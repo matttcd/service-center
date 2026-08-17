@@ -1,0 +1,31 @@
+# Levanta la app con Docker: frontend (nginx) + backend (Node/Express)
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: cuotas-backend
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - DATA_DIR=/app/data
+    volumes:
+      - cuotas_data:/app/data
+    expose:
+      - "3000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: cuotas-frontend
+    restart: unless-stopped
+    ports:
+      # Cambiá el puerto de la izquierda si 8080 está ocupado.
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  # Los datos de la base central se guardan acá y sobreviven reinicios.
+  cuotas_data:

@@ -1,0 +1,9 @@
+# Excluye del contexto de build (mantiene las imágenes livianas)
+node_modules
+dist
+server/data
+data
+*.log
+.git
+.gitignore
+.DS_Store

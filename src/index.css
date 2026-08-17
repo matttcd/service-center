@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/* Configura el modo oscuro mediante la clase .dark en el html */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* ============================================
+     TEMA — color principal de la app.
+     Para cambiar el color de toda la app, editá
+     estos valores (escala del azul Tailwind).
+     ============================================ */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #1d4ed8;
+  --color-primary-700: #1e40af;
+  --color-primary-800: #1e3a8a;
+  --color-primary-900: #172554;
+  --color-primary-950: #101a3f;
+
+  /* ============================================
+     TEMA — amarillo/marca (segundo color de marca).
+     Escala amber de Tailwind.
+     ============================================ */
+  --color-accent-50: #fffbeb;
+  --color-accent-100: #fef3c7;
+  --color-accent-200: #fde68a;
+  --color-accent-300: #fcd34d;
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+  --color-accent-700: #b45309;
+  --color-accent-800: #92400e;
+  --color-accent-900: #78350f;
+  --color-accent-950: #451a03;
+}
+
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  @apply bg-slate-100 text-slate-800 antialiased;
+}
+
+/* Elementos interactivos con cursor de puntero (Tailwind v4 ya no lo aplica) */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled),
+  select:not(:disabled),
+  input[type='checkbox'],
+  input[type='radio'] {
+    cursor: pointer;
+  }
+  button:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
+}
+
+.dark body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+/* Scrollbar sutil */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============================================
+   Impresión: Orden de servicio (OrderPrint)
+   Al imprimir solo se muestra el área #order-print,
+   a color claro aunque la app esté en modo oscuro.
+   ============================================ */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  body.printing-order * {
+    visibility: hidden;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.printing-order #order-print,
+  body.printing-order #order-print * {
+    visibility: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.printing-order #order-print {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    color: #0f172a !important;
+    background: #ffffff !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  body.printing-order #order-print .order-print-hide,
+  body.printing-order .order-print-hide {
+    display: none !important;
+  }
+
+  /* Asegura que los bordes de Tailwind v4 se impriman como líneas sólidas
+     y que las separaciones de filas se vean bien en papel. */
+  body.printing-order #order-print * {
+    --tw-border-style: solid;
+  }
+  body.printing-order #order-print table tr {
+    border-bottom-color: #cbd5e1 !important;
+  }
+  body.printing-order #order-print table {
+    page-break-inside: auto;
+  }
+  body.printing-order #order-print table tr {
+    page-break-inside: avoid;
+  }
+}
