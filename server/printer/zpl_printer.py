@@ -1,14 +1,13 @@
 """Imprime etiquetas ZPL a una impresora termica Zebra/Godex por USB (Windows).
 
 Uso:
-    python zpl_printer.py --order OS-0001 --item "OS-0001 / Item 1" \
-        --model "Samsung A15" --customer "Fernando Fleitas" --imei 123456789 \
+    python zpl_printer.py --order OS-0001 \
+        --model "Samsung A15" --customer "Fernando Fleitas" \
         --date 17/08/2026
 
 Salida (stdout): JSON {"ok": true} o {"ok": false, "error": "..."}.
-Reutiliza el formato de repair-shop (printer_utils.py) ampliandolo con IMEI,
-fecha y el nro de item, y translitera acentos para que la fuente de la
-impresora no falle.
+Reutiliza el formato de repair-shop (printer_utils.py), y translitera
+acentos para que la fuente de la impresora no falle.
 """
 import argparse
 import json
@@ -33,12 +32,10 @@ def ascii_text(s):
     return s
 
 
-def generate_zpl(order_number, item_label, phone_model, customer_name, imei, date):
+def generate_zpl(order_number, phone_model, customer_name, date):
     order_number = ascii_text(order_number)
-    item_label = ascii_text(item_label)
     phone_model = ascii_text(phone_model)
     customer_name = ascii_text(customer_name)
-    imei = ascii_text(imei)
     date = ascii_text(date)
     return (
         '^XA\r\n'
@@ -58,15 +55,7 @@ def generate_zpl(order_number, item_label, phone_model, customer_name, imei, dat
         '^FB832,1,0,C\r\n'
         '^A0N,22,22\r\n'
         '^FD' + customer_name + '^FS\r\n'
-        '^FO0,270\r\n'                        # item dentro de la orden
-        '^FB832,1,0,C\r\n'
-        '^A0N,20,20\r\n'
-        '^FD' + item_label + '^FS\r\n'
-        '^FO0,300\r\n'                        # IMEI (o "sin IMEI")
-        '^FB832,1,0,C\r\n'
-        '^A0N,18,18\r\n'
-        '^FDIMEI: ' + imei + '^FS\r\n'
-        '^FO0,330\r\n'                        # fecha
+        '^FO0,300\r\n'                        # fecha
         '^FB832,1,0,C\r\n'
         '^A0N,18,18\r\n'
         '^FD' + date + '^FS\r\n'
@@ -107,19 +96,15 @@ def print_label(zpl):
 def main():
     parser = argparse.ArgumentParser(description='Imprime una etiqueta ZPL de reparación.')
     parser.add_argument('--order', required=True)
-    parser.add_argument('--item', default='')
     parser.add_argument('--model', default='')
     parser.add_argument('--customer', default='')
-    parser.add_argument('--imei', default='')
     parser.add_argument('--date', default='')
     args = parser.parse_args()
 
     zpl = generate_zpl(
         args.order,
-        args.item or args.order,
         args.model,
         args.customer,
-        args.imei or 'Sin IMEI',
         args.date,
     )
     ok, err = print_label(zpl)

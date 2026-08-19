@@ -1,47 +1,100 @@
 // ============================================
-// OrderForm: alta de una orden de servicio
-// Cliente existente o nuevo + uno o varios dispositivos.
+// OrderForm: alta de una orden de servicio (un solo dispositivo)
+// Marcas/modelos con badges del catálogo + "otro" (búsqueda y alta en BD).
 // ============================================
-import { useEffect, useState } from 'react'
-import { Plus, Trash2, UserPlus, Search } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Plus, Search, UserPlus, ListPlus, X } from 'lucide-react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
 import { useData } from '../context/DataContext.jsx'
+import {
+  COMMON_ACCESSORIES,
+  COMMON_FIXES,
+  BRAND_BADGE_COUNT,
+  MODEL_BADGE_COUNT,
+} from '../utils/constants.js'
 
-const emptyItem = () => ({
-  brand: '',
-  model: '',
-  imei: '',
-  password: '',
-  issueDescription: '',
-  accessories: '',
-  priceEstimate: '',
-  advance: '',
-})
+const chipSelected =
+  'inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700'
+const chipIdle =
+  'inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+const chipAdd =
+  'inline-flex items-center gap-1 rounded-full border border-dashed border-primary-400 px-3 py-1.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/40 dark:text-primary-400 dark:hover:bg-primary-500/10'
 
 export default function OrderForm({ open, onClose, onCreated }) {
-  const { customers, addCustomer, addOrder } = useData()
+  const { customers, catalog, addCustomer, addOrder, addCatalogBrand, addCatalogModel } = useData()
   const [mode, setMode] = useState('existing') // 'existing' | 'new'
   const [customerId, setCustomerId] = useState('')
-  const [newCustomer, setNewCustomer] = useState({ fullName: '', dni: '', phone: '' })
-  const [items, setItems] = useState([emptyItem()])
-  const [snapshot, setSnapshot] = useState('')
-  const [confirming, setConfirming] = useState(false)
+  const [newCustomer, setNewCustomer] = useState({ fullName: '', dni: '', phone: '', address: '' })
+  const [brand, setBrand] = useState('')
+  const [model, setModel] = useState('')
+  const [picker, setPicker] = useState(null) // null | 'brand' | 'model'
+  const [pickerQuery, setPickerQuery] = useState('')
+  const [pickerNew, setPickerNew] = useState('')
+  const [accessories, setAccessories] = useState([])
+  const [customAccessory, setCustomAccessory] = useState('')
+  const [pin, setPin] = useState('')
+  const [diagnosisType, setDiagnosisType] = useState('visible') // 'visible' | 'revision'
+  const [issue, setIssue] = useState('')
+  const [fix, setFix] = useState('')
+  const [customFix, setCustomFix] = useState('')
+  const [price, setPrice] = useState('')
+  const [advance, setAdvance] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setMode('existing')
     setCustomerId(customers[0]?.id || '')
-    setNewCustomer({ fullName: '', dni: '', phone: '' })
-    setItems([emptyItem()])
+    setNewCustomer({ fullName: '', dni: '', phone: '', address: '' })
+    setBrand('')
+    setModel('')
+    setPicker(null)
+    setPickerQuery('')
+    setPickerNew('')
+    setAccessories([])
+    setCustomAccessory('')
+    setPin('')
+    setDiagnosisType('visible')
+    setIssue('')
+    setFix('')
+    setCustomFix('')
+    setPrice('')
+    setAdvance('')
     setError('')
     setConfirming(false)
-    setSnapshot('')
   }, [open, customers])
 
-  const dirty = items.some((i) => i.model || i.brand || i.issueDescription) || mode === 'new' || snapshot
+  // Badges de marcas y modelos según el catálogo (ordenado por uso).
+  const topBrands = useMemo(() => (catalog.brands || []).slice(0, BRAND_BADGE_COUNT), [catalog.brands])
+  const brandModels = useMemo(
+    () => (catalog.models || []).filter((m) => m.brand === brand).slice(0, MODEL_BADGE_COUNT),
+    [catalog.models, brand],
+  )
+  const allBrandModels = useMemo(
+    () => (catalog.models || []).filter((m) => m.brand === brand),
+    [catalog.models, brand],
+  )
+
+  const pickerList = picker === 'brand' ? catalog.brands || [] : allBrandModels
+  const pickerFiltered = pickerList.filter((x) =>
+    x.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
+  )
+
+  const dirty =
+    mode === 'new' ||
+    !!brand ||
+    !!model ||
+    !!issue ||
+    !!price ||
+    !!advance ||
+    accessories.length > 0 ||
+    !!customAccessory ||
+    !!pin ||
+    !!fix ||
+    !!customFix
 
   const requestClose = () => {
     if (dirty && !confirming) {
@@ -51,40 +104,74 @@ export default function OrderForm({ open, onClose, onCreated }) {
     onClose()
   }
 
-  const setItem = (idx, key) => (e) => {
-    setItems((list) => list.map((it, i) => (i === idx ? { ...it, [key]: e.target.value } : it)))
-    setError('')
+  const toggleAccessory = (name) =>
+    setAccessories((list) =>
+      list.includes(name) ? list.filter((a) => a !== name) : [...list, name],
+    )
+
+  const addCustomAccessory = () => {
+    const v = customAccessory.trim()
+    if (!v) return
+    setAccessories((list) => (list.includes(v) ? list : [...list, v]))
+    setCustomAccessory('')
   }
 
-  const addItem = () => setItems((list) => [...list, emptyItem()])
+  const addFromPicker = (name) => {
+    if (picker === 'brand') {
+      setBrand(name)
+      setModel('')
+    } else {
+      setModel(name)
+    }
+    setPicker(null)
+    setPickerQuery('')
+    setPickerNew('')
+  }
 
-  const removeItem = (idx) => setItems((list) => (list.length > 1 ? list.filter((_, i) => i !== idx) : list))
+  const addNewPickerItem = async () => {
+    const v = pickerNew.trim()
+    if (!v) return
+    if (picker === 'brand') {
+      const res = await addCatalogBrand(v)
+      if (res.error) return setError(res.error)
+      addFromPicker(res.brand.name)
+    } else {
+      if (!brand) return setError('Elegí primero la marca.')
+      const res = await addCatalogModel(brand, v)
+      if (res.error) return setError(res.error)
+      addFromPicker(res.model.name)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (mode === 'new' && !newCustomer.fullName.trim()) {
-      return setError('Ingresá el nombre del cliente nuevo.')
+    let cid = customerId
+    if (mode === 'new') {
+      if (!newCustomer.fullName.trim()) return setError('Ingresá el nombre del cliente.')
+      const res = await addCustomer({ ...newCustomer, phone2: '', email: '' })
+      if (res.error) return setError(res.error)
+      cid = res.id
     }
-    const cleanItems = items.filter((i) => i.brand.trim() || i.model.trim())
-    if (!cleanItems.length) {
-      return setError('Agregá al menos un dispositivo con marca o modelo.')
+    if (!brand) return setError('Elegí la marca del dispositivo.')
+    if (!model) return setError('Elegí el modelo del dispositivo.')
+    if (diagnosisType === 'visible' && Number(price) <= 0) {
+      return setError('Para un problema visible ingresá el presupuesto del arreglo.')
     }
     setSaving(true)
     setError('')
     try {
-      let cid = customerId
-      if (mode === 'new') {
-        const res = await addCustomer({ ...newCustomer, phone2: '', email: '', address: '' })
-        if (res.error) throw new Error(res.error)
-        cid = res.id
-      }
+      const accList = [...accessories, customAccessory.trim()].filter(Boolean)
       const res = await addOrder({
         customerId: cid,
-        items: cleanItems.map((i) => ({
-          ...i,
-          priceEstimate: Number(i.priceEstimate) || 0,
-          advance: Number(i.advance) || 0,
-        })),
+        brand,
+        model,
+        accessories: accList.join(', '),
+        pin: pin.trim(),
+        diagnosisType,
+        issue: issue.trim(),
+        fix: (diagnosisType === 'visible' ? (fix || customFix) : '').trim(),
+        price: Number(price) || 0,
+        advance: Number(advance) || 0,
       })
       if (res.error) throw new Error(res.error)
       onClose()
@@ -98,11 +185,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
 
   const inputCls =
     'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
-
-  const setNew = (key) => (e) => {
-    setNewCustomer((f) => ({ ...f, [key]: e.target.value }))
-    setError('')
-  }
+  const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300'
 
   return (
     <Modal open={open} onClose={requestClose} title="Nueva orden de servicio" maxWidth="max-w-3xl">
@@ -116,32 +199,17 @@ export default function OrderForm({ open, onClose, onCreated }) {
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Cliente */}
           <div>
-            <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-300">
-              <Search size={15} />
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+              <UserPlus size={15} />
               Cliente
             </div>
             <div className="mb-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setMode('existing')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  mode === 'existing'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
-                }`}
-              >
+              <button type="button" onClick={() => setMode('existing')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${mode === 'existing' ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}`}>
                 Existente
               </button>
-              <button
-                type="button"
-                onClick={() => setMode('new')}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                  mode === 'new'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
-                }`}
-              >
-                <UserPlus size={13} />
+              <button type="button" onClick={() => setMode('new')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${mode === 'new' ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}`}>
                 Nuevo
               </button>
             </div>
@@ -155,59 +223,160 @@ export default function OrderForm({ open, onClose, onCreated }) {
                 ))}
               </select>
             ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <input type="text" value={newCustomer.fullName} onChange={setNew('fullName')} placeholder="Nombre completo *" className={inputCls} />
-                <input type="text" inputMode="numeric" value={newCustomer.dni} onChange={setNew('dni')} placeholder="DNI" className={inputCls} />
-                <input type="tel" value={newCustomer.phone} onChange={setNew('phone')} placeholder="Teléfono (para WhatsApp)" className={inputCls} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <input type="text" value={newCustomer.fullName} onChange={(e) => setNewCustomer((f) => ({ ...f, fullName: e.target.value }))} placeholder="Nombre completo *" className={inputCls} />
+                <input type="text" inputMode="numeric" value={newCustomer.dni} onChange={(e) => setNewCustomer((f) => ({ ...f, dni: e.target.value }))} placeholder="DNI" className={inputCls} />
+                <input type="tel" value={newCustomer.phone} onChange={(e) => setNewCustomer((f) => ({ ...f, phone: e.target.value }))} placeholder="Teléfono" className={inputCls} />
+                <input type="text" value={newCustomer.address} onChange={(e) => setNewCustomer((f) => ({ ...f, address: e.target.value }))} placeholder="Domicilio" className={inputCls} />
               </div>
             )}
           </div>
 
-          {/* Dispositivos */}
-          <div>
-            <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
-              Dispositivos a reparar
-            </div>
-            <div className="space-y-4">
-              {items.map((it, idx) => (
-                <div key={idx} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                      Dispositivo {idx + 1}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(idx)}
-                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-red-500 transition hover:bg-red-50 dark:hover:bg-red-500/10"
-                    >
-                      <Trash2 size={13} />
-                      Quitar
+          {/* Dispositivo */}
+          <div className="space-y-4">
+            <div>
+              <label className={labelCls}>Marca</label>
+              <div className="flex flex-wrap items-center gap-2">
+                {topBrands.map((b) => (
+                  <button key={b.id} type="button" onClick={() => { setBrand(b.name); setModel('') }}
+                    className={brand === b.name ? chipSelected : chipIdle}>
+                    {b.name}
+                  </button>
+                ))}
+                <button type="button" onClick={() => { setPicker('brand'); setPickerQuery(''); setPickerNew('') }}
+                  className={chipAdd}>
+                  <ListPlus size={13} />
+                  Otra
+                </button>
+                {brand && !topBrands.some((b) => b.name === brand) && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white">
+                    {brand}
+                    <button type="button" onClick={() => { setBrand(''); setModel('') }} aria-label="Quitar marca">
+                      <X size={12} />
                     </button>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <input type="text" value={it.brand} onChange={setItem(idx, 'brand')} placeholder="Marca (ej: Samsung)" className={inputCls} />
-                    <input type="text" value={it.model} onChange={setItem(idx, 'model')} placeholder="Modelo (ej: Galaxy A15)" className={inputCls} />
-                    <input type="text" value={it.imei} onChange={setItem(idx, 'imei')} placeholder="IMEI" className={inputCls} />
-                    <input type="text" value={it.password} onChange={setItem(idx, 'password')} placeholder="Contraseña / patrón" className={inputCls} />
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <input type="text" value={it.issueDescription} onChange={setItem(idx, 'issueDescription')} placeholder="Problema reportado" className={inputCls} />
-                    <input type="text" value={it.accessories} onChange={setItem(idx, 'accessories')} placeholder="Accesorios entregados" className={inputCls} />
-                    <input type="number" min="0" step="0.01" value={it.priceEstimate} onChange={setItem(idx, 'priceEstimate')} placeholder="Costo estimado ($)" className={inputCls} />
-                    <input type="number" min="0" step="0.01" value={it.advance} onChange={setItem(idx, 'advance')} placeholder="Seña recibida ($)" className={inputCls} />
-                  </div>
-                </div>
-              ))}
+                  </span>
+                )}
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={addItem}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <Plus size={15} />
-              Agregar otro dispositivo
-            </button>
+
+            <div>
+              <label className={labelCls}>Modelo</label>
+              <div className="flex flex-wrap items-center gap-2">
+                {brand ? (
+                  brandModels.length ? (
+                    brandModels.map((m) => (
+                      <button key={m.id} type="button" onClick={() => setModel(m.name)}
+                        className={model === m.name ? chipSelected : chipIdle}>
+                        {m.name}
+                      </button>
+                    ))
+                  ) : (
+                    <span className="text-sm text-slate-400">Sin modelos cargados para {brand}.</span>
+                  )
+                ) : (
+                  <span className="text-sm text-slate-400">Elegí primero la marca.</span>
+                )}
+                {brand && (
+                  <button type="button" onClick={() => { setPicker('model'); setPickerQuery(''); setPickerNew('') }}
+                    className={chipAdd}>
+                    <ListPlus size={13} />
+                    Otro
+                  </button>
+                )}
+                {model && !brandModels.some((m) => m.name === model) && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white">
+                    {model}
+                    <button type="button" onClick={() => setModel('')} aria-label="Quitar modelo">
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className={labelCls}>PIN / patrón</label>
+                <input type="text" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Si te lo dejan configurado" className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Accesorios que deja</label>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {COMMON_ACCESSORIES.map((a) => (
+                    <button key={a} type="button" onClick={() => toggleAccessory(a)}
+                      className={accessories.includes(a) ? chipSelected : chipIdle}>
+                      {a}
+                    </button>
+                  ))}
+                  <span className="flex items-center gap-1">
+                    <input type="text" value={customAccessory} onChange={(e) => setCustomAccessory(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomAccessory() } }}
+                      placeholder="Otro..." className={`${inputCls} !w-28`} />
+                    <button type="button" onClick={addCustomAccessory} className={chipIdle}>
+                      <Plus size={13} />
+                    </button>
+                  </span>
+                </div>
+                {accessories.length > 0 && (
+                  <p className="mt-1 text-xs text-slate-400">{accessories.join(', ')}</p>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* Diagnóstico */}
+          <div>
+            <label className={labelCls}>¿Se ve el problema a simple vista?</label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button type="button" onClick={() => setDiagnosisType('visible')}
+                className={`rounded-xl border-2 px-4 py-3 text-left text-sm transition ${diagnosisType === 'visible' ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                <p className="font-semibold text-slate-900 dark:text-white">Sí, se ve</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Anotamos el arreglo y el presupuesto ahora.</p>
+              </button>
+              <button type="button" onClick={() => setDiagnosisType('revision')}
+                className={`rounded-xl border-2 px-4 py-3 text-left text-sm transition ${diagnosisType === 'revision' ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                <p className="font-semibold text-slate-900 dark:text-white">No, va a revisión</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">El técnico revisa y carga el presupuesto después.</p>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>Problema reportado</label>
+            <input type="text" value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="Ej: no enciende, se mojó, se cayó..." className={inputCls} />
+          </div>
+
+          {diagnosisType === 'visible' ? (
+            <div className="space-y-4">
+              <div>
+                <label className={labelCls}>Arreglo a realizar</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {COMMON_FIXES.map((f) => (
+                    <button key={f} type="button" onClick={() => { setFix(f); setCustomFix('') }}
+                      className={(fix || customFix) === f ? chipSelected : chipIdle}>
+                      {f}
+                    </button>
+                  ))}
+                  <input type="text" value={customFix} onChange={(e) => { setCustomFix(e.target.value); setFix('') }}
+                    placeholder="Otro arreglo..." className={`${inputCls} !w-40`} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className={labelCls}>Presupuesto ($)</label>
+                  <input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Costo del arreglo" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Seña ($) — solo si se encarga repuesto</label>
+                  <input type="number" min="0" step="0.01" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="Opcióna" className={inputCls} />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              El equipo entra a revisión técnica. El presupuesto lo va a cargar el técnico y se le avisa al cliente.
+            </p>
+          )}
 
           {error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
@@ -216,21 +385,64 @@ export default function OrderForm({ open, onClose, onCreated }) {
           )}
 
           <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={requestClose}
-              className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
+            <button type="button" onClick={requestClose}
+              className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
               Cancelar
             </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 rounded-lg bg-primary-600 px-4 py-2.5 font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
-            >
+            <button type="submit" disabled={saving}
+              className="flex-1 rounded-lg bg-primary-600 px-4 py-2.5 font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50">
               {saving ? 'Guardando...' : 'Guardar e imprimir orden'}
             </button>
           </div>
+
+          {/* Picker "otro" de marca/modelo */}
+          <Modal
+            open={!!picker}
+            onClose={() => setPicker(null)}
+            title={picker === 'brand' ? 'Elegir marca' : `Elegir modelo (${brand})`}
+          >
+            <div className="space-y-4">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={pickerQuery}
+                  onChange={(e) => setPickerQuery(e.target.value)}
+                  placeholder="Buscar..."
+                  className={`${inputCls} pl-9`}
+                  autoFocus
+                />
+              </div>
+
+              <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+                {pickerFiltered.length === 0 && (
+                  <p className="px-2 py-3 text-center text-sm text-slate-400">No hay resultados.</p>
+                )}
+                {pickerFiltered.map((x) => (
+                  <button key={x.id} type="button" onClick={() => addFromPicker(x.name)}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-primary-50 dark:text-slate-200 dark:hover:bg-primary-500/10">
+                    {x.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+                <input
+                  type="text"
+                  value={pickerNew}
+                  onChange={(e) => setPickerNew(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addNewPickerItem() } }}
+                  placeholder={picker === 'brand' ? 'Marca nueva...' : 'Modelo nuevo...'}
+                  className={inputCls}
+                />
+                <button type="button" onClick={addNewPickerItem}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700">
+                  <Plus size={15} />
+                  Agregar
+                </button>
+              </div>
+            </div>
+          </Modal>
         </form>
       )}
     </Modal>

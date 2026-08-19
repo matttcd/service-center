@@ -11,7 +11,6 @@ import { fileURLToPath } from 'node:url'
 import { initDB, getDB, mutate, persist, createBackup, listBackups, restoreBackup, purgeTrash } from './store.js'
 import { buildSeed } from './seed.js'
 import { todayISO, titleCase, uid } from './helpers.js'
-import { renderTemplate, normalizePhone, sendWhatsApp } from './whatsapp.js'
 import { printZplLabel } from './printer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -22,7 +21,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'service-local-secret-2026'
 app.use(cors())
 app.use(express.json())
 
-// Inicializa la base de datos (seed la primera vez).
 await initDB(buildSeed)
 
 // ============================================
@@ -87,19 +85,10 @@ const audit = (d, action, table, recordId, userId, details) => {
   })
 }
 
-// ---------- Estados de los equipos ----------
-const ITEM_STATUSES = ['recibido', 'en_reparacion', 'terminado', 'entregado']
+// ---------- Estados de una orden ----------
+const ORDER_STATUSES = ['recibido', 'en_revision', 'presupuesto', 'en_reparacion', 'terminado', 'entregado']
 
-// Estado de la orden derivado del estado de sus ítems.
-function orderStatus(order) {
-  const items = order.items || []
-  if (items.length && items.every((i) => i.status === 'entregado')) return 'entregada'
-  if (items.some((i) => i.status === 'terminado')) return 'lista'
-  if (items.some((i) => i.status === 'en_reparacion')) return 'en_reparacion'
-  return 'recibida'
-}
-
-// Adjunta a una orden datos legibles: cliente, quién la recibió y estado.
+// Adjunta a una orden datos legibles: cliente, responsables y estado.
 function decorateOrder(d, order) {
   const customer = d.customers.find((c) => c.id === order.customerId)
   const names = new Map(d.users.map((u) => [u.id, u.name]))
@@ -107,24 +96,11 @@ function decorateOrder(d, order) {
     ...order,
     customerName: customer?.fullName || '(cliente eliminado)',
     receivedByName: names.get(order.receivedBy) || '—',
-    status: orderStatus(order),
-    items: (order.items || []).map((i) => ({
-      ...i,
-      repairedByName: i.repairedBy ? names.get(i.repairedBy) || '—' : null,
-      history: (i.history || []).map((h) => ({ ...h, byName: names.get(h.by) || '—' })),
-    })),
+    repairedByName: order.repairedBy ? names.get(order.repairedBy) || '—' : null,
+    deliveredByName: order.deliveredBy ? names.get(order.deliveredBy) || '—' : null,
+    notifiedByName: order.notifiedBy ? names.get(order.notifiedBy) || '—' : null,
+    history: (order.history || []).map((h) => ({ ...h, byName: names.get(h.by) || '—' })),
   }
-}
-
-// Busca una orden y un ítem dentro de ella.
-function findItem(orderId, itemId) {
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === orderId)
-  if (!order) return { error: 'Orden no encontrada.' }
-  const item = (order.items || []).find((i) => i.id === itemId)
-  if (!item) return { error: 'Equipo no encontrado.' }
-  const customer = db.customers.find((c) => c.id === order.customerId)
-  return { order, item, customer }
 }
 
 function pad4(n) {
@@ -185,10 +161,79 @@ app.get('/api/bootstrap', auth, (req, res) => {
     user: publicUser(req.user),
     customers: db.customers.filter(live),
     orders,
+    catalog: db.catalog || { brands: [], models: [] },
     users: req.user.role === 'admin' ? db.users.map(publicUser) : [],
-    config: req.user.role === 'admin' ? db.config : undefined,
+    config: {
+      revisionFee: db.config?.revisionFee ?? 0,
+      ...(req.user.role === 'admin' ? { whatsapp: db.config?.whatsapp || {} } : {}),
+    },
   })
 })
+
+// ---------- Catálogo de marcas y modelos ----------
+app.get('/api/catalog', auth, (req, res) => {
+  const db = getDB()
+  const brands = [...(db.catalog?.brands || [])].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name))
+  const models = [...(db.catalog?.models || [])].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name))
+  res.json({ brands, models })
+})
+
+app.post('/api/catalog/brands', auth, (req, res) => {
+  const name = titleCase(String(req.body?.name || '').trim())
+  if (!name) return res.status(400).json({ error: 'El nombre de la marca es obligatorio.' })
+  mutate((d) => {
+    d.catalog = d.catalog || { brands: [], models: [] }
+    let b = d.catalog.brands.find((x) => x.name.toLowerCase() === name.toLowerCase())
+    if (!b) {
+      b = { id: uid(), name, usage: 0 }
+      d.catalog.brands.push(b)
+      audit(d, 'create', 'catalog', b.id, req.user.id, `Nueva marca en catálogo: ${name}`)
+    }
+  }).then(() => {
+    const b = getDB().catalog.brands.find((x) => x.name.toLowerCase() === name.toLowerCase())
+    res.json({ ok: true, brand: b })
+  })
+})
+
+app.post('/api/catalog/models', auth, (req, res) => {
+  const brand = titleCase(String(req.body?.brand || '').trim())
+  const name = titleCase(String(req.body?.name || '').trim())
+  if (!brand || !name) return res.status(400).json({ error: 'La marca y el modelo son obligatorios.' })
+  mutate((d) => {
+    d.catalog = d.catalog || { brands: [], models: [] }
+    if (!d.catalog.brands.find((x) => x.name.toLowerCase() === brand.toLowerCase())) {
+      d.catalog.brands.push({ id: uid(), name: brand, usage: 0 })
+    }
+    let m = d.catalog.models.find((x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase())
+    if (!m) {
+      m = { id: uid(), brand, name, usage: 0 }
+      d.catalog.models.push(m)
+      audit(d, 'create', 'catalog', m.id, req.user.id, `Nuevo modelo en catálogo: ${brand} ${name}`)
+    }
+  }).then(() => {
+    const m = getDB().catalog.models.find(
+      (x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase(),
+    )
+    res.json({ ok: true, model: m })
+  })
+})
+
+// Cuenta una marca/modelo en el catálogo (y los crea si faltan).
+function bumpCatalog(d, brand, model) {
+  d.catalog = d.catalog || { brands: [], models: [] }
+  let b = d.catalog.brands.find((x) => x.name.toLowerCase() === brand.toLowerCase())
+  if (!b) {
+    b = { id: uid(), name: brand, usage: 0 }
+    d.catalog.brands.push(b)
+  }
+  b.usage += 1
+  let m = d.catalog.models.find((x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === model.toLowerCase())
+  if (!m) {
+    m = { id: uid(), brand, name: model, usage: 0 }
+    d.catalog.models.push(m)
+  }
+  m.usage += 1
+}
 
 // ---------- Clientes ----------
 app.post('/api/customers', auth, (req, res) => {
@@ -267,40 +312,20 @@ app.delete('/api/customers/:id', auth, (req, res) => {
 
 // ---------- Órdenes ----------
 app.post('/api/orders', auth, (req, res) => {
-  const { customerId, items } = req.body || {}
+  const body = req.body || {}
   const db = getDB()
-  const customer = db.customers.find((c) => c.id === customerId)
+  const customer = db.customers.find((c) => c.id === body.customerId)
   if (!customer || customer.deletedAt) {
     return res.status(400).json({ error: 'Cliente inexistente o eliminado.' })
   }
-  if (!Array.isArray(items) || !items.length) {
-    return res.status(400).json({ error: 'Agregá al menos un dispositivo a la orden.' })
-  }
-  const cleanItems = []
-  for (const raw of items) {
-    const brand = String(raw?.brand || '').trim()
-    const model = String(raw?.model || '').trim()
-    if (!brand && !model) {
-      return res.status(400).json({ error: 'Cada dispositivo necesita marca o modelo.' })
-    }
-    cleanItems.push({
-      id: uid(),
-      brand: titleCase(brand),
-      model: titleCase(model),
-      imei: String(raw?.imei || '').trim(),
-      password: String(raw?.password || ''),
-      issueDescription: String(raw?.issueDescription || '').trim(),
-      accessories: String(raw?.accessories || '').trim(),
-      priceEstimate: Math.max(0, Number(raw?.priceEstimate) || 0),
-      advance: Math.max(0, Number(raw?.advance) || 0),
-      status: 'recibido',
-      technicianNotes: '',
-      repairedBy: null,
-      history: [{ status: 'recibido', at: todayISO(), by: req.user.id }],
-      createdAt: todayISO(),
-      deliveredAt: null,
-    })
-  }
+  const brand = titleCase(String(body.brand || '').trim())
+  const model = titleCase(String(body.model || '').trim())
+  if (!brand) return res.status(400).json({ error: 'Elegí la marca del dispositivo.' })
+  if (!model) return res.status(400).json({ error: 'Elegí el modelo del dispositivo.' })
+  const diagnosisType = body.diagnosisType === 'revision' ? 'revision' : 'visible'
+  const price = Math.max(0, Number(body.price) || 0)
+  const advance = Math.max(0, Number(body.advance) || 0)
+
   let order = null
   mutate((d) => {
     const orderNumber = `OS-${pad4((d.orderCounter || 0) + 1)}`
@@ -308,19 +333,37 @@ app.post('/api/orders', auth, (req, res) => {
     order = {
       id: uid(),
       orderNumber,
-      customerId,
-      items: cleanItems,
+      customerId: body.customerId,
+      brand,
+      model,
+      accessories: String(body.accessories || '').trim(),
+      pin: String(body.pin || ''),
+      diagnosisType,
+      issue: String(body.issue || '').trim(),
+      fix: String(body.fix || '').trim(),
+      price,
+      advance,
+      status: 'recibido',
+      technicianNotes: '',
+      repairedBy: null,
+      notified: false,
+      notifiedAt: null,
+      notifiedBy: null,
+      history: [{ status: 'recibido', at: new Date().toISOString(), by: req.user.id }],
       receivedBy: req.user.id,
       createdAt: todayISO(),
+      deliveredAt: null,
+      deliveredBy: null,
     }
     d.orders.push(order)
+    bumpCatalog(d, brand, model)
     audit(
       d,
       'create',
       'orders',
       order.id,
       req.user.id,
-      `Orden ${orderNumber} · ${cleanItems.length} dispositivo(s) de ${customer.fullName}`,
+      `Orden ${orderNumber} · ${brand} ${model} de ${customer.fullName}${diagnosisType === 'revision' ? ' (a revisión)' : ''}`,
     )
   }).then(() => {
     res.json({ ok: true, order: decorateOrder(getDB(), order) })
@@ -342,11 +385,7 @@ app.get('/api/orders', auth, (req, res) => {
       (o) =>
         o.orderNumber.toLowerCase().includes(query) ||
         (o.customerName || '').toLowerCase().includes(query) ||
-        (o.items || []).some(
-          (i) =>
-            (i.brand + ' ' + i.model).toLowerCase().includes(query) ||
-            i.imei.toLowerCase().includes(query),
-        ),
+        (o.brand + ' ' + o.model).toLowerCase().includes(query),
     )
   }
   res.json({ orders: list })
@@ -364,9 +403,8 @@ app.delete('/api/orders/:id', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden ya está eliminada.' })
-  const anyActive = (order.items || []).some((i) => i.status !== 'entregado')
-  if (anyActive && req.user.role !== 'admin') {
-    return res.status(400).json({ error: 'La orden tiene equipos sin entregar. Solo el admin puede eliminarla.' })
+  if (order.status !== 'entregado' && req.user.role !== 'admin') {
+    return res.status(400).json({ error: 'La orden no está entregada. Solo el admin puede eliminarla.' })
   }
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
@@ -375,22 +413,27 @@ app.delete('/api/orders/:id', auth, (req, res) => {
   }).then(() => res.json({ ok: true }))
 })
 
-// ---------- Estado de un equipo ----------
-app.post('/api/orders/:id/items/:itemId/status', auth, async (req, res) => {
+// ---------- Estado de una orden ----------
+app.post('/api/orders/:id/status', auth, (req, res) => {
   const { status } = req.body || {}
-  const { order, item, customer, error } = findItem(req.params.id, req.params.itemId)
-  if (error) return res.status(404).json({ error })
+  const db = getDB()
+  const order = db.orders.find((o) => o.id === req.params.id)
+  if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
-  if (!ITEM_STATUSES.includes(status)) {
+  if (!ORDER_STATUSES.includes(status)) {
     return res.status(400).json({ error: 'Estado inválido.' })
   }
 
-  const from = item.status
+  const from = order.status
   const role = req.user.role
+  const isTech = ['tecnico', 'admin'].includes(role)
+  const isCounter = ['mostrador', 'admin'].includes(role)
 
-  // Transiciones permitidas según el estado actual y el rol.
+  // Transiciones permitidas según el estado actual.
   const transitions = {
-    recibido: ['en_reparacion'],
+    recibido: order.diagnosisType === 'revision' ? ['en_revision'] : ['en_reparacion'],
+    en_revision: ['presupuesto'],
+    presupuesto: ['en_reparacion', 'entregado'],
     en_reparacion: ['terminado'],
     terminado: ['entregado', 'en_reparacion'],
     entregado: [],
@@ -400,173 +443,106 @@ app.post('/api/orders/:id/items/:itemId/status', auth, async (req, res) => {
       error: `No se puede pasar de "${from}" a "${status}".`,
     })
   }
-  if (status === 'en_reparacion' && !['tecnico', 'admin'].includes(role)) {
-    return res.status(403).json({ error: 'Solo el técnico puede iniciar reparaciones.' })
+  if (status === 'presupuesto' && Number(order.price) <= 0) {
+    return res.status(400).json({ error: 'Cargá el arreglo y el presupuesto antes de pasarlo a presupuesto.' })
   }
-  if (status === 'terminado' && !['tecnico', 'admin'].includes(role)) {
-    return res.status(403).json({ error: 'Solo el técnico puede marcar un equipo como terminado.' })
+  if (['en_revision', 'presupuesto', 'en_reparacion', 'terminado'].includes(status) && !isTech) {
+    return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
   }
-  if (status === 'entregado' && !['mostrador', 'admin'].includes(role)) {
+  if (status === 'entregado' && !isCounter) {
     return res.status(403).json({ error: 'Solo el mostrador (o el admin) puede entregar un equipo.' })
   }
 
-  let whatsapp = null
   mutate((d) => {
-    const target = d.orders.find((o) => o.id === req.params.id).items.find((i) => i.id === req.params.itemId)
-    target.status = status
-    target.history = target.history || []
-    target.history.push({ status, at: new Date().toISOString(), by: req.user.id })
-    if (status === 'en_reparacion' || status === 'terminado') target.repairedBy = req.user.id
+    const o = d.orders.find((x) => x.id === req.params.id)
+    const previous = o.status
+    o.status = status
+    o.history = o.history || []
+    o.history.push({
+      status,
+      at: new Date().toISOString(),
+      by: req.user.id,
+      note: status === 'entregado' && previous === 'presupuesto' ? 'Cliente rechazó el presupuesto' : undefined,
+    })
+    if (['en_revision', 'en_reparacion', 'terminado'].includes(status)) o.repairedBy = req.user.id
     if (status === 'entregado') {
-      target.deliveredAt = todayISO()
-      target.deliveredBy = req.user.id
+      o.deliveredAt = todayISO()
+      o.deliveredBy = req.user.id
     }
-    const deviceLabel = `${target.brand} ${target.model}`.trim()
     audit(
       d,
       'status',
-      'orderItems',
-      target.id,
+      'orders',
+      o.id,
       req.user.id,
-      `${order.orderNumber} · ${deviceLabel}: estado "${status}"`,
+      `${o.orderNumber} · ${o.brand} ${o.model}: estado "${status}"`,
     )
-
-    // Al marcar "terminado" se avisa al cliente por WhatsApp.
-    if (status === 'terminado') {
-      const cfg = d.config?.whatsapp || {}
-      const phone = normalizePhone(customer?.phone)
-      const message = renderTemplate(cfg.messageTemplate, {
-        cliente: customer?.fullName || '',
-        dispositivo: deviceLabel,
-        orden: order.orderNumber,
-        local: cfg.local || '',
-      })
-      // El envío se hace después del commit (no dentro de mutate).
-      whatsapp = { cfg, phone, message, deviceLabel }
-    }
-  }).then(async () => {
-    if (whatsapp) {
-      const result = await sendWhatsApp({
-        instanceId: whatsapp.cfg.instanceId,
-        apiToken: whatsapp.cfg.apiToken,
-        chatId: whatsapp.phone,
-        message: whatsapp.message,
-      })
-      mutate((d) => {
-        const item2 = d.orders.find((o) => o.id === req.params.id).items.find((i) => i.id === req.params.itemId)
-        item2.history = item2.history || []
-        item2.history.push({
-          status: 'whatsapp',
-          at: new Date().toISOString(),
-          by: req.user.id,
-          note: result.ok ? 'WhatsApp enviado al cliente' : `WhatsApp: ${result.error}`,
-        })
-        audit(
-          d,
-          result.ok ? 'whatsapp' : 'whatsapp_error',
-          'orderItems',
-          req.params.itemId,
-          req.user.id,
-          `${order.orderNumber} · ${whatsapp.deviceLabel}: ${result.ok ? 'aviso enviado' : `falló (${result.error})`}`,
-        )
-      })
-    }
-    res.json({
-      ok: true,
-      order: decorateOrder(getDB(), order),
-      whatsapp: whatsapp ? { attempted: true, sent: !!(whatsapp && whatsapp.phone && whatsapp.cfg.instanceId && whatsapp.cfg.apiToken) } : undefined,
-    })
+  }).then(() => {
+    res.json({ ok: true, order: decorateOrder(getDB(), order) })
   })
 })
 
-// ---------- Edición de notas / precio de un equipo ----------
-app.put('/api/orders/:id/items/:itemId', auth, (req, res) => {
-  if (!['tecnico', 'admin'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Solo el técnico puede editar las notas del equipo.' })
-  }
-  const { order, error } = findItem(req.params.id, req.params.itemId)
-  if (error) return res.status(404).json({ error })
+// ---------- Edición de notas / presupuesto del técnico ----------
+app.put('/api/orders/:id', auth, (req, res) => {
+  const db = getDB()
+  const order = db.orders.find((o) => o.id === req.params.id)
+  if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
-  const { technicianNotes, priceEstimate } = req.body || {}
+  const { technicianNotes, fix, price } = req.body || {}
+  const touched = technicianNotes !== undefined || fix !== undefined || price !== undefined
   mutate((d) => {
-    const target = d.orders.find((o) => o.id === req.params.id).items.find((i) => i.id === req.params.itemId)
-    if (technicianNotes !== undefined) target.technicianNotes = String(technicianNotes)
-    if (priceEstimate !== undefined) target.priceEstimate = Math.max(0, Number(priceEstimate) || 0)
-    audit(
-      d,
-      'update',
-      'orderItems',
-      target.id,
-      req.user.id,
-      `${order.orderNumber} · ${target.brand} ${target.model}: notas/precio actualizados`,
-    )
+    const o = d.orders.find((x) => x.id === req.params.id)
+    if (technicianNotes !== undefined) o.technicianNotes = String(technicianNotes)
+    if (fix !== undefined) o.fix = String(fix).trim()
+    if (price !== undefined) o.price = Math.max(0, Number(price) || 0)
+    if (touched) {
+      audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · ${o.brand} ${o.model}: notas/presupuesto actualizados`)
+    }
   }).then(() => res.json({ ok: true }))
 })
 
+// ---------- Marcar / desmarcar "cliente avisado" ----------
+app.post('/api/orders/:id/notified', auth, (req, res) => {
+  const db = getDB()
+  const order = db.orders.find((o) => o.id === req.params.id)
+  if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
+  if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
+  const notified = !!req.body?.notified
+  mutate((d) => {
+    const o = d.orders.find((x) => x.id === req.params.id)
+    o.notified = notified
+    o.notifiedAt = notified ? new Date().toISOString() : null
+    o.notifiedBy = notified ? req.user.id : null
+    audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · cliente ${notified ? 'marcado como avisado' : 'desmarcado como avisado'}`)
+  }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
+})
+
 // ---------- Etiqueta ZPL ----------
-app.post('/api/orders/:id/items/:itemId/label', auth, async (req, res) => {
-  const { order, item, customer, error } = findItem(req.params.id, req.params.itemId)
-  if (error) return res.status(404).json({ error })
+app.post('/api/orders/:id/label', auth, async (req, res) => {
+  const db = getDB()
+  const order = db.orders.find((o) => o.id === req.params.id)
+  if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
+  const customer = db.customers.find((c) => c.id === order.customerId)
   const result = await printZplLabel({
     orderNumber: order.orderNumber,
-    itemLabel: `${order.orderNumber} · ${(order.items || []).findIndex((i) => i.id === item.id) + 1}`,
-    model: `${item.brand} ${item.model}`.trim(),
+    model: `${order.brand} ${order.model}`.trim(),
     customerName: customer?.fullName || '',
-    imei: item.imei,
     date: formatDateLabel(todayISO()),
   })
   res.json({ ok: result.ok, error: result.error })
 })
 
-// ---------- Reenviar aviso por WhatsApp ----------
-app.post('/api/orders/:id/items/:itemId/notify', auth, async (req, res) => {
-  const db = getDB()
-  const { order, item, customer, error } = findItem(req.params.id, req.params.itemId)
-  if (error) return res.status(404).json({ error })
-  const cfg = db.config?.whatsapp || {}
-  const phone = normalizePhone(customer?.phone)
-  const deviceLabel = `${item.brand} ${item.model}`.trim()
-  const message = renderTemplate(cfg.messageTemplate, {
-    cliente: customer?.fullName || '',
-    dispositivo: deviceLabel,
-    orden: order.orderNumber,
-    local: cfg.local || '',
-  })
-  const result = await sendWhatsApp({
-    instanceId: cfg.instanceId,
-    apiToken: cfg.apiToken,
-    chatId: phone,
-    message,
-  })
-  mutate((d) => {
-    audit(
-      d,
-      result.ok ? 'whatsapp' : 'whatsapp_error',
-      'orderItems',
-      item.id,
-      req.user.id,
-      `${order.orderNumber} · ${deviceLabel}: ${result.ok ? 'aviso enviado' : `falló (${result.error})`}`,
-    )
-  })
-  res.json({ ok: result.ok, error: result.error })
-})
-
-// ---------- Configuración de WhatsApp (solo admin) ----------
-app.get('/api/config/whatsapp', auth, adminOnly, (req, res) => {
+// ---------- Configuración (solo admin) ----------
+app.get('/api/config', auth, adminOnly, (req, res) => {
   res.json({ config: getDB().config || {} })
 })
 
-app.post('/api/config/whatsapp', auth, adminOnly, (req, res) => {
-  const { instanceId, apiToken, local, messageTemplate } = req.body || {}
+app.post('/api/config', auth, adminOnly, (req, res) => {
+  const { revisionFee } = req.body || {}
   mutate((d) => {
     d.config = d.config || {}
-    d.config.whatsapp = {
-      instanceId: String(instanceId || '').trim(),
-      apiToken: String(apiToken || '').trim(),
-      local: String(local || '').trim(),
-      messageTemplate: String(messageTemplate || '').trim(),
-    }
-    audit(d, 'update', 'config', null, req.user.id, 'Configuración de WhatsApp actualizada')
+    if (revisionFee !== undefined) d.config.revisionFee = Math.max(0, Number(revisionFee) || 0)
+    audit(d, 'update', 'config', null, req.user.id, 'Configuración actualizada')
   }).then(() => res.json({ ok: true }))
 })
 

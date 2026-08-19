@@ -4,7 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { api } from '../utils/api.js'
 import { useAuth } from './AuthContext.jsx'
-import { todayISO, orderStatus } from '../utils/helpers.js'
+import { todayISO } from '../utils/helpers.js'
 
 const DataContext = createContext(null)
 
@@ -17,6 +17,7 @@ export function DataProvider({ children }) {
     orders: [],
     users: [],
     config: null,
+    catalog: { brands: [], models: [] },
   })
   const [actividad, setActividad] = useState([])
   const [actividadHasMore, setActividadHasMore] = useState(false)
@@ -32,6 +33,7 @@ export function DataProvider({ children }) {
         orders: res.orders || [],
         users: res.users || [],
         config: res.config || null,
+        catalog: res.catalog || { brands: [], models: [] },
       })
       try {
         const act = await api(`/actividad?page=1&limit=${ACTIVIDAD_PAGE_SIZE}`)
@@ -50,7 +52,7 @@ export function DataProvider({ children }) {
 
   useEffect(() => {
     if (!currentUser) {
-      setData({ customers: [], orders: [], users: [], config: null })
+      setData({ customers: [], orders: [], users: [], config: null, catalog: { brands: [], models: [] } })
       setActividad([])
       setLoading(false)
       return
@@ -82,6 +84,26 @@ export function DataProvider({ children }) {
     run(api(`/customers/${id}`, { method: 'PUT', body: fields }))
   const deleteCustomer = (id) => run(api(`/customers/${id}`, { method: 'DELETE' }))
 
+  // ---------- Catálogo ----------
+  const addCatalogBrand = async (name) => {
+    try {
+      const res = await api('/catalog/brands', { method: 'POST', body: { name } })
+      await refresh({ silent: true })
+      return { error: null, brand: res.brand }
+    } catch (err) {
+      return { error: err.message }
+    }
+  }
+  const addCatalogModel = async (brand, name) => {
+    try {
+      const res = await api('/catalog/models', { method: 'POST', body: { brand, name } })
+      await refresh({ silent: true })
+      return { error: null, model: res.model }
+    } catch (err) {
+      return { error: err.message }
+    }
+  }
+
   // ---------- Órdenes ----------
   const addOrder = async (fields) => {
     try {
@@ -95,38 +117,36 @@ export function DataProvider({ children }) {
 
   const deleteOrder = (id) => run(api(`/orders/${id}`, { method: 'DELETE' }))
 
-  // Cambia el estado de un equipo. Devuelve la orden actualizada.
-  const setItemStatus = async (orderId, itemId, status) => {
+  // Cambia el estado de una orden.
+  const setOrderStatus = async (orderId, status) => {
     try {
-      const res = await api(`/orders/${orderId}/items/${itemId}/status`, {
-        method: 'POST',
-        body: { status },
-      })
+      const res = await api(`/orders/${orderId}/status`, { method: 'POST', body: { status } })
       await refresh({ silent: true })
-      return { error: null, order: res.order, whatsapp: res.whatsapp }
+      return { error: null, order: res.order }
     } catch (err) {
       return { error: err.message }
     }
   }
 
-  // Actualiza notas / precio del técnico.
-  const updateItem = (orderId, itemId, fields) =>
-    run(api(`/orders/${orderId}/items/${itemId}`, { method: 'PUT', body: fields }))
+  // Actualiza notas / presupuesto del técnico.
+  const updateOrder = (orderId, fields) =>
+    run(api(`/orders/${orderId}`, { method: 'PUT', body: fields }))
+
+  // Marca / desmarca "cliente avisado".
+  const toggleNotified = async (orderId, notified) => {
+    try {
+      const res = await api(`/orders/${orderId}/notified`, { method: 'POST', body: { notified } })
+      await refresh({ silent: true })
+      return { error: null, order: res.order }
+    } catch (err) {
+      return { error: err.message }
+    }
+  }
 
   // Imprime la etiqueta ZPL del equipo.
-  const printItemLabel = async (orderId, itemId) => {
+  const printLabel = async (orderId) => {
     try {
-      const res = await api(`/orders/${orderId}/items/${itemId}/label`, { method: 'POST' })
-      return { error: res.ok ? null : res.error }
-    } catch (err) {
-      return { error: err.message }
-    }
-  }
-
-  // Reenvía el aviso de WhatsApp.
-  const notifyItem = async (orderId, itemId) => {
-    try {
-      const res = await api(`/orders/${orderId}/items/${itemId}/notify`, { method: 'POST' })
+      const res = await api(`/orders/${orderId}/label`, { method: 'POST' })
       return { error: res.ok ? null : res.error }
     } catch (err) {
       return { error: err.message }
@@ -149,37 +169,33 @@ export function DataProvider({ children }) {
   const addUser = (fields) => run(api('/users', { method: 'POST', body: fields }))
   const toggleUserActive = (id) => run(api(`/users/${id}/toggle`, { method: 'POST' }))
 
-  // ---------- Configuración de WhatsApp ----------
-  const saveWhatsAppConfig = async (fields) => {
-    const res = await run(api('/config/whatsapp', { method: 'POST', body: fields }))
-    return res
-  }
+  // ---------- Configuración ----------
+  const saveConfig = async (fields) => run(api('/config', { method: 'POST', body: fields }))
 
   // ---------- Derivados / métricas ----------
   const derived = useMemo(() => {
     const receivedToday = data.orders.filter((o) => o.createdAt === today).length
+    const deliveredToday = data.orders.filter((o) => o.deliveredAt === today).length
 
-    const inRepair = data.orders.filter((o) => orderStatus(o) === 'en_reparacion')
-    const ready = data.orders.filter((o) => orderStatus(o) === 'lista')
+    const byStatus = (s) => data.orders.filter((o) => o.status === s)
 
-    const readyItems = data.orders
-      .flatMap((o) =>
-        (o.items || []).filter((i) => i.status === 'terminado').map((i) => ({ order: o, item: i })),
-      )
-      .sort((a, b) => String(b.item.createdAt).localeCompare(String(a.item.createdAt)))
-
-    const deliveredToday = data.orders.filter((o) =>
-      (o.items || []).some((i) => i.deliveredAt === today),
-    ).length
+    const byLastActivity = (list) =>
+      [...list].sort((a, b) => {
+        const last = (o) => o.history?.[o.history.length - 1]?.at || o.createdAt
+        return String(last(b)).localeCompare(String(last(a)))
+      })
 
     return {
       metrics: {
         receivedToday,
-        inRepairCount: inRepair.length,
-        readyCount: ready.length,
+        inRevisionCount: byStatus('en_revision').length,
+        pendingBudgetCount: byStatus('presupuesto').length,
+        inRepairCount: byStatus('en_reparacion').length,
+        readyCount: byStatus('terminado').length,
         deliveredToday,
       },
-      readyItems,
+      readyOrders: byLastActivity(byStatus('terminado')),
+      pendingBudgetOrders: byLastActivity(byStatus('presupuesto')),
     }
   }, [data.orders, today])
 
@@ -191,22 +207,25 @@ export function DataProvider({ children }) {
     orders: data.orders,
     users: data.users,
     config: data.config,
+    catalog: data.catalog,
     actividad,
     actividadHasMore,
     ...derived,
     addCustomer,
     updateCustomer,
     deleteCustomer,
+    addCatalogBrand,
+    addCatalogModel,
     addOrder,
     deleteOrder,
-    setItemStatus,
-    updateItem,
-    printItemLabel,
-    notifyItem,
+    setOrderStatus,
+    updateOrder,
+    toggleNotified,
+    printLabel,
     loadMoreActividad,
     addUser,
     toggleUserActive,
-    saveWhatsAppConfig,
+    saveConfig,
   }
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>

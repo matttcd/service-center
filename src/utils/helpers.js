@@ -16,13 +16,13 @@ function pad(n) {
 const KEEP_UPPER = new Set([
   'TV', 'HD', 'HDMI', 'LED', 'LCD', 'OLED', 'QLED', '4K', '8K', '2K',
   'USB', 'LG', 'HP', 'PS5', 'PS4', 'PS3', 'XBOX', 'LTE', '4G', '5G',
-  'GPS', 'DVR', 'AV', 'JVC', 'UPS', 'SSD', 'RAM', 'CPU', 'GPU', '3000F',
+  'GPS', 'DVR', 'AV', 'JVC', 'UPS', 'SSD', 'RAM', 'CPU', 'GPU',
   'SAMSUNG', 'XIAOMI', 'MOTOROLA', 'APPLE', 'HUAWEI', 'LENOVO', 'NOKIA',
-  'REALME', 'REDMI', 'GALAXY',
+  'REALME', 'REDMI', 'GALAXY', 'POCO', 'IPHONE',
 ])
 
-// Marcas/casos especiales que quieren capitalización exacta.
-const SPECIAL = { IPHONE: 'iPhone', IOS: 'iOS' }
+// Casos especiales que quieren capitalización exacta.
+const SPECIAL = { IOS: 'iOS' }
 
 // Pone la primera letra de cada palabra en mayúscula y el resto en minúscula.
 export function titleCase(s) {
@@ -89,49 +89,27 @@ export function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
-// ---------- Estados de los equipos ----------
-export const ITEM_STATUSES = ['recibido', 'en_reparacion', 'terminado', 'entregado']
+// ---------- Estados de una orden ----------
+export const ORDER_STATUSES = ['recibido', 'en_revision', 'presupuesto', 'en_reparacion', 'terminado', 'entregado']
 
-export const ITEM_STATUS_LABEL = {
+export const ORDER_STATUS_LABEL = {
   recibido: 'Recibido',
+  en_revision: 'En revisión',
+  presupuesto: 'Presupuesto',
   en_reparacion: 'En reparación',
   terminado: 'Listo para retirar',
   entregado: 'Entregado',
 }
 
-// Tono del badge según el estado del equipo.
-export function itemStatusTone(status) {
+// Tono del badge según el estado.
+export function orderStatusTone(status) {
   const map = {
     recibido: 'slate',
+    en_revision: 'primary',
+    presupuesto: 'yellow',
     en_reparacion: 'primary',
     terminado: 'green',
     entregado: 'slate',
-  }
-  return map[status] || 'slate'
-}
-
-// Estado de la orden derivado de sus equipos.
-export function orderStatus(order) {
-  const items = order.items || []
-  if (items.length && items.every((i) => i.status === 'entregado')) return 'entregada'
-  if (items.some((i) => i.status === 'terminado')) return 'lista'
-  if (items.some((i) => i.status === 'en_reparacion')) return 'en_reparacion'
-  return 'recibida'
-}
-
-export const ORDER_STATUS_LABEL = {
-  recibida: 'Recibida',
-  en_reparacion: 'En reparación',
-  lista: 'Lista para retirar',
-  entregada: 'Entregada',
-}
-
-export function orderStatusTone(status) {
-  const map = {
-    recibida: 'slate',
-    en_reparacion: 'primary',
-    lista: 'green',
-    entregada: 'slate',
   }
   return map[status] || 'slate'
 }
@@ -140,5 +118,5 @@ export function orderStatusTone(status) {
 export const ROLE_LABEL = {
   admin: 'Administrador',
   tecnico: 'Técnico',
-  mostrador: 'Mostrador',
+  mostrador: 'Empleado',
 }

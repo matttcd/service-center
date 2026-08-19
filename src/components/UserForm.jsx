@@ -100,7 +100,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
             Rol
           </label>
           <select value={form.role} onChange={set('role')} className={inputCls}>
-            <option value="mostrador">Mostrador (recepción y entrega)</option>
+            <option value="mostrador">Empleado (recepción y entrega)</option>
             <option value="tecnico">Técnico (reparación)</option>
             <option value="admin">Administrador</option>
           </select>

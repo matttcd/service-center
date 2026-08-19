@@ -3,18 +3,13 @@
 // ============================================
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Search, Eye } from 'lucide-react'
+import { Plus, Search, Eye, BellOff } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import OrderForm from '../components/OrderForm.jsx'
 import OrderPrint from '../components/OrderPrint.jsx'
-import {
-  orderStatus,
-  ORDER_STATUS_LABEL,
-  orderStatusTone,
-  formatDate,
-} from '../utils/helpers.js'
+import { ORDER_STATUS_LABEL, orderStatusTone, formatDate } from '../utils/helpers.js'
 
 export default function Orders() {
   const { orders, customers } = useData()
@@ -28,18 +23,13 @@ export default function Orders() {
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
     return orders
-      .map((o) => ({ ...o, status: orderStatus(o) }))
       .filter((o) => (status === 'all' ? true : o.status === status))
       .filter((o) => {
         if (!query) return true
         return (
           o.orderNumber.toLowerCase().includes(query) ||
           (o.customerName || '').toLowerCase().includes(query) ||
-          (o.items || []).some(
-            (i) =>
-              `${i.brand} ${i.model}`.toLowerCase().includes(query) ||
-              (i.imei || '').toLowerCase().includes(query),
-          )
+          `${o.brand} ${o.model}`.toLowerCase().includes(query)
         )
       })
   }, [orders, status, q])
@@ -54,9 +44,7 @@ export default function Orders() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Órdenes de servicio</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {filtered.length} orden(es)
-          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{filtered.length} orden(es)</p>
         </div>
         <button
           onClick={() => setFormOpen(true)}
@@ -76,16 +64,15 @@ export default function Orders() {
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por N.º, cliente, equipo o IMEI..."
+              placeholder="Buscar por N.º, cliente o equipo..."
               className={`${inputCls} pl-9`}
             />
           </div>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${inputCls} sm:w-56`}>
             <option value="all">Todas</option>
-            <option value="recibida">Recibida</option>
-            <option value="en_reparacion">En reparación</option>
-            <option value="lista">Lista para retirar</option>
-            <option value="entregada">Entregada</option>
+            {Object.entries(ORDER_STATUS_LABEL).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
           </select>
         </div>
       </Card>
@@ -104,16 +91,19 @@ export default function Orders() {
                 className="flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/40 sm:flex-row sm:items-center"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-slate-900 dark:text-white">{o.orderNumber}</p>
+                    <p className="font-semibold text-slate-700 dark:text-slate-200">{o.brand} {o.model}</p>
                     <Badge tone={orderStatusTone(o.status)}>{ORDER_STATUS_LABEL[o.status]}</Badge>
+                    {!o.notified && o.status !== 'entregado' && (
+                      <Badge tone="yellow">
+                        <BellOff size={12} />
+                        Sin avisar
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-                    {o.customerName} · {(o.items || []).length} dispositivo(s) ·{' '}
-                    {(o.items || []).filter((i) => i.status === 'terminado').length} listo(s)
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {formatDate(o.createdAt)} · Recibió {o.receivedByName}
+                    {o.customerName} · {formatDate(o.createdAt)} · Recibió {o.receivedByName}
                   </p>
                 </div>
 

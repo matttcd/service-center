@@ -1,25 +1,39 @@
 // ============================================
 // DashboardCards: tarjetas de métricas principales
 // ============================================
-import { ClipboardList, Wrench, CheckCircle2, PackageCheck } from 'lucide-react'
+import { Inbox, Stethoscope, FileText, Wrench, CheckCircle2, PackageCheck } from 'lucide-react'
 import StatCard from './StatCard.jsx'
 
 export default function DashboardCards({ metrics }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <StatCard
-        icon={ClipboardList}
+        icon={Inbox}
         label="Recibidos hoy"
         value={metrics.receivedToday}
         sub="Órdenes creadas en el día"
         accent="primary"
       />
       <StatCard
+        icon={Stethoscope}
+        label="En revisión"
+        value={metrics.inRevisionCount}
+        sub="Equipos que revisa el técnico"
+        accent="primary"
+      />
+      <StatCard
+        icon={FileText}
+        label="Presupuesto pendiente"
+        value={metrics.pendingBudgetCount}
+        sub="Esperando decisión del cliente"
+        accent="amber"
+      />
+      <StatCard
         icon={Wrench}
         label="En reparación"
         value={metrics.inRepairCount}
-        sub="Órdenes con trabajo en curso"
-        accent="amber"
+        sub="Trabajo en curso"
+        accent="primary"
       />
       <StatCard
         icon={CheckCircle2}
