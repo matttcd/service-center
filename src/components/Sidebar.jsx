@@ -15,6 +15,8 @@ import {
   LogOut,
   X,
   History,
+  Wrench,
+  PackageCheck,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { BRAND_NAME, BRAND_SUBTITLE } from '../utils/brand.js'
@@ -24,10 +26,19 @@ export default function Sidebar({ open, onClose }) {
   const { currentUser, logout } = useAuth()
   const role = currentUser?.role
   const isAdmin = role === 'admin'
+  const isTech = role === 'tecnico' || isAdmin
 
   // Ítems de navegación según el rol.
   const navItems = [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+    ...(isTech
+      ? [
+          { to: '/taller', label: 'Taller', icon: Wrench, end: false },
+          { to: '/listos', label: 'Listos', icon: PackageCheck, end: false },
+        ]
+      : [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }]),
+    ...(isAdmin
+      ? [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }]
+      : []),
     { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
     ...(role === 'mostrador' || isAdmin
       ? [{ to: '/clientes', label: 'Clientes', icon: Users, end: false }]

@@ -2,14 +2,14 @@
 // Dashboard: métricas + presupuestos pendientes y listos para retirar
 // ============================================
 import { useNavigate } from 'react-router-dom'
-import { FileText, CheckCircle2, Bell, BellOff, Eye, Sticker } from 'lucide-react'
+import { FileText, CheckCircle2, Bell, BellOff, Eye, Sticker, Megaphone, Lock } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import DashboardCards from '../components/DashboardCards.jsx'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import { ORDER_STATUS_LABEL, orderStatusTone, formatDate } from '../utils/helpers.js'
 
-function QueueRow({ title, Icon, tone, items, emptyText, showLabel, onNotify, onLabel }) {
+function QueueRow({ title, Icon, tone, items, emptyText, showLabel, onNotify, onLabel, onConfirm }) {
   return (
     <Card>
       <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
@@ -35,16 +35,31 @@ function QueueRow({ title, Icon, tone, items, emptyText, showLabel, onNotify, on
                     {o.brand} {o.model}
                   </p>
                   <span className="text-xs text-slate-400">{o.orderNumber} · {o.customerName}</span>
-                  {o.notified ? (
-                    <Badge tone="green">
-                      <Bell size={12} />
-                      Avisado
-                    </Badge>
-                  ) : (
-                    <Badge tone="yellow">
-                      <BellOff size={12} />
-                      Sin avisar
-                    </Badge>
+                  {o.status === 'presupuesto' && (
+                    o.confirmed ? (
+                      <Badge tone="green">
+                        <CheckCircle2 size={12} />
+                        Confirmado
+                      </Badge>
+                    ) : (
+                      <Badge tone="yellow">
+                        <Lock size={12} />
+                        Sin confirmar
+                      </Badge>
+                    )
+                  )}
+                  {o.status !== 'presupuesto' && (
+                    o.notified ? (
+                      <Badge tone="green">
+                        <Bell size={12} />
+                        Avisado
+                      </Badge>
+                    ) : (
+                      <Badge tone="yellow">
+                        <BellOff size={12} />
+                        Sin avisar
+                      </Badge>
+                    )
                   )}
                 </div>
                 <p className="text-sm text-slate-400">
@@ -55,6 +70,18 @@ function QueueRow({ title, Icon, tone, items, emptyText, showLabel, onNotify, on
               <div className="flex items-center gap-2">
                 {showLabel && (
                   <Badge tone={orderStatusTone(o.status)}>{ORDER_STATUS_LABEL[o.status]}</Badge>
+                )}
+                {onConfirm && o.status === 'presupuesto' && (
+                  <button
+                    onClick={() => onConfirm(o)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                      o.confirmed
+                        ? 'border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300'
+                        : 'border-primary-200 bg-primary-600 text-white hover:bg-primary-700'
+                    }`}
+                  >
+                    {o.confirmed ? 'Desmarcar' : 'Confirmar'}
+                  </button>
                 )}
                 <button
                   onClick={() => onNotify(o)}
@@ -99,10 +126,15 @@ function NavButton({ o }) {
 }
 
 export default function Dashboard() {
-  const { metrics, pendingBudgetOrders, readyOrders, toggleNotified, printLabel } = useData()
+  const { metrics, pendingBudgetOrders, readyOrders, porAvisarOrders, toggleNotified, confirmOrder, printLabel } = useData()
 
   const handleNotify = async (o) => {
     const res = await toggleNotified(o.id, !o.notified)
+    if (res.error) alert(res.error)
+  }
+
+  const handleConfirm = async (o) => {
+    const res = await confirmOrder(o.id, !o.confirmed)
     if (res.error) alert(res.error)
   }
 
@@ -121,6 +153,17 @@ export default function Dashboard() {
       <DashboardCards metrics={metrics} />
 
       <QueueRow
+        title="Por avisar"
+        icon={Megaphone}
+        Icon={Megaphone}
+        tone="text-amber-500"
+        items={porAvisarOrders}
+        emptyText="No hay equipos pendientes de avisar al cliente."
+        onNotify={handleNotify}
+        showLabel
+      />
+
+      <QueueRow
         title="Presupuestos pendientes"
         icon={FileText}
         Icon={FileText}
@@ -128,6 +171,7 @@ export default function Dashboard() {
         items={pendingBudgetOrders}
         emptyText="No hay presupuestos esperando confirmación del cliente."
         onNotify={handleNotify}
+        onConfirm={handleConfirm}
       />
 
       <QueueRow

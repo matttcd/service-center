@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { initDB, getDB, mutate, persist, createBackup, listBackups, restoreBackup, purgeTrash } from './store.js'
+import { initDB, getDB, mutate, persist, createBackup, listBackups, restoreBackup, purgeTrash, onDataChange } from './store.js'
 import { buildSeed } from './seed.js'
 import { todayISO, titleCase, uid } from './helpers.js'
 import { printZplLabel } from './printer.js'
@@ -22,6 +22,26 @@ app.use(cors())
 app.use(express.json())
 
 await initDB(buildSeed)
+
+// ============================================
+// Tiempo real (Server-Sent Events)
+// ============================================
+const eventClients = new Set()
+
+// Envía un evento a todos los clientes conectados.
+function broadcast(type, data = {}) {
+  const payload = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`
+  for (const res of eventClients) {
+    try {
+      res.write(payload)
+    } catch {
+      eventClients.delete(res)
+    }
+  }
+}
+
+// Cuando la base cambia, avisamos a todos los clientes conectados.
+onDataChange(() => broadcast('data-changed'))
 
 // ============================================
 // Copias de seguridad automáticas
@@ -95,10 +115,12 @@ function decorateOrder(d, order) {
   return {
     ...order,
     customerName: customer?.fullName || '(cliente eliminado)',
+    assignedToName: order.assignedTo ? names.get(order.assignedTo) || '—' : null,
     receivedByName: names.get(order.receivedBy) || '—',
     repairedByName: order.repairedBy ? names.get(order.repairedBy) || '—' : null,
     deliveredByName: order.deliveredBy ? names.get(order.deliveredBy) || '—' : null,
     notifiedByName: order.notifiedBy ? names.get(order.notifiedBy) || '—' : null,
+    confirmedByName: order.confirmedBy ? names.get(order.confirmedBy) || '—' : null,
     history: (order.history || []).map((h) => ({ ...h, byName: names.get(h.by) || '—' })),
   }
 }
@@ -149,6 +171,45 @@ function adminOnly(req, res, next) {
   next()
 }
 
+// ---------- Tiempo real: canal de eventos (SSE) ----------
+app.get('/api/events', (req, res) => {
+  // EventSource no puede enviar headers, así que el token viaja como query.
+  const token = req.query.token
+  if (!token) return res.status(401).json({ error: 'No autorizado.' })
+  let user
+  try {
+    const payload = jwt.verify(String(token), JWT_SECRET)
+    user = getDB().users.find((u) => u.id === payload.id) || null
+  } catch {
+    user = null
+  }
+  if (!user || !user.active) return res.status(401).json({ error: 'No autorizado.' })
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  })
+  res.write('event: connected\ndata: {"ok":true}\n\n')
+
+  eventClients.add(res)
+
+  // Heartbeat: evita que proxies/gateways corten la conexión inactiva.
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': ping\n\n')
+    } catch {
+      clearInterval(heartbeat)
+    }
+  }, 25000)
+
+  req.on('close', () => {
+    clearInterval(heartbeat)
+    eventClients.delete(res)
+  })
+})
+
 // ---------- Bootstrap ----------
 app.get('/api/bootstrap', auth, (req, res) => {
   const db = getDB()
@@ -163,6 +224,9 @@ app.get('/api/bootstrap', auth, (req, res) => {
     orders,
     catalog: db.catalog || { brands: [], models: [] },
     users: req.user.role === 'admin' ? db.users.map(publicUser) : [],
+    technicians: db.users
+      .filter((u) => u.active && u.role === 'tecnico')
+      .map(publicUser),
     config: {
       revisionFee: db.config?.revisionFee ?? 0,
       ...(req.user.role === 'admin' ? { whatsapp: db.config?.whatsapp || {} } : {}),
@@ -348,10 +412,14 @@ app.post('/api/orders', auth, (req, res) => {
       advance,
       status: 'recibido',
       technicianNotes: '',
+      assignedTo: null,
       repairedBy: null,
       notified: false,
       notifiedAt: null,
       notifiedBy: null,
+      confirmed: false,
+      confirmedAt: null,
+      confirmedBy: null,
       history: [{ status: 'recibido', at: new Date().toISOString(), by: req.user.id }],
       receivedBy: req.user.id,
       createdAt: todayISO(),
@@ -432,7 +500,10 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   const isTech = ['tecnico', 'admin'].includes(role)
   const isCounter = ['mostrador', 'admin'].includes(role)
 
-  // Transiciones permitidas según el estado actual.
+  // Estados del taller: el técnico puede mover libremente entre ellos (cola flexible).
+  const WORKSHOP_STATUSES = ['recibido', 'en_revision', 'presupuesto', 'en_reparacion', 'terminado']
+
+  // Transiciones permitidas según el estado actual (para mostrador / no-técnico).
   const transitions = {
     recibido: order.diagnosisType === 'revision' ? ['en_revision'] : ['en_reparacion'],
     en_revision: ['presupuesto'],
@@ -441,13 +512,20 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
     terminado: ['entregado', 'en_reparacion'],
     entregado: [],
   }
-  if (!transitions[from]?.includes(status)) {
+
+  const flexible = isTech && from !== status && WORKSHOP_STATUSES.includes(from) && WORKSHOP_STATUSES.includes(status)
+  const allowed = flexible || transitions[from]?.includes(status)
+  if (!allowed) {
     return res.status(400).json({
       error: `No se puede pasar de "${from}" a "${status}".`,
     })
   }
   if (status === 'presupuesto' && Number(order.price) <= 0) {
     return res.status(400).json({ error: 'Cargá el arreglo y el presupuesto antes de pasarlo a presupuesto.' })
+  }
+  // Sin confirmación del cliente no se puede comenzar la reparación de un presupuesto.
+  if (from === 'presupuesto' && status === 'en_reparacion' && !order.confirmed) {
+    return res.status(400).json({ error: 'El cliente debe confirmar el arreglo antes de reparar.' })
   }
   if (['en_revision', 'presupuesto', 'en_reparacion', 'terminado'].includes(status) && !isTech) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
@@ -468,6 +546,16 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
       note: status === 'entregado' && previous === 'presupuesto' ? 'Cliente rechazó el presupuesto' : undefined,
     })
     if (['en_revision', 'en_reparacion', 'terminado'].includes(status)) o.repairedBy = req.user.id
+    if (['presupuesto', 'terminado'].includes(status)) {
+      o.notified = false
+      o.notifiedAt = null
+      o.notifiedBy = null
+    }
+    if (status === 'presupuesto') {
+      o.confirmed = false
+      o.confirmedAt = null
+      o.confirmedBy = null
+    }
     if (status === 'entregado') {
       o.deliveredAt = todayISO()
       o.deliveredBy = req.user.id
@@ -491,17 +579,42 @@ app.put('/api/orders/:id', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
-  const { technicianNotes, fix, price } = req.body || {}
-  const touched = technicianNotes !== undefined || fix !== undefined || price !== undefined
+  const { technicianNotes, fix, price, issue } = req.body || {}
+  const touched = technicianNotes !== undefined || fix !== undefined || price !== undefined || issue !== undefined
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
     if (technicianNotes !== undefined) o.technicianNotes = String(technicianNotes)
     if (fix !== undefined) o.fix = String(fix).trim()
     if (price !== undefined) o.price = Math.max(0, Number(price) || 0)
+    if (issue !== undefined) o.issue = String(issue).trim()
     if (touched) {
       audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · ${o.brand} ${o.model}: notas/presupuesto actualizados`)
     }
   }).then(() => res.json({ ok: true }))
+})
+
+// ---------- Asignación de técnico encargado ----------
+app.post('/api/orders/:id/assign', auth, (req, res) => {
+  const db = getDB()
+  const order = db.orders.find((o) => o.id === req.params.id)
+  if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
+  if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
+  const isTech = ['tecnico', 'admin'].includes(req.user.role)
+  if (!isTech) {
+    return res.status(403).json({ error: 'Solo el técnico (o el admin) puede asignar un técnico.' })
+  }
+  const userId = req.body?.userId || null
+  if (userId) {
+    const tech = db.users.find(
+      (u) => u.id === userId && u.active && u.role === 'tecnico',
+    )
+    if (!tech) return res.status(400).json({ error: 'Técnico no encontrado.' })
+  }
+  mutate((d) => {
+    const o = d.orders.find((x) => x.id === req.params.id)
+    o.assignedTo = userId
+    audit(d, 'assign', 'orders', o.id, req.user.id, `${o.orderNumber} · asignado a ${userId || 'sin técnico'}`)
+  }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
 })
 
 // ---------- Marcar / desmarcar "cliente avisado" ----------
@@ -517,6 +630,22 @@ app.post('/api/orders/:id/notified', auth, (req, res) => {
     o.notifiedAt = notified ? new Date().toISOString() : null
     o.notifiedBy = notified ? req.user.id : null
     audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · cliente ${notified ? 'marcado como avisado' : 'desmarcado como avisado'}`)
+  }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
+})
+
+// ---------- Marcar / desmarcar confirmación del cliente ----------
+app.post('/api/orders/:id/confirm', auth, (req, res) => {
+  const db = getDB()
+  const order = db.orders.find((o) => o.id === req.params.id)
+  if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
+  if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
+  const confirmed = !!req.body?.confirmed
+  mutate((d) => {
+    const o = d.orders.find((x) => x.id === req.params.id)
+    o.confirmed = confirmed
+    o.confirmedAt = confirmed ? new Date().toISOString() : null
+    o.confirmedBy = confirmed ? req.user.id : null
+    audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · arreglo ${confirmed ? 'confirmado por el cliente' : 'desmarcado como confirmado'}`)
   }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
 })
 

@@ -17,9 +17,11 @@ import {
   Phone,
   BellRing,
   BellOff,
+  Lock,
   AlertTriangle,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
+import TechnicianSelect from '../components/TechnicianSelect.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
@@ -38,7 +40,7 @@ export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { orders, customers, config, setOrderStatus, updateOrder, toggleNotified, printLabel, deleteOrder } = useData()
+  const { orders, customers, config, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder } = useData()
   const [printing, setPrinting] = useState(false)
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
@@ -136,6 +138,13 @@ export default function OrderDetail() {
     setBusy(null)
   }
 
+  const handleConfirm = async () => {
+    setBusy('confirm')
+    const res = await confirmOrder(order.id, !order.confirmed)
+    showNotice(res.error ? res.error : order.confirmed ? 'Confirmación desmarcada.' : 'Arreglo confirmado por el cliente.')
+    setBusy(null)
+  }
+
   const handleDelete = async () => {
     if (!window.confirm(`¿Eliminar la orden ${order.orderNumber}?`)) return
     const res = await deleteOrder(order.id)
@@ -222,6 +231,29 @@ export default function OrderDetail() {
         </button>
       </Card>
 
+      {/* Confirmación del arreglo (presupuesto) */}
+      {order.status === 'presupuesto' && (
+        <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+          <div className="flex-1 text-sm">
+            {order.confirmed ? (
+              <p className="text-slate-600 dark:text-slate-300">
+                <CheckCircle2 size={16} className="mr-1.5 inline text-emerald-500" />
+                Arreglo <span className="font-semibold">confirmado</span> por el cliente ·{' '}
+                {order.confirmedByName || '—'} el {formatDateTime(order.confirmedAt)}
+              </p>
+            ) : (
+              <p className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <Lock size={16} className="text-amber-500" />
+                El cliente <span className="font-semibold">aún no confirma</span> el arreglo. Sin confirmación no se puede reparar.
+              </p>
+            )}
+          </div>
+          <button onClick={handleConfirm} disabled={busy === 'confirm'} className={btnGhost}>
+            {order.confirmed ? 'Desmarcar confirmación' : 'Confirmar arreglo'}
+          </button>
+        </Card>
+      )}
+
       {/* Datos del cliente */}
       <Card>
         <div className="grid grid-cols-1 gap-3 px-5 py-4 text-sm sm:grid-cols-3">
@@ -259,6 +291,15 @@ export default function OrderDetail() {
             <span className="text-slate-400">Problema reportado:</span> {order.issue || '—'}
           </p>
         </div>
+        {isTech && (
+          <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-5 py-4 text-sm dark:border-slate-800">
+            <span className="text-slate-400">Técnico encargado:</span>
+            <TechnicianSelect order={order} onChanged={() => showNotice('Técnico asignado.')} />
+            {order.assignedTo && (
+              <p className="text-xs text-slate-400">{order.assignedToName || '—'}</p>
+            )}
+          </div>
+        )}
         {order.pattern?.length > 0 && (
           <div className="flex items-center gap-3 border-t border-slate-200 px-5 py-4 text-sm dark:border-slate-800">
             <span className="text-slate-400">Patrón de desbloqueo:</span>
@@ -374,7 +415,12 @@ export default function OrderDetail() {
               ¿Qué decidió el cliente sobre el presupuesto?
             </p>
             {isTech && (
-              <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnPrimary}>
+              <button
+                onClick={() => doStatus('en_reparacion')}
+                disabled={busy === 'en_reparacion' || !order.confirmed}
+                title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : ''}
+                className={`${btnPrimary} ${!order.confirmed ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+              >
                 <Play size={14} />
                 Aceptó → reparar
               </button>

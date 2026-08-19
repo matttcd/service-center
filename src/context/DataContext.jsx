@@ -4,6 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { api } from '../utils/api.js'
 import { useAuth } from './AuthContext.jsx'
+import { loadSession } from '../utils/storage.js'
 import { todayISO } from '../utils/helpers.js'
 
 const DataContext = createContext(null)
@@ -16,6 +17,7 @@ export function DataProvider({ children }) {
     customers: [],
     orders: [],
     users: [],
+    technicians: [],
     config: null,
     catalog: { brands: [], models: [] },
   })
@@ -32,6 +34,7 @@ export function DataProvider({ children }) {
         customers: res.customers || [],
         orders: res.orders || [],
         users: res.users || [],
+        technicians: res.technicians || [],
         config: res.config || null,
         catalog: res.catalog || { brands: [], models: [] },
       })
@@ -52,12 +55,22 @@ export function DataProvider({ children }) {
 
   useEffect(() => {
     if (!currentUser) {
-      setData({ customers: [], orders: [], users: [], config: null, catalog: { brands: [], models: [] } })
+      setData({ customers: [], orders: [], users: [], technicians: [], config: null, catalog: { brands: [], models: [] } })
       setActividad([])
       setLoading(false)
       return
     }
     refresh()
+
+    // Canal de tiempo real: recibe avisos cuando algo cambió y recarga en silencio.
+    const token = loadSession()?.token
+    if (!token) return
+    const es = new EventSource(`/api/events?token=${encodeURIComponent(token)}`)
+    es.addEventListener('data-changed', () => refresh({ silent: true }))
+    es.onerror = () => {
+      // EventSource se reconecta solo; nada que hacer aquí salvo limpiar al salir.
+    }
+    return () => es.close()
   }, [currentUser, refresh])
 
   const run = async (promise) => {
@@ -143,6 +156,28 @@ export function DataProvider({ children }) {
     }
   }
 
+  // Marca / desmarca confirmación del cliente sobre el arreglo.
+  const confirmOrder = async (orderId, confirmed) => {
+    try {
+      const res = await api(`/orders/${orderId}/confirm`, { method: 'POST', body: { confirmed } })
+      await refresh({ silent: true })
+      return { error: null, order: res.order }
+    } catch (err) {
+      return { error: err.message }
+    }
+  }
+
+  // Asigna el técnico encargado de una orden.
+  const assignTechnician = async (orderId, userId) => {
+    try {
+      const res = await api(`/orders/${orderId}/assign`, { method: 'POST', body: { userId } })
+      await refresh({ silent: true })
+      return { error: null, order: res.order }
+    } catch (err) {
+      return { error: err.message }
+    }
+  }
+
   // Imprime la etiqueta ZPL del equipo.
   const printLabel = async (orderId) => {
     try {
@@ -194,8 +229,13 @@ export function DataProvider({ children }) {
         readyCount: byStatus('terminado').length,
         deliveredToday,
       },
-      readyOrders: byLastActivity(byStatus('terminado')),
+readyOrders: byLastActivity(byStatus('terminado')),
       pendingBudgetOrders: byLastActivity(byStatus('presupuesto')),
+      porAvisarOrders: byLastActivity(
+        data.orders.filter(
+          (o) => ['presupuesto', 'terminado'].includes(o.status) && !o.notified,
+        ),
+      ),
     }
   }, [data.orders, today])
 
@@ -206,6 +246,7 @@ export function DataProvider({ children }) {
     customers: data.customers,
     orders: data.orders,
     users: data.users,
+    technicians: data.technicians,
     config: data.config,
     catalog: data.catalog,
     actividad,
@@ -221,6 +262,8 @@ export function DataProvider({ children }) {
     setOrderStatus,
     updateOrder,
     toggleNotified,
+    confirmOrder,
+    assignTechnician,
     printLabel,
     loadMoreActividad,
     addUser,

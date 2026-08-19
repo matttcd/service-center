@@ -12,6 +12,15 @@ const DB_FILE = process.env.DB_FILE || path.join(DATA_DIR, 'db.json')
 let db = null
 let writeQueue = Promise.resolve()
 
+// Suscriptores que se notifican cuando la base cambia (para tiempo real).
+const changeListeners = new Set()
+
+// Registra un callback que se invoca después de cada persistencia.
+export function onDataChange(fn) {
+  changeListeners.add(fn)
+  return () => changeListeners.delete(fn)
+}
+
 // Inicializa la base de datos. Si no existe el archivo, crea el seed.
 export async function initDB(seed) {
   try {
@@ -66,7 +75,16 @@ function atomicReplace(tmp, dest) {
 // Aplica una mutación a la base y la persiste.
 export function mutate(fn) {
   const result = fn(db)
-  return persist().then(() => result)
+  return persist().then(() => {
+    changeListeners.forEach((l) => {
+      try {
+        l()
+      } catch {
+        // Un listener con error no debe romper la mutación.
+      }
+    })
+    return result
+  })
 }
 
 // ============================================

@@ -6,6 +6,8 @@ import { useAuth } from './context/AuthContext.jsx'
 import Layout from './components/Layout.jsx'
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
+import Taller from './pages/Taller.jsx'
+import Listos from './pages/Listos.jsx'
 import Orders from './pages/Orders.jsx'
 import OrderDetail from './pages/OrderDetail.jsx'
 import Clients from './pages/Clients.jsx'
@@ -22,11 +24,19 @@ function RequireAuth({ children }) {
   return children
 }
 
-// Restringe rutas según rol.
-function RequireRole({ role, children }) {
+// Restringe rutas según rol (acepta uno o varios roles).
+function RequireRole({ roles, children }) {
   const { currentUser } = useAuth()
-  if (currentUser?.role !== role) return <Navigate to="/" replace />
+  const allowed = Array.isArray(roles) ? roles : [roles]
+  if (!allowed.includes(currentUser?.role)) return <Navigate to="/" replace />
   return children
+}
+
+// Home: el técnico entra directo a su tablero del Taller.
+function Home() {
+  const { currentUser } = useAuth()
+  if (currentUser?.role === 'tecnico') return <Navigate to="/taller" replace />
+  return <Dashboard />
 }
 
 export default function App() {
@@ -42,7 +52,23 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route index element={<Home />} />
+        <Route
+          path="taller"
+          element={
+            <RequireRole roles={['tecnico', 'admin']}>
+              <Taller />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="listos"
+          element={
+            <RequireRole roles={['tecnico', 'admin']}>
+              <Listos />
+            </RequireRole>
+          }
+        />
         <Route path="ordenes" element={<Orders />} />
         <Route path="ordenes/:id" element={<OrderDetail />} />
         <Route path="clientes" element={<Clients />} />
@@ -51,7 +77,7 @@ export default function App() {
         <Route
           path="usuarios"
           element={
-            <RequireRole role="admin">
+            <RequireRole roles={['admin']}>
               <Users />
             </RequireRole>
           }
@@ -59,7 +85,7 @@ export default function App() {
         <Route
           path="backups"
           element={
-            <RequireRole role="admin">
+            <RequireRole roles={['admin']}>
               <Backups />
             </RequireRole>
           }
@@ -67,7 +93,7 @@ export default function App() {
         <Route
           path="configuracion"
           element={
-            <RequireRole role="admin">
+            <RequireRole roles={['admin']}>
               <Settings />
             </RequireRole>
           }
