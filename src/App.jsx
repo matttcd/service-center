@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard.jsx'
 import Orders from './pages/Orders.jsx'
 import OrderDetail from './pages/OrderDetail.jsx'
 import Clients from './pages/Clients.jsx'
+import ClientDetail from './pages/ClientDetail.jsx'
 import Users from './pages/Users.jsx'
 import Backups from './pages/Backups.jsx'
 import Actividad from './pages/Actividad.jsx'
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="ordenes" element={<Orders />} />
         <Route path="ordenes/:id" element={<OrderDetail />} />
         <Route path="clientes" element={<Clients />} />
+        <Route path="clientes/:id" element={<ClientDetail />} />
         <Route path="actividad" element={<Actividad />} />
         <Route
           path="usuarios"

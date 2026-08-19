@@ -15,6 +15,11 @@ dist-ssr
 # Datos de la base compartida (db.json + backups) no se versionan
 server/data/
 
+# Archivos de Python (impresión de etiquetas) y sesiones de trabajo
+__pycache__/
+*.pyc
+session-*.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

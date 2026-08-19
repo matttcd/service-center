@@ -41,14 +41,14 @@ export function buildSeed() {
   const mostrador = { id: uid(), name: 'Mostrador', email: 'mostrador@local.com', password: hash('mostrador123'), role: 'mostrador', active: true }
   db.users.push(admin, tecnico, mostrador)
 
-  const mkCustomer = (fullName, dni, phone, email, address, createdAt) => ({
-    id: uid(), fullName, dni, phone, email, address, createdAt,
+  const mkCustomer = (fullName, dni, phone, email, address, createdAt, phone2 = '', phone3 = '') => ({
+    id: uid(), fullName, dni, phone, phone2, phone3, email, address, createdAt,
   })
 
   const fernando = mkCustomer('Fernando Fleitas', '30123456', '1155554433', 'fernando@mail.com', 'Av. Tecnológica 100', addDays(today, -12))
   const luciano = mkCustomer('Luciano Grossi', '27987654', '1166667788', 'luciano@mail.com', 'Calle Computación 890', addDays(today, -8))
-  const mateo = mkCustomer('Mateo Cuella', '33456789', '1177778899', 'mateo@mail.com', 'Belgrano 456', addDays(today, -20))
-  const cristian = mkCustomer('Cristian Ramirez', '36765432', '1188889900', 'cristian@mail.com', 'San Martín 678', addDays(today, -3))
+  const mateo = mkCustomer('Mateo Cuella', '33456789', '1177778899', 'mateo@mail.com', 'Belgrano 456', addDays(today, -20), '1512345678', '1523456789')
+  const cristian = mkCustomer('Cristian Ramirez', '36765432', '1188889900', 'cristian@mail.com', 'San Martín 678', addDays(today, -3), '', '1511199887')
   db.customers.push(fernando, luciano, mateo, cristian)
 
   // ---------- Catálogo ----------
@@ -81,6 +81,7 @@ export function buildSeed() {
       model: opts.model,
       accessories: opts.accessories || '',
       pin: opts.pin || '',
+      pattern: opts.pattern || null,
       diagnosisType: opts.diagnosisType || 'visible',
       issue: opts.issue,
       fix: opts.fix || '',
@@ -109,7 +110,7 @@ export function buildSeed() {
       receivedBy: mostrador.id,
       createdAt: addDays(today, -2),
       brand: 'Samsung', model: 'Galaxy A15',
-      accessories: 'Funda', pin: '1234',
+      accessories: 'Funda', pin: '1234', pattern: [0, 1, 2, 5],
       diagnosisType: 'visible',
       issue: 'No enciende, queda en logo y se apaga.',
       fix: 'Cambio de batería', price: 45000,
@@ -144,7 +145,7 @@ export function buildSeed() {
       receivedBy: mostrador.id,
       createdAt: addDays(today, -3),
       brand: 'Motorola', model: 'G54',
-      accessories: '', pin: '4567',
+      accessories: '', pin: '4567', pattern: [0, 3, 6, 7],
       diagnosisType: 'revision',
       issue: 'No carga con cable, solo inalámbrico.',
       fix: 'Cambio de puerto de carga', price: 38000,

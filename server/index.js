@@ -237,7 +237,7 @@ function bumpCatalog(d, brand, model) {
 
 // ---------- Clientes ----------
 app.post('/api/customers', auth, (req, res) => {
-  const { fullName, dni, phone, phone2, email, address } = req.body || {}
+  const { fullName, dni, phone, phone2, phone3, email, address } = req.body || {}
   if (!fullName || !fullName.trim()) {
     return res.status(400).json({ error: 'El nombre completo es obligatorio.' })
   }
@@ -256,6 +256,7 @@ app.post('/api/customers', auth, (req, res) => {
       dni: dniNorm,
       phone: String(phone || ''),
       phone2: String(phone2 || ''),
+      phone3: String(phone3 || ''),
       email: String(email || '').trim().toLowerCase(),
       address: titleCase(address),
       createdAt: todayISO(),
@@ -268,7 +269,7 @@ app.put('/api/customers/:id', auth, (req, res) => {
   const db = getDB()
   const target = db.customers.find((c) => c.id === req.params.id)
   if (!target) return res.status(404).json({ error: 'Cliente no encontrado.' })
-  const { fullName, dni, phone, phone2, email, address } = req.body || {}
+  const { fullName, dni, phone, phone2, phone3, email, address } = req.body || {}
   if (!fullName || !fullName.trim()) {
     return res.status(400).json({ error: 'El nombre completo es obligatorio.' })
   }
@@ -286,6 +287,7 @@ app.put('/api/customers/:id', auth, (req, res) => {
       dni: dniNorm,
       phone: String(phone || ''),
       phone2: String(phone2 || ''),
+      phone3: String(phone3 || ''),
       email: String(email || '').trim().toLowerCase(),
       address: titleCase(address),
     })
@@ -298,10 +300,6 @@ app.delete('/api/customers/:id', auth, (req, res) => {
   const target = db.customers.find((c) => c.id === req.params.id)
   if (!target) return res.status(404).json({ error: 'Cliente no encontrado.' })
   if (target.deletedAt) return res.status(400).json({ error: 'El cliente ya está eliminado.' })
-  const activeOrders = db.orders.filter((o) => !o.deletedAt && o.customerId === req.params.id)
-  if (activeOrders.length) {
-    return res.status(400).json({ error: 'El cliente tiene órdenes activas. No se puede eliminar.' })
-  }
   mutate((d) => {
     const now = new Date().toISOString()
     d.orders.filter((o) => o.customerId === req.params.id).forEach((o) => (o.deletedAt = now))
@@ -325,6 +323,10 @@ app.post('/api/orders', auth, (req, res) => {
   const diagnosisType = body.diagnosisType === 'revision' ? 'revision' : 'visible'
   const price = Math.max(0, Number(body.price) || 0)
   const advance = Math.max(0, Number(body.advance) || 0)
+  const pattern = Array.isArray(body.pattern)
+    ? body.pattern.filter((n) => Number.isInteger(n) && n >= 0 && n <= 8).slice(0, 9)
+    : []
+  const storedPattern = pattern.length >= 3 ? pattern : null
 
   let order = null
   mutate((d) => {
@@ -338,6 +340,7 @@ app.post('/api/orders', auth, (req, res) => {
       model,
       accessories: String(body.accessories || '').trim(),
       pin: String(body.pin || ''),
+      pattern: storedPattern,
       diagnosisType,
       issue: String(body.issue || '').trim(),
       fix: String(body.fix || '').trim(),

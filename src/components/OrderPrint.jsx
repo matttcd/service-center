@@ -8,6 +8,7 @@ import { Printer, FileDown, X } from 'lucide-react'
 import { BRAND_NAME, BRAND_SUBTITLE } from '../utils/brand.js'
 import { formatDate, formatMoney, ORDER_STATUS_LABEL } from '../utils/helpers.js'
 import { WARRANTY_DAYS } from '../utils/constants.js'
+import { PatternPreview } from './PatternPad.jsx'
 import { downloadOrderPdf } from '../utils/orderPdf.js'
 
 export default function OrderPrint({ open, order, customer, onClose }) {
@@ -90,7 +91,7 @@ export default function OrderPrint({ open, order, customer, onClose }) {
               <p><span className="text-slate-500">DNI:</span> {customer?.dni || '—'}</p>
               <p>
                 <span className="text-slate-500">Teléfono:</span>{' '}
-                {customer?.phone || '—'} {customer?.phone2 ? `· ${customer.phone2}` : ''}
+                {[customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' · ') || '—'}
               </p>
               <p>
                 <span className="text-slate-500">Domicilio:</span> {customer?.address || '—'}
@@ -110,7 +111,7 @@ export default function OrderPrint({ open, order, customer, onClose }) {
               </div>
               <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
                 <p>
-                  <span className="text-slate-500">PIN / patrón:</span>{' '}
+                  <span className="text-slate-500">PIN / contraseña:</span>{' '}
                   {order.pin || '—'}
                 </p>
                 <p>
@@ -122,6 +123,14 @@ export default function OrderPrint({ open, order, customer, onClose }) {
                   {order.issue || '—'}
                 </p>
               </div>
+              {order.pattern?.length > 0 && (
+                <div className="mt-3 flex items-center gap-4">
+                  <p className="text-sm">
+                    <span className="text-slate-500">Patrón de desbloqueo:</span>
+                  </p>
+                  <PatternPreview value={order.pattern} size={80} />
+                </div>
+              )}
             </div>
 
             {/* Presupuesto */}

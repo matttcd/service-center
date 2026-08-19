@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, UserPlus, ListPlus, X } from 'lucide-react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
+import PatternPad from './PatternPad.jsx'
 import { useData } from '../context/DataContext.jsx'
 import {
   COMMON_ACCESSORIES,
@@ -34,7 +35,8 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [accessories, setAccessories] = useState([])
   const [customAccessory, setCustomAccessory] = useState('')
   const [pin, setPin] = useState('')
-  const [diagnosisType, setDiagnosisType] = useState('visible') // 'visible' | 'revision'
+  const [pattern, setPattern] = useState([])
+  const [diagnosisType, setDiagnosisType] = useState('revision') // 'visible' | 'revision'
   const [issue, setIssue] = useState('')
   const [fix, setFix] = useState('')
   const [customFix, setCustomFix] = useState('')
@@ -57,7 +59,8 @@ export default function OrderForm({ open, onClose, onCreated }) {
     setAccessories([])
     setCustomAccessory('')
     setPin('')
-    setDiagnosisType('visible')
+    setPattern([])
+setDiagnosisType('revision')
     setIssue('')
     setFix('')
     setCustomFix('')
@@ -93,6 +96,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
     accessories.length > 0 ||
     !!customAccessory ||
     !!pin ||
+    pattern.length > 0 ||
     !!fix ||
     !!customFix
 
@@ -148,7 +152,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
     let cid = customerId
     if (mode === 'new') {
       if (!newCustomer.fullName.trim()) return setError('Ingresá el nombre del cliente.')
-      const res = await addCustomer({ ...newCustomer, phone2: '', email: '' })
+      const res = await addCustomer({ ...newCustomer, phone2: '', phone3: '', email: '' })
       if (res.error) return setError(res.error)
       cid = res.id
     }
@@ -167,6 +171,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
         model,
         accessories: accList.join(', '),
         pin: pin.trim(),
+        pattern: pattern.length >= 3 ? pattern : null,
         diagnosisType,
         issue: issue.trim(),
         fix: (diagnosisType === 'visible' ? (fix || customFix) : '').trim(),
@@ -296,8 +301,9 @@ export default function OrderForm({ open, onClose, onCreated }) {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className={labelCls}>PIN / patrón</label>
+                <label className={labelCls}>PIN / contraseña</label>
                 <input type="text" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Si te lo dejan configurado" className={inputCls} />
+                <p className="mt-1 text-xs text-slate-400">Dejá en blanco si no tiene.</p>
               </div>
               <div>
                 <label className={labelCls}>Accesorios que deja</label>
@@ -317,36 +323,36 @@ export default function OrderForm({ open, onClose, onCreated }) {
                     </button>
                   </span>
                 </div>
-                {accessories.length > 0 && (
-                  <p className="mt-1 text-xs text-slate-400">{accessories.join(', ')}</p>
-                )}
               </div>
+            </div>
+
+            <div>
+              <label className={labelCls}>Patrón de desbloqueo</label>
+              <PatternPad value={pattern} onChange={setPattern} />
             </div>
           </div>
 
-          {/* Diagnóstico */}
+          {/* Ingreso */}
           <div>
-            <label className={labelCls}>¿Se ve el problema a simple vista?</label>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <button type="button" onClick={() => setDiagnosisType('visible')}
-                className={`rounded-xl border-2 px-4 py-3 text-left text-sm transition ${diagnosisType === 'visible' ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
-                <p className="font-semibold text-slate-900 dark:text-white">Sí, se ve</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Anotamos el arreglo y el presupuesto ahora.</p>
-              </button>
+            <label className={labelCls}>Ingreso del equipo</label>
+            <div className="flex flex-wrap items-center gap-2">
               <button type="button" onClick={() => setDiagnosisType('revision')}
-                className={`rounded-xl border-2 px-4 py-3 text-left text-sm transition ${diagnosisType === 'revision' ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
-                <p className="font-semibold text-slate-900 dark:text-white">No, va a revisión</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">El técnico revisa y carga el presupuesto después.</p>
+                className={diagnosisType === 'revision' ? chipSelected : chipIdle}>
+                Revisión
+              </button>
+              <button type="button" onClick={() => setDiagnosisType('visible')}
+                className={diagnosisType === 'visible' ? chipSelected : chipIdle}>
+                Reparación directa
               </button>
             </div>
           </div>
 
           <div>
             <label className={labelCls}>Problema reportado</label>
-            <input type="text" value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="Ej: no enciende, se mojó, se cayó..." className={inputCls} />
+            <textarea value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="Motivo de ingreso, chequeos y notas generales..." className={inputCls} rows={3} />
           </div>
 
-          {diagnosisType === 'visible' ? (
+          {diagnosisType === 'visible' && (
             <div className="space-y-4">
               <div>
                 <label className={labelCls}>Arreglo a realizar</label>
@@ -367,15 +373,11 @@ export default function OrderForm({ open, onClose, onCreated }) {
                   <input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Costo del arreglo" className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Seña ($) — solo si se encarga repuesto</label>
-                  <input type="number" min="0" step="0.01" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="Opcióna" className={inputCls} />
+                  <label className={labelCls}>Seña ($)</label>
+                  <input type="number" min="0" step="0.01" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="Opcional" className={inputCls} />
                 </div>
               </div>
             </div>
-          ) : (
-            <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              El equipo entra a revisión técnica. El presupuesto lo va a cargar el técnico y se le avisa al cliente.
-            </p>
           )}
 
           {error && (
@@ -391,7 +393,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
             </button>
             <button type="submit" disabled={saving}
               className="flex-1 rounded-lg bg-primary-600 px-4 py-2.5 font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50">
-              {saving ? 'Guardando...' : 'Guardar e imprimir orden'}
+              {saving ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
 

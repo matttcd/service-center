@@ -12,13 +12,14 @@ import OrderPrint from '../components/OrderPrint.jsx'
 import { ORDER_STATUS_LABEL, orderStatusTone, formatDate } from '../utils/helpers.js'
 
 export default function Orders() {
-  const { orders, customers } = useData()
+  const { orders, customers, printLabel } = useData()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const [status, setStatus] = useState('all')
   const [q, setQ] = useState(() => params.get('q') || '')
   const [formOpen, setFormOpen] = useState(false)
   const [printing, setPrinting] = useState(null)
+  const [notice, setNotice] = useState(null) // { text, error }
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
@@ -39,6 +40,15 @@ export default function Orders() {
   const inputCls =
     'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
 
+  const onCreated = async (order) => {
+    const res = await printLabel(order.id)
+    setNotice(res.error
+      ? { text: `No se imprimió la etiqueta: ${res.error}`, error: true }
+      : { text: 'Etiqueta enviada a la impresora.', error: false })
+    window.setTimeout(() => setNotice(null), 6000)
+    setPrinting({ order, customer: customerOf(order) })
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -54,6 +64,14 @@ export default function Orders() {
           Nueva orden
         </button>
       </div>
+
+      {notice && (
+        <p className={`rounded-lg px-4 py-2 text-sm ${notice.error
+          ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400'
+          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'}`}>
+          {notice.text}
+        </p>
+      )}
 
       {/* Filtros */}
       <Card className="p-4">
@@ -128,7 +146,7 @@ export default function Orders() {
         )}
       </Card>
 
-      <OrderForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={(order) => setPrinting({ order, customer: customerOf(order) })} />
+      <OrderForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={onCreated} />
       <OrderPrint
         open={!!printing}
         order={printing?.order}

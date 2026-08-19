@@ -2,6 +2,7 @@
 // CustomerForm: alta o edición de cliente
 // ============================================
 import { useState, useEffect } from 'react'
+import { Plus } from 'lucide-react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
 import { isValidEmail } from '../utils/helpers.js'
@@ -12,27 +13,31 @@ export default function CustomerForm({ open, onClose, onSubmit, initial, serverE
     dni: '',
     phone: '',
     phone2: '',
+    phone3: '',
     email: '',
     address: '',
   })
   const [snapshot, setSnapshot] = useState('')
   const [confirming, setConfirming] = useState(false)
+  const [showPhone3, setShowPhone3] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!open) return
     setError('')
     setConfirming(false)
+    setShowPhone3(!!initial?.phone3)
     const base = initial
       ? {
           fullName: initial.fullName,
           dni: initial.dni,
           phone: initial.phone,
           phone2: initial.phone2 || '',
+          phone3: initial.phone3 || '',
           email: initial.email,
           address: initial.address,
         }
-      : { fullName: '', dni: '', phone: '', phone2: '', email: '', address: '' }
+      : { fullName: '', dni: '', phone: '', phone2: '', phone3: '', email: '', address: '' }
     setSnapshot(JSON.stringify(base))
     setForm(base)
   }, [open, initial])
@@ -134,6 +139,29 @@ export default function CustomerForm({ open, onClose, onSubmit, initial, serverE
             className={inputCls}
           />
         </div>
+        {showPhone3 ? (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Teléfono 3
+            </label>
+            <input
+              type="tel"
+              value={form.phone3}
+              onChange={set('phone3')}
+              placeholder="1155998877"
+              className={inputCls}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowPhone3(true)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-600 transition hover:text-primary-700"
+          >
+            <Plus size={15} />
+            Agregar otro teléfono
+          </button>
+        )}
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
             Email

@@ -24,6 +24,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import OrderPrint from '../components/OrderPrint.jsx'
+import { PatternPreview } from '../components/PatternPad.jsx'
 import {
   ORDER_STATUS_LABEL,
   orderStatusTone,
@@ -171,8 +172,14 @@ export default function OrderDetail() {
               </Badge>
             </div>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              {order.brand} {order.model} · {customer?.fullName || order.customerName} · Recibió{' '}
-              {order.receivedByName} · {formatDate(order.createdAt)}
+              {order.brand} {order.model} ·{' '}
+              <button
+                onClick={() => navigate(`/clientes/${customer?.id}`)}
+                className="font-semibold text-primary-600 transition hover:text-primary-700 dark:text-primary-400"
+              >
+                {customer?.fullName || order.customerName}
+              </button>{' '}
+              · Recibió {order.receivedByName} · {formatDate(order.createdAt)}
             </p>
           </div>
         </div>
@@ -220,7 +227,7 @@ export default function OrderDetail() {
         <div className="grid grid-cols-1 gap-3 px-5 py-4 text-sm sm:grid-cols-3">
           <p className="text-slate-600 dark:text-slate-300">
             <span className="text-slate-400">Teléfonos:</span>{' '}
-            {customer?.phone || '—'} {customer?.phone2 ? `· ${customer.phone2}` : ''}
+            {[customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' · ') || '—'}
           </p>
           <p className="text-slate-600 dark:text-slate-300">
             <span className="text-slate-400">DNI:</span> {customer?.dni || '—'}
@@ -243,7 +250,7 @@ export default function OrderDetail() {
         </div>
         <div className="grid grid-cols-1 gap-3 px-5 py-4 text-sm sm:grid-cols-3">
           <p className="text-slate-600 dark:text-slate-300">
-            <span className="text-slate-400">PIN / patrón:</span> {order.pin || '—'}
+            <span className="text-slate-400">PIN / contraseña:</span> {order.pin || '—'}
           </p>
           <p className="text-slate-600 dark:text-slate-300">
             <span className="text-slate-400">Accesorios:</span> {order.accessories || '—'}
@@ -252,6 +259,12 @@ export default function OrderDetail() {
             <span className="text-slate-400">Problema reportado:</span> {order.issue || '—'}
           </p>
         </div>
+        {order.pattern?.length > 0 && (
+          <div className="flex items-center gap-3 border-t border-slate-200 px-5 py-4 text-sm dark:border-slate-800">
+            <span className="text-slate-400">Patrón de desbloqueo:</span>
+            <PatternPreview value={order.pattern} size={80} />
+          </div>
+        )}
       </Card>
 
       {/* Presupuesto y notas del técnico */}
