@@ -10,6 +10,7 @@ import {
   Trash2,
   Play,
   Search,
+  Check,
   CheckCircle2,
   PackageCheck,
   RotateCcw,
@@ -21,6 +22,8 @@ import {
   Lock,
   Smartphone,
   User,
+  X,
+  Pencil,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import TechnicianSelect from '../components/TechnicianSelect.jsx'
@@ -39,7 +42,7 @@ import {
   sentenceCase,
   addDays,
 } from '../utils/helpers.js'
-import { WARRANTY_DAYS } from '../utils/constants.js'
+import { WARRANTY_DAYS, COMMON_FIXES } from '../utils/constants.js'
 
 function initials(name) {
   return String(name || '')
@@ -60,6 +63,10 @@ export default function OrderDetail() {
   const [notice, setNotice] = useState('')
   const noticeTimer = useRef(null)
   const [technicianNotes, setTechnicianNotes] = useState('')
+  const [budgetFixList, setBudgetFixList] = useState([])
+  const [budgetCustomFix, setBudgetCustomFix] = useState('')
+  const [budgetPriceText, setBudgetPriceText] = useState('')
+  const [editingBudget, setEditingBudget] = useState(false)
 
   const order = orders.find((o) => o.id === id)
   const customer = customers.find((c) => c.id === order?.customerId)
@@ -71,6 +78,10 @@ export default function OrderDetail() {
   useEffect(() => {
     if (!order) return
     setTechnicianNotes(order.technicianNotes || '')
+    setBudgetFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
+    setBudgetPriceText(order.price ? String(order.price) : '')
+    setBudgetCustomFix('')
+    setEditingBudget(false)
     setNotice('')
     // Solo resetear la nota cuando cambia la orden (evita pisar ediciones en curso).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,6 +149,42 @@ export default function OrderDetail() {
     setBusy(null)
   }
 
+  const toggleBudgetFix = (name) =>
+    setBudgetFixList((list) => (list.includes(name) ? list.filter((f) => f !== name) : [...list, name]))
+
+  const addBudgetCustomFix = () => {
+    const v = budgetCustomFix.trim()
+    if (!v) return
+    setBudgetFixList((list) => (list.includes(v) ? list : [...list, v]))
+    setBudgetCustomFix('')
+  }
+
+  const startEditBudget = () => {
+    setBudgetFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
+    setBudgetPriceText(order.price ? String(order.price) : '')
+    setBudgetCustomFix('')
+    setEditingBudget(true)
+  }
+
+  const cancelEditBudget = () => {
+    setBudgetFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
+    setBudgetPriceText(order.price ? String(order.price) : '')
+    setBudgetCustomFix('')
+    setEditingBudget(false)
+  }
+
+  const saveBudget = async () => {
+    const fix = [...budgetFixList, budgetCustomFix.trim()].filter(Boolean).map((f) => titleCase(f)).join(', ')
+    const price = Number(budgetPriceText) || 0
+    setBusy('budget')
+    const res = await updateOrder(order.id, { fix, price })
+    if (!res.error) {
+      setEditingBudget(false)
+      showNotice('Presupuesto guardado.')
+    } else showNotice(res.error)
+    setBusy(null)
+  }
+
   const handleNotified = async () => {
     setBusy('notified')
     const res = await toggleNotified(order.id, !order.notified)
@@ -165,6 +212,10 @@ export default function OrderDetail() {
     'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
   const chipReadonly =
     'inline-flex items-center rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300'
+  const chipSelected =
+    'inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700'
+  const chipIdle =
+    'inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
   const inputCls =
     'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
   const labelCls = 'mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400'
@@ -433,25 +484,83 @@ export default function OrderDetail() {
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="space-y-3">
                 <div>
-                  <label className={labelCls}>Arreglo a realizar</label>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {displayedFixes.length > 0 ? (
-                      displayedFixes.map((f) => (
-                        <span key={f} className={chipReadonly}>
-                          {f}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm text-slate-400">Sin definir</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className={labelCls}>Arreglo a realizar</label>
+                    {status === 'en_revision' && isTech && !editingBudget && (
+                      <button
+                        type="button"
+                        onClick={startEditBudget}
+                        className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10"
+                      >
+                        <Pencil size={12} />
+                        Editar presupuesto
+                      </button>
                     )}
                   </div>
+
+                  {editingBudget ? (
+                    <div className="space-y-3 pt-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {COMMON_FIXES.map((f) => (
+                          <button key={f} type="button" onClick={() => toggleBudgetFix(f)}
+                            className={budgetFixList.includes(f) ? chipSelected : chipIdle}>
+                            {f}
+                          </button>
+                        ))}
+                        {budgetFixList.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
+                          <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
+                            {f}
+                            <button type="button" onClick={() => toggleBudgetFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500">
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                        <span className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={budgetCustomFix}
+                            onChange={(e) => setBudgetCustomFix(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addBudgetCustomFix() } }}
+                            placeholder="Otro arreglo..."
+                            className={`${inputCls} !w-36`}
+                          />
+                          <button type="button" onClick={addBudgetCustomFix} className={chipIdle}>
+                            <Check size={13} />
+                          </button>
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {displayedFixes.length > 0 ? (
+                        displayedFixes.map((f) => (
+                          <span key={f} className={chipReadonly}>
+                            {f}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-slate-400">Sin definir</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={labelCls}>Presupuesto</label>
-                    <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {formatMoney(order.price)}
-                    </p>
+                    <label className={labelCls}>{editingBudget ? 'Presupuesto ($)' : 'Presupuesto'}</label>
+                    {editingBudget ? (
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={budgetPriceText}
+                        onChange={(e) => setBudgetPriceText(e.target.value)}
+                        className={inputCls}
+                      />
+                    ) : (
+                      <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {formatMoney(order.price)}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className={labelCls}>Seña recibida</label>
@@ -460,6 +569,17 @@ export default function OrderDetail() {
                     </p>
                   </div>
                 </div>
+                {editingBudget && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <button onClick={saveBudget} disabled={busy === 'budget'} className={btnPrimary}>
+                      <Save size={14} />
+                      Guardar presupuesto
+                    </button>
+                    <button type="button" onClick={cancelEditBudget} className={btnGhost}>
+                      Cancelar
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -499,7 +619,7 @@ export default function OrderDetail() {
                 <button
                   onClick={() => doStatus('presupuesto')}
                   disabled={busy === 'presupuesto' || (order.price || 0) <= 0}
-                  title={(order.price || 0) <= 0 ? 'Cargá el arreglo y el presupuesto desde el taller' : ''}
+                  title={(order.price || 0) <= 0 ? 'Cargá el arreglo y el presupuesto arriba antes de pasar a presupuesto' : ''}
                   className={`${btnPrimary} ${(order.price || 0) <= 0 ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
                 >
                   <Play size={14} />

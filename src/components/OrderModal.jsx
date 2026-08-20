@@ -2,7 +2,7 @@
 // OrderModal: orden completa con acciones rápidas del técnico.
 // Reutilizado por el Taller y la página de equipos listos.
 // ============================================
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ChevronRight,
@@ -93,6 +93,33 @@ export default function OrderModal({ order, onClose }) {
   const [busy, setBusy] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [editingWork, setEditingWork] = useState(() => order?.diagnosisType === 'revision' && !order?.fix)
+
+  // Resincroniza el estado local cuando la orden cambia por fuera (SSE/otra
+  // pestaña). No pisa ediciones en curso: solo re-sincroniza si no hay cambios.
+  const prevSync = useRef(null)
+  useEffect(() => {
+    if (!order) return
+    const prev = prevSync.current
+    prevSync.current = order
+    if (!prev || prev.id !== order.id) {
+      setFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
+      setCustomFix('')
+      setPriceText(order.price ? String(order.price) : '')
+      setTechNotes(order.technicianNotes || '')
+      setEditingWork(order.diagnosisType === 'revision' && !order.fix)
+      return
+    }
+    const notesClean = (techNotes.trim() || '') === (order.technicianNotes || '')
+    const priceClean = Math.abs((Number(priceText) || 0) - (order.price || 0)) <= 0.001
+    const fixClean = [...fixList, customFix.trim()].filter(Boolean).join(', ') === (order.fix || '')
+    if (notesClean && priceClean && fixClean) {
+      setTechNotes(order.technicianNotes || '')
+      setPriceText(order.price ? String(order.price) : '')
+      setFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
+      setCustomFix('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order])
 
   if (!order) return null
 
@@ -495,7 +522,7 @@ export default function OrderModal({ order, onClose }) {
               {order.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
             </button>
           )}
-          {dirty && !lockedBudget && (
+          {dirty && (
             <button onClick={saveOnly} disabled={busy} className={btnGhost}>
               <Check size={14} />
               Guardar
