@@ -16,7 +16,16 @@ import { printZplLabel } from './printer.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 8080
-const JWT_SECRET = process.env.JWT_SECRET || 'service-local-secret-2026'
+// El secreto JWT no debe quedar hardcodeado en producción: se exige por env.
+const NODE_ENV = process.env.NODE_ENV || 'development'
+const JWT_SECRET = process.env.JWT_SECRET || (NODE_ENV === 'production' ? null : 'service-local-secret-2026')
+if (!JWT_SECRET) {
+  console.error('Falta la variable de entorno JWT_SECRET. Definila antes de iniciar el servidor.')
+  process.exit(1)
+}
+if (NODE_ENV !== 'production' && !process.env.JWT_SECRET) {
+  console.warn('[WARN] Usando JWT_SECRET por defecto (solo desarrollo). Definí JWT_SECRET para entornos productivos.')
+}
 
 app.use(cors())
 app.use(express.json())
@@ -359,7 +368,7 @@ app.put('/api/customers/:id', auth, (req, res) => {
   }).then(() => res.json({ ok: true }))
 })
 
-app.delete('/api/customers/:id', auth, (req, res) => {
+app.delete('/api/customers/:id', auth, adminOnly, (req, res) => {
   const db = getDB()
   const target = db.customers.find((c) => c.id === req.params.id)
   if (!target) return res.status(404).json({ error: 'Cliente no encontrado.' })
@@ -470,14 +479,11 @@ app.get('/api/orders/:id', auth, (req, res) => {
   res.json({ order: decorateOrder(db, order) })
 })
 
-app.delete('/api/orders/:id', auth, (req, res) => {
+app.delete('/api/orders/:id', auth, adminOnly, (req, res) => {
   const db = getDB()
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden ya está eliminada.' })
-  if (order.status !== 'entregado' && req.user.role !== 'admin') {
-    return res.status(400).json({ error: 'La orden no está entregada. Solo el admin puede eliminarla.' })
-  }
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
     o.deletedAt = new Date().toISOString()

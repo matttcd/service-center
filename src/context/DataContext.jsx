@@ -66,9 +66,15 @@ export function DataProvider({ children }) {
     const token = loadSession()?.token
     if (!token) return
     const es = new EventSource(`/api/events?token=${encodeURIComponent(token)}`)
+    let connected = false
+    es.addEventListener('connected', () => {
+      connected = true
+    })
     es.addEventListener('data-changed', () => refresh({ silent: true }))
     es.onerror = () => {
-      // EventSource se reconecta solo; nada que hacer aquí salvo limpiar al salir.
+      // Si ya llegamos a conectar y ahora la conexión falla, puede ser un
+      // token expirado: validamos contra la API (refresh hace logout en 401).
+      if (connected) refresh({ silent: true })
     }
     return () => es.close()
   }, [currentUser, refresh])

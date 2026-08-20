@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Variables de entorno (secretos JWT, etc.) no se versionan
+.env
+*.env
+
 # Datos de la base compartida (db.json + backups) no se versionan
 server/data/
 

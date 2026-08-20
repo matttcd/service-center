@@ -9,6 +9,7 @@ services:
     environment:
       - PORT=3000
       - DATA_DIR=/app/data
+      - JWT_SECRET=${JWT_SECRET:?Definí JWT_SECRET antes de levantar el sistema}
     volumes:
       - cuotas_data:/app/data
     expose:

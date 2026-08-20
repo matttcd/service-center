@@ -64,6 +64,7 @@ export default function OrderDetail() {
   const order = orders.find((o) => o.id === id)
   const customer = customers.find((c) => c.id === order?.customerId)
   const role = currentUser?.role
+  const isAdmin = role === 'admin'
   const isTech = role === 'tecnico' || role === 'admin'
   const isCounter = role === 'mostrador' || role === 'admin'
   const revisionFee = config?.revisionFee ?? 0
@@ -235,10 +236,12 @@ export default function OrderDetail() {
                 <Printer size={14} />
                 Imprimir orden
               </button>
-              <button onClick={handleDelete} className={`${btnGhost} !text-red-500 hover:!bg-red-50 dark:hover:!bg-red-500/10`}>
-                <Trash2 size={14} />
-                Eliminar
-              </button>
+              {isAdmin && (
+                <button onClick={handleDelete} className={`${btnGhost} !text-red-500 hover:!bg-red-50 dark:hover:!bg-red-500/10`}>
+                  <Trash2 size={14} />
+                  Eliminar
+                </button>
+              )}
             </div>
           </div>
         </div>
