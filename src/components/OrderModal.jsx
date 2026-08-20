@@ -28,6 +28,8 @@ import {
   orderStatusTone,
   formatMoney,
   formatDateTime,
+  titleCase,
+  sentenceCase,
 } from '../utils/helpers.js'
 
 function nextStatus(o) {
@@ -106,10 +108,10 @@ export default function OrderModal({ order, onClose }) {
   const dirty = notesDirty || (editingWork && workDirty)
 
   const savePending = async () => {
-    const fields = { technicianNotes: techNotes.trim() }
+    const fields = { technicianNotes: sentenceCase(techNotes.trim()) }
     let workChanged = false
     if (editingWork) {
-      fields.fix = fixValue
+      fields.fix = fixValue.split(',').map((s) => titleCase(s.trim())).filter(Boolean).join(', ')
       fields.price = Number(priceText) || 0
       workChanged = workDirty
     }

@@ -1,30 +1,59 @@
 // ============================================
-// Orders: listado de órdenes de servicio
+// Orders: listado de órdenes de servicio en tabla
+// (estilo planilla, con ordenamiento, filtros y paginación)
 // ============================================
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Search, Eye, BellOff } from 'lucide-react'
+import { Plus, Search, BellOff, ArrowUp, ArrowDown, ChevronUp, ChevronDown, ChevronsUpDown, X } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import OrderForm from '../components/OrderForm.jsx'
 import OrderPrint from '../components/OrderPrint.jsx'
-import { ORDER_STATUS_LABEL, orderStatusTone, formatDate } from '../utils/helpers.js'
+import { ORDER_STATUS_LABEL, orderStatusTone, formatDate, formatMoney, titleCase, normalizeList } from '../utils/helpers.js'
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
 export default function Orders() {
   const { orders, customers, printLabel } = useData()
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const [status, setStatus] = useState('all')
+
+  // Filtros
   const [q, setQ] = useState(() => params.get('q') || '')
+  const [status, setStatus] = useState('all')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [brand, setBrand] = useState('all')
+  const [onlyNotNotified, setOnlyNotNotified] = useState(false)
+  const [onlyNotConfirmed, setOnlyNotConfirmed] = useState(false)
+
+  // Ordenamiento
+  const [sortKey, setSortKey] = useState('createdAt')
+  const [sortDir, setSortDir] = useState('desc')
+
+  // Paginación
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[1])
+
   const [formOpen, setFormOpen] = useState(false)
   const [printing, setPrinting] = useState(null)
-  const [notice, setNotice] = useState(null) // { text, error }
+  const [notice, setNotice] = useState(null)
+
+  const brands = useMemo(
+    () => [...new Set(orders.map((o) => o.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es-AR')),
+    [orders],
+  )
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
     return orders
       .filter((o) => (status === 'all' ? true : o.status === status))
+      .filter((o) => (brand === 'all' ? true : o.brand === brand))
+      .filter((o) => (from ? o.createdAt >= from : true))
+      .filter((o) => (to ? o.createdAt <= to : true))
+      .filter((o) => (onlyNotNotified ? !o.notified && o.status !== 'entregado' : true))
+      .filter((o) => (onlyNotConfirmed ? !o.confirmed : true))
       .filter((o) => {
         if (!query) return true
         return (
@@ -33,12 +62,57 @@ export default function Orders() {
           `${o.brand} ${o.model}`.toLowerCase().includes(query)
         )
       })
-  }, [orders, status, q])
+  }, [orders, status, brand, from, to, onlyNotNotified, onlyNotConfirmed, q])
+
+  const sorted = useMemo(() => {
+    const cmp = (a, b) => {
+      switch (sortKey) {
+        case 'price':
+        case 'advance':
+          return (Number(a[sortKey]) || 0) - (Number(b[sortKey]) || 0)
+        case 'status':
+          return ORDER_STATUS_LABEL[a.status].localeCompare(ORDER_STATUS_LABEL[b.status], 'es-AR')
+        case 'orderNumber':
+          return a.orderNumber.localeCompare(b.orderNumber, 'es-AR', { numeric: true })
+        default: {
+          const va = a[sortKey] || ''
+          const vb = b[sortKey] || ''
+          return String(va).localeCompare(String(vb), 'es-AR')
+        }
+      }
+    }
+    const list = [...filtered].sort(cmp)
+    return sortDir === 'desc' ? list.reverse() : list
+  }, [filtered, sortKey, sortDir])
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const paged = sorted.slice((safePage - 1) * pageSize, safePage * pageSize)
+
+  const hasFilters = q.trim() || status !== 'all' || brand !== 'all' || from || to || onlyNotNotified || onlyNotConfirmed
+
+  const clearFilters = () => {
+    setQ('')
+    setStatus('all')
+    setBrand('all')
+    setFrom('')
+    setTo('')
+    setOnlyNotNotified(false)
+    setOnlyNotConfirmed(false)
+    setPage(1)
+  }
+
+  const toggleSort = (key) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+    setPage(1)
+  }
 
   const customerOf = (o) => customers.find((c) => c.id === o.customerId)
-
-  const inputCls =
-    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
 
   const onCreated = async (order) => {
     const res = await printLabel(order.id)
@@ -48,6 +122,31 @@ export default function Orders() {
     window.setTimeout(() => setNotice(null), 6000)
     setPrinting({ order, customer: customerOf(order) })
   }
+
+  const inputCls =
+    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
+
+  const checkboxCls = 'h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 dark:border-slate-600'
+
+  const thCls =
+    'group cursor-pointer select-none whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+
+  const SortIcon = ({ col }) => {
+    if (sortKey !== col) return <ChevronsUpDown size={12} className="ml-1 inline opacity-40" />
+    return sortDir === 'asc' ? <ArrowUp size={12} className="ml-1 inline" /> : <ArrowDown size={12} className="ml-1 inline" />
+  }
+
+  const Th = ({ col, className = '', children }) => (
+    <th onClick={() => toggleSort(col)} className={`${thCls} ${className}`}>
+      <span className="inline-flex items-center">
+        {children}
+        <SortIcon col={col} />
+      </span>
+    </th>
+  )
+
+  const navBtn =
+    'inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
 
   return (
     <div className="space-y-6">
@@ -75,74 +174,148 @@ export default function Orders() {
 
       {/* Filtros */}
       <Card className="p-4">
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por N.º, cliente o equipo..."
+              onChange={(e) => { setQ(e.target.value); setPage(1) }}
+              placeholder="N.º, cliente o equipo..."
               className={`${inputCls} pl-9`}
             />
           </div>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${inputCls} sm:w-56`}>
-            <option value="all">Todas</option>
+          <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }} className={inputCls}>
+            <option value="all">Todos los estados</option>
             {Object.entries(ORDER_STATUS_LABEL).map(([key, label]) => (
               <option key={key} value={key}>{label}</option>
             ))}
           </select>
+          <select value={brand} onChange={(e) => { setBrand(e.target.value); setPage(1) }} className={inputCls}>
+            <option value="all">Todas las marcas</option>
+            {brands.map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1) }} className={inputCls} title="Desde" />
+            <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1) }} className={inputCls} title="Hasta" />
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={onlyNotNotified} onChange={(e) => { setOnlyNotNotified(e.target.checked); setPage(1) }} className={checkboxCls} />
+            Sin avisar
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={onlyNotConfirmed} onChange={(e) => { setOnlyNotConfirmed(e.target.checked); setPage(1) }} className={checkboxCls} />
+            Sin confirmar
+          </label>
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-50 dark:hover:bg-red-500/10"
+            >
+              <X size={14} />
+              Limpiar filtros
+            </button>
+          )}
         </div>
       </Card>
 
-      {/* Listado */}
+      {/* Tabla */}
       <Card className="overflow-hidden">
-        {filtered.length === 0 ? (
+        {paged.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-slate-400">
             No hay órdenes que coincidan con la búsqueda.
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {filtered.map((o) => (
-              <li
-                key={o.id}
-                className="flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/40 sm:flex-row sm:items-center"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-slate-900 dark:text-white">{o.orderNumber}</p>
-                    <p className="font-semibold text-slate-700 dark:text-slate-200">{o.brand} {o.model}</p>
-                    <Badge tone={orderStatusTone(o.status)}>{ORDER_STATUS_LABEL[o.status]}</Badge>
-                    {!o.notified && o.status !== 'entregado' && (
-                      <Badge tone="yellow">
-                        <BellOff size={12} />
-                        Sin avisar
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-                    {o.customerName} · {formatDate(o.createdAt)} · Recibió {o.receivedByName}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPrinting({ order: o, customer: customerOf(o) })}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    Imprimir
-                  </button>
-                  <button
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
+                  <Th col="orderNumber">Nº</Th>
+                  <Th col="customerName">Cliente</Th>
+                  <Th col="model">Equipo</Th>
+                  <Th col="fix">Tipo de arreglo</Th>
+                  <Th col="price" className="text-right">Precio</Th>
+                  <Th col="status">Estado</Th>
+                  <Th col="createdAt">Fecha</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {paged.map((o, i) => (
+                  <tr
+                    key={o.id}
                     onClick={() => navigate(`/ordenes/${o.id}`)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700"
+                    className={`cursor-pointer transition hover:bg-primary-50 dark:hover:bg-primary-500/10 ${
+                      i % 2 === 1 ? 'bg-slate-50/60 dark:bg-slate-800/30' : ''
+                    }`}
                   >
-                    <Eye size={14} />
-                    Ver
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                    <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900 dark:text-white">{o.orderNumber}</td>
+                    <td className="max-w-[160px] truncate px-3 py-2.5 font-medium text-slate-700 dark:text-slate-200" title={o.customerName}>
+                      {titleCase(o.customerName)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-slate-700 dark:text-slate-200">{titleCase(o.brand)} {titleCase(o.model)}</td>
+                    <td className="max-w-[220px] truncate px-3 py-2.5 text-slate-500 dark:text-slate-400" title={o.fix || '—'}>
+                      {o.fix ? normalizeList(o.fix) : '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold text-slate-900 dark:text-white">
+                      {o.price ? formatMoney(o.price) : '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <Badge tone={orderStatusTone(o.status)}>{ORDER_STATUS_LABEL[o.status]}</Badge>
+                        {!o.notified && o.status !== 'entregado' && (
+                          <Badge tone="yellow">
+                            <BellOff size={12} />
+                            Sin avisar
+                          </Badge>
+                        )}
+                        {!o.confirmed && o.status === 'presupuesto' && (
+                          <Badge tone="orange">Sin confirmar</Badge>
+                        )}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-slate-500 dark:text-slate-400">{formatDate(o.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Paginación */}
+        {filtered.length > 0 && (
+          <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row dark:border-slate-800">
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>Mostrando</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              <span>por página · {sorted.length} en total</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className={navBtn} onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>
+                <ChevronUp size={14} className="rotate-90" />
+                Anterior
+              </button>
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                {safePage} / {totalPages}
+              </span>
+              <button className={navBtn} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>
+                Siguiente
+                <ChevronDown size={14} className="-rotate-90" />
+              </button>
+            </div>
+          </div>
         )}
       </Card>
 

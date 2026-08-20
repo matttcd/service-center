@@ -10,12 +10,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { initDB, getDB, mutate, persist, createBackup, listBackups, restoreBackup, purgeTrash, onDataChange } from './store.js'
 import { buildSeed } from './seed.js'
-import { todayISO, titleCase, uid, addDays, daysBetween, toISODate } from './helpers.js'
+import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase, normalizeList } from './helpers.js'
 import { printZplLabel } from './printer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 8080
+
 // El secreto JWT no debe quedar hardcodeado en producción: se exige por env.
 const NODE_ENV = process.env.NODE_ENV || 'development'
 const JWT_SECRET = process.env.JWT_SECRET || (NODE_ENV === 'production' ? null : 'service-local-secret-2026')
@@ -31,6 +32,56 @@ app.use(cors())
 app.use(express.json())
 
 await initDB(buildSeed)
+
+// ============================================
+// Migración: normaliza el texto ya guardado (Title/Sentence Case).
+// Se ejecuta una sola vez y se marca para no repetirla en cada arranque.
+// ============================================
+function migrateNormalizedText() {
+  const db = getDB()
+  if (!db || db.meta?.normalizedText) return
+
+  let changed = 0
+  const touch = (before, after) => {
+    if (before !== after) changed += 1
+    return after
+  }
+
+  for (const c of db.customers || []) {
+    c.fullName = touch(c.fullName, titleCase(c.fullName))
+    c.address = touch(c.address, titleCase(c.address))
+  }
+  for (const o of db.orders || []) {
+    o.brand = touch(o.brand, titleCase(o.brand))
+    o.model = touch(o.model, titleCase(o.model))
+    o.accessories = touch(o.accessories, normalizeList(o.accessories))
+    o.conditions = touch(o.conditions, normalizeList(o.conditions))
+    o.issue = touch(o.issue, sentenceCase(o.issue))
+    o.fix = touch(o.fix, normalizeList(o.fix))
+    o.technicianNotes = touch(o.technicianNotes, sentenceCase(o.technicianNotes))
+  }
+  for (const b of db.catalog?.brands || []) {
+    b.name = touch(b.name, titleCase(b.name))
+  }
+  for (const m of db.catalog?.models || []) {
+    m.brand = touch(m.brand, titleCase(m.brand))
+    m.name = touch(m.name, titleCase(m.name))
+  }
+  for (const u of db.users || []) {
+    u.name = touch(u.name, titleCase(u.name))
+  }
+
+  if (changed > 0) {
+    mutate((d) => {
+      d.meta = { ...(d.meta || {}), normalizedText: true }
+    }).then(() => console.log(`Migración de texto: ${changed} campo(s) normalizado(s).`))
+  } else {
+    mutate((d) => {
+      d.meta = { ...(d.meta || {}), normalizedText: true }
+    }).then(() => console.log('Migración de texto: sin cambios.'))
+  }
+}
+migrateNormalizedText()
 
 // ============================================
 // Tiempo real (Server-Sent Events)
@@ -411,13 +462,13 @@ app.post('/api/orders', auth, (req, res) => {
       customerId: body.customerId,
       brand,
       model,
-      accessories: String(body.accessories || '').trim(),
-      conditions: String(body.conditions || '').trim(),
+      accessories: normalizeList(String(body.accessories || '')),
+      conditions: normalizeList(String(body.conditions || '')),
       pin: String(body.pin || ''),
       pattern: storedPattern,
       diagnosisType,
-      issue: String(body.issue || '').trim(),
-      fix: String(body.fix || '').trim(),
+      issue: sentenceCase(String(body.issue || '')),
+      fix: normalizeList(String(body.fix || '')),
       price,
       advance,
       status: 'recibido',
@@ -591,12 +642,12 @@ app.put('/api/orders/:id', auth, (req, res) => {
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
     const budgetChanged =
-      (fix !== undefined && String(fix).trim() !== String(o.fix || '').trim()) ||
+      (fix !== undefined && normalizeList(String(fix)) !== normalizeList(String(o.fix || ''))) ||
       (price !== undefined && String(Math.max(0, Number(price) || 0)) !== String(o.price || 0))
-    if (technicianNotes !== undefined) o.technicianNotes = String(technicianNotes)
-    if (fix !== undefined) o.fix = String(fix).trim()
+    if (technicianNotes !== undefined) o.technicianNotes = sentenceCase(String(technicianNotes))
+    if (fix !== undefined) o.fix = normalizeList(String(fix))
     if (price !== undefined) o.price = Math.max(0, Number(price) || 0)
-    if (issue !== undefined) o.issue = String(issue).trim()
+    if (issue !== undefined) o.issue = sentenceCase(String(issue))
     if (budgetChanged && o.status === 'presupuesto' && o.confirmed) {
       o.confirmed = false
       o.confirmedAt = null

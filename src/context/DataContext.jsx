@@ -244,7 +244,7 @@ export function DataProvider({ children }) {
         ),
       ),
     }
-  }, [data.orders, today])
+  }, [data.orders])
 
   const value = {
     loading,

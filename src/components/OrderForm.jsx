@@ -8,6 +8,7 @@ import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
 import PatternPad from './PatternPad.jsx'
 import { useData } from '../context/DataContext.jsx'
+import { titleCase, sentenceCase } from '../utils/helpers.js'
 import {
   COMMON_ACCESSORIES,
   COMMON_CONDITIONS,
@@ -191,7 +192,14 @@ setIssue('')
       cid = selectedCustomerId
     } else {
       if (!newCustomer.fullName.trim()) return setError('Ingresá el nombre del cliente.')
-      const res = await addCustomer({ ...newCustomer, phone2: '', phone3: '', email: '' })
+      const res = await addCustomer({
+        ...newCustomer,
+        fullName: titleCase(newCustomer.fullName),
+        address: titleCase(newCustomer.address),
+        phone2: '',
+        phone3: '',
+        email: '',
+      })
       if (res.error) return setError(res.error)
       cid = res.id
     }
@@ -208,13 +216,13 @@ setIssue('')
         customerId: cid,
         brand,
         model,
-        accessories: accList.join(', '),
-        conditions: conditions.join(', '),
+        accessories: accList.map((a) => titleCase(a)).join(', '),
+        conditions: conditions.map((c) => titleCase(c)).join(', '),
         pin: pin.trim(),
         pattern: pattern.length >= 3 ? pattern : null,
         diagnosisType,
-        issue: issue.trim(),
-        fix: (diagnosisType === 'visible' ? [...fixes, customFix.trim()].filter(Boolean) : []).join(', '),
+        issue: sentenceCase(issue.trim()),
+        fix: (diagnosisType === 'visible' ? [...fixes, customFix.trim()].filter(Boolean) : []).map((f) => titleCase(f)).join(', '),
         price: Number(price) || 0,
         advance: Number(advance) || 0,
       })

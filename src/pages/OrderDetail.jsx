@@ -38,6 +38,8 @@ import {
   formatDate,
   formatDateTime,
   formatMoney,
+  titleCase,
+  sentenceCase,
 } from '../utils/helpers.js'
 import { WARRANTY_DAYS, COMMON_FIXES } from '../utils/constants.js'
 
@@ -125,7 +127,7 @@ export default function OrderDetail() {
     setNotice('')
     try {
       const save = await updateOrder(order.id, {
-        fix: [...drafts.fix, customFix.trim()].filter(Boolean).join(', '),
+        fix: [...drafts.fix, customFix.trim()].filter(Boolean).map((f) => titleCase(f)).join(', '),
         price: Number(drafts.price) || 0,
       })
       if (save.error) return showNotice(save.error)
@@ -140,9 +142,9 @@ export default function OrderDetail() {
   const saveNotes = async () => {
     setBusy('notes')
     const res = await updateOrder(order.id, {
-      fix: [...drafts.fix, customFix.trim()].filter(Boolean).join(', '),
+      fix: [...drafts.fix, customFix.trim()].filter(Boolean).map((f) => titleCase(f)).join(', '),
       price: Number(drafts.price) || 0,
-      technicianNotes: drafts.technicianNotes,
+      technicianNotes: sentenceCase(drafts.technicianNotes),
     })
     showNotice(res.error ? res.error : 'Notas y presupuesto guardados.')
     setBusy(null)
@@ -221,14 +223,14 @@ export default function OrderDetail() {
                 {order.confirmed && <Badge tone="green">Confirmado</Badge>}
               </div>
               <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-                {order.brand} {order.model} ·{' '}
+                {titleCase(order.brand)} {titleCase(order.model)} ·{' '}
                 <button
                   onClick={() => navigate(`/clientes/${customer?.id}`)}
                   className="font-semibold text-primary-600 transition hover:text-primary-700 dark:text-primary-400"
                 >
-                  {customer?.fullName || order.customerName}
+                  {titleCase(customer?.fullName || order.customerName)}
                 </button>{' '}
-                · Recibió {order.receivedByName} · {formatDate(order.createdAt)}
+                · Recibió {titleCase(order.receivedByName)} · {formatDate(order.createdAt)}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -292,7 +294,7 @@ export default function OrderDetail() {
             <div className="flex items-center gap-2 pb-2 text-base">
               <Smartphone size={15} className="shrink-0 text-slate-400" />
               <span className="truncate font-semibold text-slate-900 dark:text-white">
-                {order.brand} {order.model}
+                {titleCase(order.brand)} {titleCase(order.model)}
               </span>
             </div>
 
@@ -370,7 +372,7 @@ export default function OrderDetail() {
             <div className="mt-3">
               <label className={labelCls}>Chequeos / notas generales</label>
               <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                {order.issue || '—'}
+                {order.issue ? sentenceCase(order.issue) : '—'}
               </p>
             </div>
           </div>

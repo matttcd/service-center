@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
-import { isValidEmail } from '../utils/helpers.js'
+import { isValidEmail, titleCase } from '../utils/helpers.js'
 
 export default function CustomerForm({ open, onClose, onSubmit, initial, serverError }) {
   const [form, setForm] = useState({
@@ -63,7 +63,11 @@ export default function CustomerForm({ open, onClose, onSubmit, initial, serverE
     if (!form.fullName.trim()) return setError('El nombre completo es obligatorio.')
     if (form.dni && !/^\d{6,8}$/.test(form.dni)) return setError('El DNI debe tener entre 6 y 8 dígitos.')
     if (form.email && !isValidEmail(form.email)) return setError('Ingresá un email válido.')
-    const result = await onSubmit(form)
+    const result = await onSubmit({
+      ...form,
+      fullName: titleCase(form.fullName),
+      address: titleCase(form.address),
+    })
     if (result?.error) {
       setError(result.error)
       return

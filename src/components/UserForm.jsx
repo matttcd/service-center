@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
-import { isValidEmail } from '../utils/helpers.js'
+import { isValidEmail, titleCase } from '../utils/helpers.js'
 
 export default function UserForm({ open, onClose, onSubmit }) {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'mostrador' })
@@ -41,7 +41,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
     if (!form.name.trim()) return setError('El nombre es obligatorio.')
     if (!isValidEmail(form.email)) return setError('Ingresá un email válido.')
     if (form.password.length < 4) return setError('La contraseña debe tener al menos 4 caracteres.')
-    const res = await onSubmit(form)
+    const res = await onSubmit({ ...form, name: titleCase(form.name) })
     if (res && res.error) return setError(res.error)
     onClose()
   }

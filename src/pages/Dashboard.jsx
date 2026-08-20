@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { Megaphone, FileText, CheckCircle2, Eye } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
-import { formatDate } from '../utils/helpers.js'
+import { formatDate, titleCase, normalizeList } from '../utils/helpers.js'
 
 function QueueRow({ title, Icon, tone, items, emptyText }) {
   const navigate = useNavigate()
@@ -33,12 +33,12 @@ function QueueRow({ title, Icon, tone, items, emptyText }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-slate-900 dark:text-white">
-                    {o.brand} {o.model}
+                    {titleCase(o.brand)} {titleCase(o.model)}
                   </p>
-                  <span className="text-xs text-slate-400">{o.orderNumber} · {o.customerName}</span>
+                  <span className="text-xs text-slate-400">{o.orderNumber} · {titleCase(o.customerName)}</span>
                 </div>
                 <p className="text-sm text-slate-400">
-                  {o.fix ? `${o.fix} · ` : ''}Recibido {formatDate(o.createdAt)}
+                  {o.fix ? `${normalizeList(o.fix)} · ` : ''}Recibido {formatDate(o.createdAt)}
                 </p>
               </div>
 
