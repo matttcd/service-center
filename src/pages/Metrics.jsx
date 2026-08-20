@@ -16,7 +16,22 @@ function dayLabel(dateISO) {
 }
 
 export default function Metrics() {
-  const { adminMetrics } = useData()
+  const { adminMetrics, adminMetricsError } = useData()
+  if (adminMetricsError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Métricas</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Indicadores del negocio</p>
+        </div>
+        <Card className="p-10">
+          <p className="text-center text-sm text-red-600 dark:text-red-400">
+            No se pudieron cargar las métricas. {adminMetricsError}
+          </p>
+        </Card>
+      </div>
+    )
+  }
   if (!adminMetrics) {
     return (
       <div className="space-y-6">

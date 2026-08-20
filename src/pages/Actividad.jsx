@@ -31,6 +31,7 @@ const ICONS = {
   restore: <Archive size={16} className="text-sky-500" />,
   toggle: <RefreshCw size={16} className="text-accent-500" />,
   config: <Save size={16} className="text-accent-500" />,
+  password_change: <RefreshCw size={16} className="text-accent-500" />,
 }
 
 const LABELS = {
@@ -44,10 +45,11 @@ const LABELS = {
   restore: 'Restauración',
   toggle: 'Estado usuario',
   config: 'Configuración',
+  password_change: 'Contraseña',
 }
 
 export default function Actividad() {
-  const { actividad, actividadHasMore, loadMoreActividad } = useData()
+  const { actividad, actividadHasMore, loadMoreActividad, actividadError } = useData()
 
   return (
     <div className="space-y-6">
@@ -60,10 +62,14 @@ export default function Actividad() {
 
       {actividad.length === 0 ? (
         <Card>
-          <EmptyState
-            message="Todavía no hay movimientos"
-            sub="Cuando registres órdenes o cambios de estado van a aparecer acá."
-          />
+          {actividadError ? (
+            <p className="px-5 py-10 text-center text-sm text-red-600 dark:text-red-400">{actividadError}</p>
+          ) : (
+            <EmptyState
+              message="Todavía no hay movimientos"
+              sub="Cuando registres órdenes o cambios de estado van a aparecer acá."
+            />
+          )}
         </Card>
       ) : (
         <Card className="overflow-hidden">

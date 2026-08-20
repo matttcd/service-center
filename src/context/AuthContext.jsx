@@ -13,10 +13,11 @@ export function AuthProvider({ children }) {
   // Valida credenciales contra la API y guarda la sesión.
   const login = useCallback(async (profileId, password) => {
     const data = await api('/auth/login', { method: 'POST', body: { profileId, password } })
-    saveSession({ token: data.token, user: data.user })
+    const user = { ...data.user, mustChangePassword: !!data.mustChangePassword }
+    saveSession({ token: data.token, user })
     saveLastProfile(profileId)
-    setCurrentUser(data.user)
-    return data.user
+    setCurrentUser(user)
+    return user
   }, [])
 
   // Cierra la sesión local (sin llamar al servidor).
@@ -25,8 +26,17 @@ export function AuthProvider({ children }) {
     setCurrentUser(null)
   }, [])
 
+  // Quita la marca de "cambiar contraseña" una vez que el usuario la cambia.
+  const clearMustChangePassword = useCallback(() => {
+    const s = loadSession()
+    if (!s) return
+    const user = { ...s.user, mustChangePassword: false }
+    saveSession({ token: s.token, user })
+    setCurrentUser(user)
+  }, [])
+
   return (
-    <AuthContext.Provider value={{ currentUser, login, logout }}>
+    <AuthContext.Provider value={{ currentUser, login, logout, clearMustChangePassword }}>
       {children}
     </AuthContext.Provider>
   )

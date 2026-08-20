@@ -23,7 +23,9 @@ export function DataProvider({ children }) {
   })
   const [actividad, setActividad] = useState([])
   const [actividadHasMore, setActividadHasMore] = useState(false)
+  const [actividadError, setActividadError] = useState('')
   const [adminMetrics, setAdminMetrics] = useState(null)
+  const [adminMetricsError, setAdminMetricsError] = useState('')
   const [loading, setLoading] = useState(true)
   const today = todayISO()
 
@@ -44,9 +46,11 @@ export function DataProvider({ children }) {
         // Si ya se cargaron más páginas, no pisarlas: solo la primera se recarga.
         setActividad((prev) => (prev.length > ACTIVIDAD_PAGE_SIZE ? prev : act.logs || []))
         setActividadHasMore((act.page || 1) < (act.pages || 1))
+        setActividadError('')
       } catch {
         setActividad([])
         setActividadHasMore(false)
+        setActividadError('No se pudieron cargar los movimientos.')
       }
     } catch (err) {
       if (err.status === 401) logout()
@@ -59,8 +63,9 @@ export function DataProvider({ children }) {
     try {
       const m = await api('/metrics')
       setAdminMetrics(m)
-    } catch {
-      // Silencioso: la página de métricas muestra estado vacío.
+      setAdminMetricsError('')
+    } catch (err) {
+      setAdminMetricsError(err.status === 403 ? 'Necesitás rol de administrador.' : 'No se pudieron cargar las métricas.')
     }
   }, [])
 
@@ -68,7 +73,9 @@ export function DataProvider({ children }) {
     if (!currentUser) {
       setData({ customers: [], orders: [], users: [], technicians: [], config: null, catalog: { brands: [], models: [] } })
       setActividad([])
+      setActividadError('')
       setAdminMetrics(null)
+      setAdminMetricsError('')
       setLoading(false)
       return
     }
@@ -267,7 +274,9 @@ export function DataProvider({ children }) {
     catalog: data.catalog,
     actividad,
     actividadHasMore,
+    actividadError,
     adminMetrics,
+    adminMetricsError,
     loadAdminMetrics,
     ...derived,
     addCustomer,

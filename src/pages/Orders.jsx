@@ -53,7 +53,7 @@ export default function Orders() {
       .filter((o) => (from ? o.createdAt >= from : true))
       .filter((o) => (to ? o.createdAt <= to : true))
       .filter((o) => (onlyNotNotified ? !o.notified && ['presupuesto', 'terminado'].includes(o.status) : true))
-      .filter((o) => (onlyNotConfirmed ? !o.confirmed : true))
+      .filter((o) => (onlyNotConfirmed ? !o.confirmed && o.status === 'presupuesto' : true))
       .filter((o) => {
         if (!query) return true
         return (
@@ -86,7 +86,7 @@ export default function Orders() {
   }, [filtered, sortKey, sortDir])
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
-  const safePage = Math.min(page, totalPages)
+  const safePage = Math.max(1, Math.min(page, totalPages))
   const paged = sorted.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   const hasFilters = q.trim() || status !== 'all' || brand !== 'all' || from || to || onlyNotNotified || onlyNotConfirmed

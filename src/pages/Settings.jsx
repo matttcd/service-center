@@ -10,12 +10,19 @@ import { formatMoney } from '../utils/helpers.js'
 export default function Settings() {
   const { config, saveConfig } = useData()
   const [revisionFee, setRevisionFee] = useState('')
+  const [appliedFee, setAppliedFee] = useState(null)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState(null)
 
+  // Sincroniza con el valor guardado solo cuando cambió de verdad
+  // (un refresh por SSE no debe pisar lo que estás escribiendo).
   useEffect(() => {
     if (!config) return
-    setRevisionFee(String(config.revisionFee ?? ''))
+    const val = config.revisionFee ?? ''
+    if (appliedFee === val) return
+    setAppliedFee(val)
+    setRevisionFee(String(val))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config])
 
   const inputCls =
@@ -23,6 +30,7 @@ export default function Settings() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return
     const value = Number(revisionFee)
     if (Number.isNaN(value) || value < 0) return setNotice({ type: 'error', text: 'Ingresá un valor válido.' })
     setSaving(true)

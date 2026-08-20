@@ -5,12 +5,15 @@ import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import Sidebar from './Sidebar.jsx'
+import ChangePasswordModal from './ChangePasswordModal.jsx'
 import { useData } from '../context/DataContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import { BRAND_NAME } from '../utils/brand.js'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { loading } = useData()
+  const { currentUser, clearMustChangePassword } = useAuth()
 
   return (
     <div className="min-h-screen">
@@ -46,6 +49,10 @@ export default function Layout() {
           )}
         </div>
       </main>
+
+      {currentUser?.mustChangePassword && (
+        <ChangePasswordModal open onDone={clearMustChangePassword} />
+      )}
     </div>
   )
 }

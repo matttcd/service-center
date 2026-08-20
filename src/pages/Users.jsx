@@ -18,6 +18,7 @@ const actionLabel = {
   delete: 'Baja',
   status: 'Estado',
   toggle: 'Estado usuario',
+  password_change: 'Contraseña',
   seed: 'Inicialización',
   restore: 'Restauración',
   whatsapp: 'WhatsApp',
@@ -199,10 +200,11 @@ export default function Users() {
               </button>
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const { id } = confirmToggle
                   setConfirmToggle(null)
-                  toggleUserActive(id)
+                  const res = await toggleUserActive(id)
+                  if (res?.error) alert(res.error)
                 }}
                 className={`flex-1 rounded-lg px-4 py-2.5 font-semibold text-white transition ${
                   confirmToggle.active
