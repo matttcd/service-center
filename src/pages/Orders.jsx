@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Search, BellOff, ArrowUp, ArrowDown, ChevronUp, ChevronDown, ChevronsUpDown, X } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import OrderForm from '../components/OrderForm.jsx'
@@ -16,6 +17,7 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
 export default function Orders() {
   const { orders, customers, printLabel } = useData()
+  const { currentUser } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
 
@@ -39,6 +41,7 @@ export default function Orders() {
   const [formOpen, setFormOpen] = useState(false)
   const [printing, setPrinting] = useState(null)
   const [notice, setNotice] = useState(null)
+  const canCreate = ['mostrador', 'admin'].includes(currentUser?.role)
 
   const brands = useMemo(
     () => [...new Set(orders.map((o) => o.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es-AR')),
@@ -155,13 +158,15 @@ export default function Orders() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Órdenes de servicio</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{filtered.length} orden(es)</p>
         </div>
-        <button
-          onClick={() => setFormOpen(true)}
-          className="inline-flex items-center gap-2 self-start rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
-        >
-          <Plus size={16} />
-          Nueva orden
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setFormOpen(true)}
+            className="inline-flex items-center gap-2 self-start rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+          >
+            <Plus size={16} />
+            Nueva orden
+          </button>
+        )}
       </div>
 
       {notice && (
@@ -319,7 +324,7 @@ export default function Orders() {
         )}
       </Card>
 
-      <OrderForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={onCreated} />
+      {canCreate && <OrderForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={onCreated} />}
       <OrderPrint
         open={!!printing}
         order={printing?.order}

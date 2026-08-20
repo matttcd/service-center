@@ -36,3 +36,4 @@ tools/
 *.njsproj
 *.sln
 *.sw?
+nul

@@ -74,6 +74,7 @@ export default function OrderDetail() {
   const isAdmin = role === 'admin'
   const isTech = role === 'tecnico' || role === 'admin'
   const isCounter = role === 'mostrador' || role === 'admin'
+  const canBudget = ['mostrador', 'admin'].includes(role)
 
   useEffect(() => {
     if (!order) return
@@ -486,7 +487,7 @@ export default function OrderDetail() {
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <label className={labelCls}>Arreglo a realizar</label>
-                    {status === 'en_revision' && isTech && !editingBudget && (
+                    {status === 'en_revision' && canBudget && !editingBudget && (
                       <button
                         type="button"
                         onClick={startEditBudget}
@@ -615,7 +616,7 @@ export default function OrderDetail() {
                   Iniciar revisión
                 </button>
               )}
-              {status === 'en_revision' && isTech && (
+              {status === 'en_revision' && canBudget && (
                 <button
                   onClick={() => doStatus('presupuesto')}
                   disabled={busy === 'presupuesto' || (order.price || 0) <= 0}
@@ -661,10 +662,12 @@ export default function OrderDetail() {
                     <CheckCircle2 size={14} />
                     Marcar terminado (listo)
                   </button>
-                  <button onClick={() => doStatus('presupuesto')} disabled={busy === 'presupuesto'} className={btnGhost}>
-                    <RotateCcw size={14} />
-                    Volver a presupuesto
-                  </button>
+                  {canBudget && (
+                    <button onClick={() => doStatus('presupuesto')} disabled={busy === 'presupuesto'} className={btnGhost}>
+                      <RotateCcw size={14} />
+                      Volver a presupuesto
+                    </button>
+                  )}
                 </>
               )}
               {status === 'terminado' && (

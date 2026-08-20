@@ -508,6 +508,9 @@ app.delete('/api/customers/:id', auth, adminOnly, (req, res) => {
 
 // ---------- Órdenes ----------
 app.post('/api/orders', auth, (req, res) => {
+  if (!['mostrador', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Solo empleados o administradores pueden crear órdenes.' })
+  }
   const body = req.body || {}
   const db = getDB()
   const customer = db.customers.find((c) => c.id === body.customerId)
@@ -659,8 +662,11 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   if (status === 'entregado' && !order.notified && !retiro) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
   }
-  if (['en_revision', 'presupuesto', 'en_reparacion', 'terminado'].includes(status) && !isTech) {
+  if (['en_revision', 'en_reparacion', 'terminado'].includes(status) && !isTech) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
+  }
+  if (status === 'presupuesto' && !['mostrador', 'admin'].includes(role)) {
+    return res.status(403).json({ error: 'Solo empleados o administradores pueden cargar el presupuesto.' })
   }
   if (status === 'entregado' && !isCounter) {
     return res.status(403).json({ error: 'Solo el mostrador (o el admin) puede entregar un equipo.' })
@@ -718,11 +724,18 @@ app.put('/api/orders/:id', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
-  if (!['tecnico', 'admin'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Solo el técnico puede editar notas y presupuesto.' })
-  }
   const { technicianNotes, fix, price, issue } = req.body || {}
-  const touched = technicianNotes !== undefined || fix !== undefined || price !== undefined || issue !== undefined
+  const canBudget = ['mostrador', 'admin'].includes(req.user.role)
+  const canNotes = ['tecnico', 'admin'].includes(req.user.role)
+  const touchesBudget = fix !== undefined || price !== undefined || issue !== undefined
+  const touchesNotes = technicianNotes !== undefined
+  if (touchesBudget && !canBudget) {
+    return res.status(403).json({ error: 'Solo empleados o administradores pueden cargar el presupuesto.' })
+  }
+  if (touchesNotes && !canNotes) {
+    return res.status(403).json({ error: 'Solo el técnico o el administrador pueden editar las notas.' })
+  }
+  const touched = touchesNotes || touchesBudget
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
     const budgetChanged =

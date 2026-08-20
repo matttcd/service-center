@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import Badge from './Badge.jsx'
 import Modal from './Modal.jsx'
 import { PatternPreview } from './PatternPad.jsx'
@@ -85,6 +86,7 @@ const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-
 
 export default function OrderModal({ order, onClose }) {
   const navigate = useNavigate()
+  const { currentUser } = useAuth()
   const { customers, setOrderStatus, toggleNotified, updateOrder, confirmOrder } = useData()
   const [fixList, setFixList] = useState(() => (order?.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
   const [customFix, setCustomFix] = useState('')
@@ -92,7 +94,8 @@ export default function OrderModal({ order, onClose }) {
   const [techNotes, setTechNotes] = useState(order?.technicianNotes || '')
   const [busy, setBusy] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-  const [editingWork, setEditingWork] = useState(() => order?.diagnosisType === 'revision' && !order?.fix)
+  const canBudget = currentUser?.role === 'admin'
+  const [editingWork, setEditingWork] = useState(() => order?.diagnosisType === 'revision' && !order?.fix && canBudget)
 
   // Resincroniza el estado local cuando la orden cambia por fuera (SSE/otra
   // pestaña). No pisa ediciones en curso: solo re-sincroniza si no hay cambios.
@@ -106,7 +109,7 @@ export default function OrderModal({ order, onClose }) {
       setCustomFix('')
       setPriceText(order.price ? String(order.price) : '')
       setTechNotes(order.technicianNotes || '')
-      setEditingWork(order.diagnosisType === 'revision' && !order.fix)
+      setEditingWork(order.diagnosisType === 'revision' && !order.fix && canBudget)
       return
     }
     const notesClean = (techNotes.trim() || '') === (order.technicianNotes || '')
@@ -462,6 +465,7 @@ export default function OrderModal({ order, onClose }) {
                 <span className={chipReadonly}>Sin definir</span>
               )}
               <span className="text-lg font-bold text-slate-900 dark:text-white">{formatMoney(order.price)}</span>
+              {canBudget && (
               <button
                 type="button"
                 onClick={startEdit}
@@ -470,6 +474,7 @@ export default function OrderModal({ order, onClose }) {
                 <Pencil size={12} />
                 Editar
               </button>
+            )}
             </div>
           )}
 
@@ -535,7 +540,7 @@ export default function OrderModal({ order, onClose }) {
             Ver orden completa
             <ArrowRight size={16} />
           </button>
-          {next && (
+          {next && (next !== 'presupuesto' || canBudget) && (
             <button
               onClick={finish}
               disabled={busy || lockedBudget || missingBudget}
