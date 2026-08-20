@@ -42,7 +42,7 @@ function nearestDot(x, y) {
   return best
 }
 
-function PatternSvg({ value = [], size = 120, live = null, variant = 'preview' }) {
+function PatternSvg({ value = [], size = 120, live = null, variant = 'preview', className = '' }) {
   const pts = (value || []).slice(0, 9).filter((n) => Number.isInteger(n) && n >= 0 && n < 9)
   const last = pts.length ? DOTS[pts[pts.length - 1]] : null
 
@@ -90,8 +90,8 @@ function PatternSvg({ value = [], size = 120, live = null, variant = 'preview' }
   }
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${SIZE} ${SIZE}`} className="shrink-0 rounded-xl border border-slate-300 bg-white dark:border-slate-700">
-      <g stroke="#1d4ed8" strokeWidth="6" strokeLinecap="round">
+    <svg width={size} height={size} viewBox={`0 0 ${SIZE} ${SIZE}`} className={`shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 ${className}`}>
+      <g stroke="currentColor" strokeWidth="6" strokeLinecap="round" className="text-primary-600 dark:text-primary-400">
         {pts.slice(1).map((p, i) => {
           const a = DOTS[pts[i]]
           const b = DOTS[p]
@@ -106,8 +106,19 @@ function PatternSvg({ value = [], size = 120, live = null, variant = 'preview' }
         const active = pts.includes(i)
         return (
           <g key={i}>
-            <circle cx={cx} cy={cy} r="13" fill={active ? '#1d4ed8' : '#fff'} stroke="#1d4ed8" strokeWidth="2.5" />
-            <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="bold" fill={active ? '#fff' : '#94a3b8'}>
+            <circle
+              cx={cx} cy={cy} r="13"
+              className={
+                active
+                  ? 'fill-primary-600 stroke-primary-300 dark:fill-primary-500 dark:stroke-primary-300/60'
+                  : 'fill-white stroke-slate-400 dark:fill-slate-800 dark:stroke-slate-500'
+              }
+              strokeWidth="2.5"
+            />
+            <text
+              x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="bold"
+              className={active ? 'fill-white' : 'fill-slate-400 dark:fill-slate-500'}
+            >
               {i + 1}
             </text>
           </g>
@@ -117,8 +128,8 @@ function PatternSvg({ value = [], size = 120, live = null, variant = 'preview' }
   )
 }
 
-export function PatternPreview({ value, size = 120 }) {
-  return <PatternSvg value={value} size={size} />
+export function PatternPreview({ value, size = 120, className = '' }) {
+  return <PatternSvg value={value} size={size} className={className} />
 }
 
 export default function PatternPad({ value = [], onChange }) {
@@ -196,7 +207,7 @@ export default function PatternPad({ value = [], onChange }) {
       >
         <PatternSvg value={shown} size={SIZE} live={active ? live : null} variant="pad" />
       </div>
-      <div className="flex items-center justify-end gap-1.5">
+      <div className="flex items-center justify-start gap-1.5">
         <button
           type="button"
           onClick={() => onChange(shown.slice(0, -1))}

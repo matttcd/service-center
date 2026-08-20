@@ -13,6 +13,15 @@ export const COMMON_ACCESSORIES = [
   'Auriculares',
 ]
 
+// Estado en que entra el equipo (se pueden marcar varias condiciones).
+export const COMMON_CONDITIONS = [
+  'Apagado',
+  'Mojado',
+  'Golpeado',
+  'Display Roto',
+  'No se pudo probar funciones básicas',
+]
+
 // Arreglos más comunes (cuando el problema se ve a simple vista).
 export const COMMON_FIXES = [
   'Cambio de pantalla',

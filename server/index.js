@@ -403,6 +403,7 @@ app.post('/api/orders', auth, (req, res) => {
       brand,
       model,
       accessories: String(body.accessories || '').trim(),
+      conditions: String(body.conditions || '').trim(),
       pin: String(body.pin || ''),
       pattern: storedPattern,
       diagnosisType,
@@ -500,21 +501,17 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   const isTech = ['tecnico', 'admin'].includes(role)
   const isCounter = ['mostrador', 'admin'].includes(role)
 
-  // Estados del taller: el técnico puede mover libremente entre ellos (cola flexible).
-  const WORKSHOP_STATUSES = ['recibido', 'en_revision', 'presupuesto', 'en_reparacion', 'terminado']
-
-  // Transiciones permitidas según el estado actual (para mostrador / no-técnico).
+  // Transiciones permitidas (respetan el flujo real del taller).
   const transitions = {
     recibido: order.diagnosisType === 'revision' ? ['en_revision'] : ['en_reparacion'],
     en_revision: ['presupuesto'],
     presupuesto: ['en_reparacion', 'entregado'],
-    en_reparacion: ['terminado'],
+    en_reparacion: ['terminado', 'presupuesto'],
     terminado: ['entregado', 'en_reparacion'],
     entregado: [],
   }
 
-  const flexible = isTech && from !== status && WORKSHOP_STATUSES.includes(from) && WORKSHOP_STATUSES.includes(status)
-  const allowed = flexible || transitions[from]?.includes(status)
+  const allowed = transitions[from]?.includes(status)
   if (!allowed) {
     return res.status(400).json({
       error: `No se puede pasar de "${from}" a "${status}".`,
@@ -526,6 +523,10 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   // Sin confirmación del cliente no se puede comenzar la reparación de un presupuesto.
   if (from === 'presupuesto' && status === 'en_reparacion' && !order.confirmed) {
     return res.status(400).json({ error: 'El cliente debe confirmar el arreglo antes de reparar.' })
+  }
+  // No se puede entregar un equipo sin haber avisado al cliente.
+  if (status === 'entregado' && !order.notified) {
+    return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
   }
   if (['en_revision', 'presupuesto', 'en_reparacion', 'terminado'].includes(status) && !isTech) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
@@ -583,12 +584,20 @@ app.put('/api/orders/:id', auth, (req, res) => {
   const touched = technicianNotes !== undefined || fix !== undefined || price !== undefined || issue !== undefined
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
+    const budgetChanged =
+      (fix !== undefined && String(fix).trim() !== String(o.fix || '').trim()) ||
+      (price !== undefined && String(Math.max(0, Number(price) || 0)) !== String(o.price || 0))
     if (technicianNotes !== undefined) o.technicianNotes = String(technicianNotes)
     if (fix !== undefined) o.fix = String(fix).trim()
     if (price !== undefined) o.price = Math.max(0, Number(price) || 0)
     if (issue !== undefined) o.issue = String(issue).trim()
+    if (budgetChanged && o.status === 'presupuesto' && o.confirmed) {
+      o.confirmed = false
+      o.confirmedAt = null
+      o.confirmedBy = null
+    }
     if (touched) {
-      audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · ${o.brand} ${o.model}: notas/presupuesto actualizados`)
+      audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · ${o.brand} ${o.model}: notas/presupuesto actualizados${budgetChanged && o.status === 'presupuesto' ? ' (confirmación desmarcada)' : ''}`)
     }
   }).then(() => res.json({ ok: true }))
 })
@@ -640,6 +649,9 @@ app.post('/api/orders/:id/confirm', auth, (req, res) => {
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   const confirmed = !!req.body?.confirmed
+  if (confirmed && !order.notified) {
+    return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de confirmar el arreglo.' })
+  }
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
     o.confirmed = confirmed

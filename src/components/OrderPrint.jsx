@@ -118,8 +118,12 @@ export default function OrderPrint({ open, order, customer, onClose }) {
                   <span className="text-slate-500">Accesorios:</span>{' '}
                   {order.accessories || '—'}
                 </p>
+                <p>
+                  <span className="text-slate-500">Estado del equipo:</span>{' '}
+                  {order.conditions || '—'}
+                </p>
                 <p className="col-span-2">
-                  <span className="text-slate-500">Problema reportado:</span>{' '}
+                  <span className="text-slate-500">Chequeos / notas generales:</span>{' '}
                   {order.issue || '—'}
                 </p>
               </div>

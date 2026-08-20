@@ -66,7 +66,13 @@ export default function OrderCard({ order, onOpen, onChanged }) {
       <p className="mt-1 truncate text-base font-semibold text-slate-900 dark:text-white">
         {order.brand} {order.model}
       </p>
-      <p className="truncate text-sm text-slate-400">{order.customerName}</p>
+      <p className="truncate text-sm text-slate-500 dark:text-slate-400">
+        {order.conditions ? <span className="font-semibold text-amber-600 dark:text-amber-400">{order.conditions}</span> : 'Sin estado registrado'}
+      </p>
+      <p className="mt-0.5 line-clamp-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+        {order.fix || 'Arreglo sin definir'}
+      </p>
+      <p className="mt-1 truncate text-sm text-slate-400">{order.customerName}</p>
 
       <div className="mt-3">
         <TechnicianSelect order={order} onChanged={onChanged} />
@@ -80,7 +86,7 @@ export default function OrderCard({ order, onOpen, onChanged }) {
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
-              <Lock size={14} /> Sin confirmar
+              <Lock size={14} /> Sin confirmar presupuesto
             </span>
           )}
         </div>
@@ -120,7 +126,7 @@ export default function OrderCard({ order, onOpen, onChanged }) {
             className="inline-flex w-full cursor-not-allowed items-center justify-center gap-1 rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-400 dark:bg-slate-800 dark:text-slate-500"
           >
             <Lock size={15} />
-            Sin confirmar
+            Sin confirmar presupuesto
           </button>
         ) : (
           next && (

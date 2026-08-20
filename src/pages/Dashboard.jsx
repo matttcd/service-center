@@ -1,15 +1,17 @@
 // ============================================
-// Dashboard: métricas + presupuestos pendientes y listos para retirar
+// Dashboard: métricas + listas de acceso rápido.
+// Cada fila tiene un único botón "Ver" que lleva a la vista detallada
+// (todas las acciones viven en OrderDetail / OrderModal).
 // ============================================
 import { useNavigate } from 'react-router-dom'
-import { FileText, CheckCircle2, Bell, BellOff, Eye, Sticker, Megaphone, Lock } from 'lucide-react'
+import { Megaphone, FileText, CheckCircle2, Eye } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import DashboardCards from '../components/DashboardCards.jsx'
 import Card from '../components/Card.jsx'
-import Badge from '../components/Badge.jsx'
-import { ORDER_STATUS_LABEL, orderStatusTone, formatDate } from '../utils/helpers.js'
+import { formatDate } from '../utils/helpers.js'
 
-function QueueRow({ title, Icon, tone, items, emptyText, showLabel, onNotify, onLabel, onConfirm }) {
+function QueueRow({ title, Icon, tone, items, emptyText }) {
+  const navigate = useNavigate()
   return (
     <Card>
       <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
@@ -35,75 +37,19 @@ function QueueRow({ title, Icon, tone, items, emptyText, showLabel, onNotify, on
                     {o.brand} {o.model}
                   </p>
                   <span className="text-xs text-slate-400">{o.orderNumber} · {o.customerName}</span>
-                  {o.status === 'presupuesto' && (
-                    o.confirmed ? (
-                      <Badge tone="green">
-                        <CheckCircle2 size={12} />
-                        Confirmado
-                      </Badge>
-                    ) : (
-                      <Badge tone="yellow">
-                        <Lock size={12} />
-                        Sin confirmar
-                      </Badge>
-                    )
-                  )}
-                  {o.status !== 'presupuesto' && (
-                    o.notified ? (
-                      <Badge tone="green">
-                        <Bell size={12} />
-                        Avisado
-                      </Badge>
-                    ) : (
-                      <Badge tone="yellow">
-                        <BellOff size={12} />
-                        Sin avisar
-                      </Badge>
-                    )
-                  )}
                 </div>
                 <p className="text-sm text-slate-400">
                   {o.fix ? `${o.fix} · ` : ''}Recibido {formatDate(o.createdAt)}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                {showLabel && (
-                  <Badge tone={orderStatusTone(o.status)}>{ORDER_STATUS_LABEL[o.status]}</Badge>
-                )}
-                {onConfirm && o.status === 'presupuesto' && (
-                  <button
-                    onClick={() => onConfirm(o)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                      o.confirmed
-                        ? 'border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300'
-                        : 'border-primary-200 bg-primary-600 text-white hover:bg-primary-700'
-                    }`}
-                  >
-                    {o.confirmed ? 'Desmarcar' : 'Confirmar'}
-                  </button>
-                )}
-                <button
-                  onClick={() => onNotify(o)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                    o.notified
-                      ? 'border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300'
-                      : 'border-primary-200 bg-primary-600 text-white hover:bg-primary-700'
-                  }`}
-                >
-                  {o.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
-                </button>
-                {onLabel && (
-                  <button
-                    onClick={() => onLabel(o)}
-                    title="Imprimir etiqueta"
-                    className="rounded-lg border border-slate-300 p-1.5 text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    <Sticker size={14} />
-                  </button>
-                )}
-                <NavButton o={o} />
-              </div>
+              <button
+                onClick={() => navigate(`/ordenes/${o.id}`)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700"
+              >
+                <Eye size={14} />
+                Ver
+              </button>
             </li>
           ))}
         </ul>
@@ -112,36 +58,8 @@ function QueueRow({ title, Icon, tone, items, emptyText, showLabel, onNotify, on
   )
 }
 
-function NavButton({ o }) {
-  const navigate = useNavigate()
-  return (
-    <button
-      onClick={() => navigate(`/ordenes/${o.id}`)}
-      className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700"
-    >
-      <Eye size={14} />
-      Ver
-    </button>
-  )
-}
-
 export default function Dashboard() {
-  const { metrics, pendingBudgetOrders, readyOrders, porAvisarOrders, toggleNotified, confirmOrder, printLabel } = useData()
-
-  const handleNotify = async (o) => {
-    const res = await toggleNotified(o.id, !o.notified)
-    if (res.error) alert(res.error)
-  }
-
-  const handleConfirm = async (o) => {
-    const res = await confirmOrder(o.id, !o.confirmed)
-    if (res.error) alert(res.error)
-  }
-
-  const handleLabel = async (o) => {
-    const res = await printLabel(o.id)
-    if (res.error) alert(res.error)
-  }
+  const { metrics, pendingBudgetOrders, readyOrders, porAvisarOrders } = useData()
 
   return (
     <div className="space-y-6">
@@ -154,35 +72,26 @@ export default function Dashboard() {
 
       <QueueRow
         title="Por avisar"
-        icon={Megaphone}
         Icon={Megaphone}
         tone="text-amber-500"
         items={porAvisarOrders}
         emptyText="No hay equipos pendientes de avisar al cliente."
-        onNotify={handleNotify}
-        showLabel
       />
 
       <QueueRow
         title="Presupuestos pendientes"
-        icon={FileText}
         Icon={FileText}
         tone="text-accent-500"
         items={pendingBudgetOrders}
         emptyText="No hay presupuestos esperando confirmación del cliente."
-        onNotify={handleNotify}
-        onConfirm={handleConfirm}
       />
 
       <QueueRow
         title="Listos para retirar"
-        icon={CheckCircle2}
         Icon={CheckCircle2}
         tone="text-emerald-500"
         items={readyOrders}
         emptyText="No hay equipos terminados esperando retiro."
-        onNotify={handleNotify}
-        onLabel={handleLabel}
       />
     </div>
   )

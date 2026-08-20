@@ -3,13 +3,14 @@
 // Marcas/modelos con badges del catálogo + "otro" (búsqueda y alta en BD).
 // ============================================
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search, UserPlus, ListPlus, X } from 'lucide-react'
+import { Plus, Search, ListPlus, X } from 'lucide-react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
 import PatternPad from './PatternPad.jsx'
 import { useData } from '../context/DataContext.jsx'
 import {
   COMMON_ACCESSORIES,
+  COMMON_CONDITIONS,
   COMMON_FIXES,
   BRAND_BADGE_COUNT,
   MODEL_BADGE_COUNT,
@@ -24,8 +25,8 @@ const chipAdd =
 
 export default function OrderForm({ open, onClose, onCreated }) {
   const { customers, catalog, addCustomer, addOrder, addCatalogBrand, addCatalogModel } = useData()
-  const [mode, setMode] = useState('existing') // 'existing' | 'new'
-  const [customerId, setCustomerId] = useState('')
+  const [custQuery, setCustQuery] = useState('')
+  const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [newCustomer, setNewCustomer] = useState({ fullName: '', dni: '', phone: '', address: '' })
   const [brand, setBrand] = useState('')
   const [model, setModel] = useState('')
@@ -34,11 +35,12 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [pickerNew, setPickerNew] = useState('')
   const [accessories, setAccessories] = useState([])
   const [customAccessory, setCustomAccessory] = useState('')
+  const [conditions, setConditions] = useState([])
   const [pin, setPin] = useState('')
   const [pattern, setPattern] = useState([])
-  const [diagnosisType, setDiagnosisType] = useState('revision') // 'visible' | 'revision'
+  const [diagnosisType, setDiagnosisType] = useState('visible') // 'visible' | 'revision'
   const [issue, setIssue] = useState('')
-  const [fix, setFix] = useState('')
+  const [fixes, setFixes] = useState([])
   const [customFix, setCustomFix] = useState('')
   const [price, setPrice] = useState('')
   const [advance, setAdvance] = useState('')
@@ -48,8 +50,8 @@ export default function OrderForm({ open, onClose, onCreated }) {
 
   useEffect(() => {
     if (!open) return
-    setMode('existing')
-    setCustomerId(customers[0]?.id || '')
+    setCustQuery('')
+    setSelectedCustomerId('')
     setNewCustomer({ fullName: '', dni: '', phone: '', address: '' })
     setBrand('')
     setModel('')
@@ -58,11 +60,12 @@ export default function OrderForm({ open, onClose, onCreated }) {
     setPickerNew('')
     setAccessories([])
     setCustomAccessory('')
+    setConditions([])
     setPin('')
-    setPattern([])
-setDiagnosisType('revision')
-    setIssue('')
-    setFix('')
+setPattern([])
+    setDiagnosisType('visible')
+setIssue('')
+    setFixes([])
     setCustomFix('')
     setPrice('')
     setAdvance('')
@@ -86,8 +89,31 @@ setDiagnosisType('revision')
     x.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
   )
 
+  // Coincidencias de clientes por nombre o DNI (busca al existente).
+  const customerMatches = useMemo(() => {
+    const q = custQuery.trim().toLowerCase()
+    if (!q) return []
+    return customers
+      .filter((c) => {
+        if (selectedCustomerId && c.id === selectedCustomerId) return false
+        return (
+          c.fullName.toLowerCase().includes(q) ||
+          (c.dni || '').toLowerCase().includes(q) ||
+          (c.phone || '').toLowerCase().includes(q)
+        )
+      })
+      .slice(0, 8)
+  }, [customers, custQuery, selectedCustomerId])
+
+  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null
+
   const dirty =
-    mode === 'new' ||
+    !!selectedCustomerId ||
+    !!custQuery ||
+    !!newCustomer.fullName ||
+    !!newCustomer.dni ||
+    !!newCustomer.phone ||
+    !!newCustomer.address ||
     !!brand ||
     !!model ||
     !!issue ||
@@ -95,9 +121,10 @@ setDiagnosisType('revision')
     !!advance ||
     accessories.length > 0 ||
     !!customAccessory ||
+    conditions.length > 0 ||
     !!pin ||
     pattern.length > 0 ||
-    !!fix ||
+    fixes.length > 0 ||
     !!customFix
 
   const requestClose = () => {
@@ -112,6 +139,16 @@ setDiagnosisType('revision')
     setAccessories((list) =>
       list.includes(name) ? list.filter((a) => a !== name) : [...list, name],
     )
+
+  const toggleFix = (name) =>
+    setFixes((list) => (list.includes(name) ? list.filter((f) => f !== name) : [...list, name]))
+
+  const onAddCustomFix = () => {
+    const v = customFix.trim()
+    if (!v) return
+    setFixes((list) => (list.includes(v) ? list : [...list, v]))
+    setCustomFix('')
+  }
 
   const addCustomAccessory = () => {
     const v = customAccessory.trim()
@@ -149,8 +186,10 @@ setDiagnosisType('revision')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    let cid = customerId
-    if (mode === 'new') {
+    let cid = ''
+    if (selectedCustomerId) {
+      cid = selectedCustomerId
+    } else {
       if (!newCustomer.fullName.trim()) return setError('Ingresá el nombre del cliente.')
       const res = await addCustomer({ ...newCustomer, phone2: '', phone3: '', email: '' })
       if (res.error) return setError(res.error)
@@ -170,11 +209,12 @@ setDiagnosisType('revision')
         brand,
         model,
         accessories: accList.join(', '),
+        conditions: conditions.join(', '),
         pin: pin.trim(),
         pattern: pattern.length >= 3 ? pattern : null,
         diagnosisType,
         issue: issue.trim(),
-        fix: (diagnosisType === 'visible' ? (fix || customFix) : '').trim(),
+        fix: (diagnosisType === 'visible' ? [...fixes, customFix.trim()].filter(Boolean) : []).join(', '),
         price: Number(price) || 0,
         advance: Number(advance) || 0,
       })
@@ -204,36 +244,63 @@ setDiagnosisType('revision')
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Cliente */}
           <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
-              <UserPlus size={15} />
+            <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
               Cliente
             </div>
-            <div className="mb-2 flex gap-2">
-              <button type="button" onClick={() => setMode('existing')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${mode === 'existing' ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}`}>
-                Existente
-              </button>
-              <button type="button" onClick={() => setMode('new')}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${mode === 'new' ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}`}>
-                Nuevo
-              </button>
-            </div>
 
-            {mode === 'existing' ? (
-              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className={inputCls}>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.fullName} {c.dni ? `· DNI ${c.dni}` : ''}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <input type="text" value={newCustomer.fullName} onChange={(e) => setNewCustomer((f) => ({ ...f, fullName: e.target.value }))} placeholder="Nombre completo *" className={inputCls} />
-                <input type="text" inputMode="numeric" value={newCustomer.dni} onChange={(e) => setNewCustomer((f) => ({ ...f, dni: e.target.value }))} placeholder="DNI" className={inputCls} />
-                <input type="tel" value={newCustomer.phone} onChange={(e) => setNewCustomer((f) => ({ ...f, phone: e.target.value }))} placeholder="Teléfono" className={inputCls} />
-                <input type="text" value={newCustomer.address} onChange={(e) => setNewCustomer((f) => ({ ...f, address: e.target.value }))} placeholder="Domicilio" className={inputCls} />
+            {selectedCustomer ? (
+              <div className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 dark:border-primary-500/30 dark:bg-primary-500/10">
+                <p className="truncate text-sm font-semibold text-primary-700 dark:text-primary-300">
+                  {selectedCustomer.fullName}
+                  {selectedCustomer.dni ? <span className="ml-1 font-normal text-slate-500 dark:text-slate-400">· DNI {selectedCustomer.dni}</span> : null}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCustomerId('')}
+                  className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-lg border border-primary-200 px-2.5 py-1 text-xs font-semibold text-primary-600 transition hover:bg-primary-100 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10"
+                >
+                  <X size={13} />
+                  Quitar
+                </button>
               </div>
+            ) : (
+              <>
+                <div className="relative mb-3">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={custQuery}
+                    onChange={(e) => setCustQuery(e.target.value)}
+                    placeholder="Buscar cliente existente por nombre, DNI o teléfono..."
+                    className={`${inputCls} pl-9`}
+                  />
+                  {customerMatches.length > 0 && (
+                    <div className="absolute inset-x-0 top-full z-20 mt-1.5 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                      {customerMatches.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomerId(c.id)
+                            setCustQuery('')
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-primary-50 dark:text-slate-200 dark:hover:bg-primary-500/10"
+                        >
+                          <span className="font-semibold">{c.fullName}</span>
+                          {c.dni && <span className="ml-1 text-xs text-slate-400">DNI {c.dni}</span>}
+                          {c.phone && <span className="ml-2 text-xs text-slate-400">{c.phone}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <input type="text" value={newCustomer.fullName} onChange={(e) => setNewCustomer((f) => ({ ...f, fullName: e.target.value }))} placeholder="Nombre completo *" className={inputCls} />
+                  <input type="text" inputMode="numeric" value={newCustomer.dni} onChange={(e) => setNewCustomer((f) => ({ ...f, dni: e.target.value }))} placeholder="DNI" className={inputCls} />
+                  <input type="tel" value={newCustomer.phone} onChange={(e) => setNewCustomer((f) => ({ ...f, phone: e.target.value }))} placeholder="Teléfono" className={inputCls} />
+                  <input type="text" value={newCustomer.address} onChange={(e) => setNewCustomer((f) => ({ ...f, address: e.target.value }))} placeholder="Domicilio" className={inputCls} />
+                </div>
+              </>
             )}
           </div>
 
@@ -299,57 +366,72 @@ setDiagnosisType('revision')
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label className={labelCls}>PIN / contraseña</label>
-                <input type="text" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Si te lo dejan configurado" className={inputCls} />
-                <p className="mt-1 text-xs text-slate-400">Dejá en blanco si no tiene.</p>
-              </div>
-              <div>
-                <label className={labelCls}>Accesorios que deja</label>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  {COMMON_ACCESSORIES.map((a) => (
-                    <button key={a} type="button" onClick={() => toggleAccessory(a)}
-                      className={accessories.includes(a) ? chipSelected : chipIdle}>
-                      {a}
-                    </button>
-                  ))}
-                  <span className="flex items-center gap-1">
-                    <input type="text" value={customAccessory} onChange={(e) => setCustomAccessory(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomAccessory() } }}
-                      placeholder="Otro..." className={`${inputCls} !w-28`} />
-                    <button type="button" onClick={addCustomAccessory} className={chipIdle}>
-                      <Plus size={13} />
-                    </button>
-                  </span>
-                </div>
+            <div>
+              <label className={labelCls}>Estado en que entra el equipo</label>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {COMMON_CONDITIONS.map((c) => (
+                  <button key={c} type="button"
+                    onClick={() => setConditions((list) => (list.includes(c) ? list.filter((x) => x !== c) : [...list, c]))}
+                    className={conditions.includes(c) ? chipSelected : chipIdle}>
+                    {c}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div>
-              <label className={labelCls}>Patrón de desbloqueo</label>
-              <PatternPad value={pattern} onChange={setPattern} />
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="flex flex-col justify-around gap-4">
+                <div>
+                  <label className={labelCls}>PIN / contraseña del equipo</label>
+                  <input type="text" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="PIN o contraseña" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Con accesorios</label>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {COMMON_ACCESSORIES.map((a) => (
+                      <button key={a} type="button" onClick={() => toggleAccessory(a)}
+                        className={accessories.includes(a) ? chipSelected : chipIdle}>
+                        {a}
+                      </button>
+                    ))}
+                    <span className="flex items-center gap-1">
+                      <input type="text" value={customAccessory} onChange={(e) => setCustomAccessory(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomAccessory() } }}
+                        placeholder="Otro..." className={`${inputCls} !w-28`} />
+                      <button type="button" onClick={addCustomAccessory} className={chipIdle}>
+                        <Plus size={13} />
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <label className={labelCls}>Patrón de desbloqueo</label>
+                <div className="pt-1">
+                  <PatternPad value={pattern} onChange={setPattern} />
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Ingreso */}
           <div>
-            <label className={labelCls}>Ingreso del equipo</label>
+            <label className={labelCls}>Tipo de ingreso</label>
             <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setDiagnosisType('visible')}
+                className={diagnosisType === 'visible' ? chipSelected : chipIdle}>
+                Reparación
+              </button>
               <button type="button" onClick={() => setDiagnosisType('revision')}
                 className={diagnosisType === 'revision' ? chipSelected : chipIdle}>
                 Revisión
-              </button>
-              <button type="button" onClick={() => setDiagnosisType('visible')}
-                className={diagnosisType === 'visible' ? chipSelected : chipIdle}>
-                Reparación directa
               </button>
             </div>
           </div>
 
           <div>
-            <label className={labelCls}>Problema reportado</label>
-            <textarea value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="Motivo de ingreso, chequeos y notas generales..." className={inputCls} rows={3} />
+            <label className={labelCls}>Chequeos / notas generales</label>
+            <textarea value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="Chequeos y notas generales..." className={inputCls} rows={3} />
           </div>
 
           {diagnosisType === 'visible' && (
@@ -358,13 +440,19 @@ setDiagnosisType('revision')
                 <label className={labelCls}>Arreglo a realizar</label>
                 <div className="flex flex-wrap items-center gap-2">
                   {COMMON_FIXES.map((f) => (
-                    <button key={f} type="button" onClick={() => { setFix(f); setCustomFix('') }}
-                      className={(fix || customFix) === f ? chipSelected : chipIdle}>
+                    <button key={f} type="button" onClick={() => toggleFix(f)}
+                      className={fixes.includes(f) ? chipSelected : chipIdle}>
                       {f}
                     </button>
                   ))}
-                  <input type="text" value={customFix} onChange={(e) => { setCustomFix(e.target.value); setFix('') }}
-                    placeholder="Otro arreglo..." className={`${inputCls} !w-40`} />
+                  <span className="flex items-center gap-1">
+                    <input type="text" value={customFix} onChange={(e) => setCustomFix(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAddCustomFix() } }}
+                      placeholder="Otro arreglo..." className={`${inputCls} !w-40`} />
+                    <button type="button" onClick={onAddCustomFix} className={chipIdle}>
+                      <Plus size={13} />
+                    </button>
+                  </span>
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

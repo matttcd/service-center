@@ -29,29 +29,31 @@ export default function Sidebar({ open, onClose }) {
   const isTech = role === 'tecnico' || isAdmin
 
   // Ítems de navegación según el rol.
-  const navItems = [
-    ...(isTech
+  const navItems = isAdmin
+    ? [
+        { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+        { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
+        { to: '/taller', label: 'Taller', icon: Wrench, end: false },
+        { to: '/listos', label: 'Listos', icon: PackageCheck, end: false },
+        { to: '/clientes', label: 'Clientes', icon: Users, end: false },
+        { to: '/actividad', label: 'Actividad', icon: History, end: false },
+        { to: '/usuarios', label: 'Usuarios', icon: UserCog, end: false },
+        { to: '/backups', label: 'Copias de seguridad', icon: Database, end: false },
+        { to: '/configuracion', label: 'Configuración', icon: Settings, end: false },
+      ]
+    : isTech
       ? [
           { to: '/taller', label: 'Taller', icon: Wrench, end: false },
           { to: '/listos', label: 'Listos', icon: PackageCheck, end: false },
+          { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
+          { to: '/actividad', label: 'Actividad', icon: History, end: false },
         ]
-      : [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }]),
-    ...(isAdmin
-      ? [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }]
-      : []),
-    { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
-    ...(role === 'mostrador' || isAdmin
-      ? [{ to: '/clientes', label: 'Clientes', icon: Users, end: false }]
-      : []),
-    { to: '/actividad', label: 'Actividad', icon: History, end: false },
-    ...(isAdmin
-      ? [
-          { to: '/usuarios', label: 'Usuarios', icon: UserCog, end: false },
-          { to: '/backups', label: 'Copias de seguridad', icon: Database, end: false },
-          { to: '/configuracion', label: 'Configuración', icon: Settings, end: false },
+      : [
+          { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+          { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
+          { to: '/clientes', label: 'Clientes', icon: Users, end: false },
+          { to: '/actividad', label: 'Actividad', icon: History, end: false },
         ]
-      : []),
-  ]
 
   const linkCls = ({ isActive }) =>
     `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
