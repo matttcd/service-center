@@ -2,7 +2,7 @@
 // OrderDetail: detalle completo de una orden, unificado en un solo elemento
 // (mismo esquema visual que el modal del taller y el formulario).
 // ============================================
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -37,6 +37,7 @@ import {
   formatMoney,
   titleCase,
   sentenceCase,
+  addDays,
 } from '../utils/helpers.js'
 import { WARRANTY_DAYS } from '../utils/constants.js'
 
@@ -57,6 +58,7 @@ export default function OrderDetail() {
   const [printing, setPrinting] = useState(false)
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
+  const noticeTimer = useRef(null)
   const [technicianNotes, setTechnicianNotes] = useState('')
 
   const order = orders.find((o) => o.id === id)
@@ -92,8 +94,9 @@ export default function OrderDetail() {
   const status = order.status
 
   const showNotice = (msg) => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current)
     setNotice(msg)
-    if (msg) window.setTimeout(() => setNotice(''), 6000)
+    if (msg) noticeTimer.current = window.setTimeout(() => setNotice(''), 6000)
   }
 
   const doStatus = async (next) => {
@@ -115,6 +118,14 @@ export default function OrderDetail() {
     setBusy('retiro')
     const res = await setOrderStatus(order.id, 'entregado', { retiro: true })
     showNotice(res.error ? res.error : 'Equipo retirado por el cliente.')
+    setBusy(null)
+  }
+
+  const handleGarantia = async () => {
+    if (!window.confirm('¿Volver a reparar el equipo por garantía?')) return
+    setBusy('en_reparacion')
+    const res = await setOrderStatus(order.id, 'en_reparacion')
+    showNotice(res.error ? res.error : 'Equipo en reparación por garantía.')
     setBusy(null)
   }
 
@@ -187,10 +198,10 @@ export default function OrderDetail() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{order.orderNumber}</h1>
-                <Badge tone={orderStatusTone(status)}>{ORDER_STATUS_LABEL[status]}</Badge>
                 <Badge tone={order.diagnosisType === 'revision' ? 'primary' : 'slate'}>
                   {order.diagnosisType === 'revision' ? 'Revisión' : 'Reparación'}
                 </Badge>
+                <Badge tone={orderStatusTone(status)}>{ORDER_STATUS_LABEL[status]}</Badge>
                 {['presupuesto', 'terminado'].includes(status) && (
                   <Badge tone={order.notified ? 'green' : 'yellow'}>
                     {order.notified ? 'Avisado' : 'Sin avisar'}
@@ -396,8 +407,18 @@ export default function OrderDetail() {
                   El cliente <span className="font-semibold">aún no confirma</span> el arreglo. Sin confirmación no se puede reparar.
                 </p>
               )}
+              {!order.confirmed && !order.notified && (
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                  Avisá al cliente antes de confirmar el arreglo.
+                </p>
+              )}
             </div>
-            <button onClick={handleConfirm} disabled={busy === 'confirm'} className={btnGhost}>
+            <button
+              onClick={handleConfirm}
+              disabled={busy === 'confirm'}
+              className={btnGhost}
+              title={!order.confirmed && !order.notified ? 'Avisá al cliente antes de confirmar el arreglo' : ''}
+            >
               {order.confirmed ? 'Desmarcar confirmación' : 'Confirmar arreglo'}
             </button>
           </div>
@@ -474,6 +495,17 @@ export default function OrderDetail() {
                   Iniciar revisión
                 </button>
               )}
+              {status === 'en_revision' && isTech && (
+                <button
+                  onClick={() => doStatus('presupuesto')}
+                  disabled={busy === 'presupuesto' || (order.price || 0) <= 0}
+                  title={(order.price || 0) <= 0 ? 'Cargá el arreglo y el presupuesto desde el taller' : ''}
+                  className={`${btnPrimary} ${(order.price || 0) <= 0 ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                >
+                  <Play size={14} />
+                  Cargar presupuesto
+                </button>
+              )}
               {status === 'presupuesto' && (
                 <>
                   <p className="flex-1 text-sm text-slate-500 dark:text-slate-400">
@@ -537,11 +569,19 @@ export default function OrderDetail() {
                 </>
               )}
               {status === 'entregado' && (
-                <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600">
-                  <Phone size={14} />
-                  Entregado el {formatDate(order.deliveredAt)} por {order.deliveredByName || '—'} · Garantía{' '}
-                  {WARRANTY_DAYS} días
-                </p>
+                <>
+                  <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600">
+                    <Phone size={14} />
+                    Entregado el {formatDate(order.deliveredAt)} por {order.deliveredByName || '—'} · Garantía hasta{' '}
+                    {order.deliveredAt ? formatDate(addDays(order.deliveredAt, WARRANTY_DAYS)) : '—'}
+                  </p>
+                  {isTech && (
+                    <button onClick={handleGarantia} disabled={busy === 'en_reparacion'} className={btnGhost}>
+                      <RotateCcw size={14} />
+                      Volver a reparación (garantía)
+                    </button>
+                  )}
+                </>
               )}
               {status !== 'entregado' && isCounter && (
                 <button onClick={handleRetiro} disabled={busy === 'retiro'} className={btnGhost}>

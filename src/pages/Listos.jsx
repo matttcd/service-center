@@ -4,6 +4,7 @@
 import { useMemo, useState } from 'react'
 import { Inbox } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
+import { toTime } from '../utils/helpers.js'
 import OrderCard from '../components/OrderCard.jsx'
 import OrderModal from '../components/OrderModal.jsx'
 
@@ -17,7 +18,7 @@ export default function Listos() {
         .filter((o) => o.status === 'terminado')
         .sort((a, b) => {
           const last = (o) => o.history?.[o.history.length - 1]?.at || o.createdAt
-          return String(last(b)).localeCompare(String(last(a)))
+          return toTime(last(b)) - toTime(last(a))
         }),
     [orders],
   )
@@ -44,7 +45,7 @@ export default function Listos() {
         </div>
       )}
 
-      <OrderModal order={selected ? orders.find((o) => o.id === selected.id) : null} onClose={() => setSelected(null)} />
+      <OrderModal key={selected?.id || 'cerrado'} order={selected ? orders.find((o) => o.id === selected.id) : null} onClose={() => setSelected(null)} />
     </div>
   )
 }

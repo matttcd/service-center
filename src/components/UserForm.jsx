@@ -11,6 +11,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
   const [snapshot, setSnapshot] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -38,9 +39,12 @@ export default function UserForm({ open, onClose, onSubmit }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return
     if (!form.name.trim()) return setError('El nombre es obligatorio.')
     if (form.password.length < 4) return setError('La contraseña debe tener al menos 4 caracteres.')
+    setSaving(true)
     const res = await onSubmit({ ...form, name: titleCase(form.name) })
+    setSaving(false)
     if (res && res.error) return setError(res.error)
     onClose()
   }
@@ -109,9 +113,10 @@ export default function UserForm({ open, onClose, onSubmit }) {
           </button>
           <button
             type="submit"
-            className="flex-1 rounded-lg bg-primary-600 px-4 py-2.5 font-semibold text-white transition hover:bg-primary-700"
+            disabled={saving}
+            className="flex-1 rounded-lg bg-primary-600 px-4 py-2.5 font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
           >
-            Crear usuario
+            {saving ? 'Creando...' : 'Crear usuario'}
           </button>
         </div>
       </form>

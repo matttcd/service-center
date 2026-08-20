@@ -72,7 +72,7 @@ setIssue('')
     setAdvance('')
     setError('')
     setConfirming(false)
-  }, [open, customers])
+  }, [open])
 
   // Badges de marcas y modelos según el catálogo (ordenado por uso).
   const topBrands = useMemo(() => (catalog.brands || []).slice(0, BRAND_BADGE_COUNT), [catalog.brands])
@@ -187,30 +187,31 @@ setIssue('')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    let cid = ''
-    if (selectedCustomerId) {
-      cid = selectedCustomerId
-    } else {
-      if (!newCustomer.fullName.trim()) return setError('Ingresá el nombre del cliente.')
-      const res = await addCustomer({
-        ...newCustomer,
-        fullName: titleCase(newCustomer.fullName),
-        address: titleCase(newCustomer.address),
-        phone2: '',
-        phone3: '',
-        email: '',
-      })
-      if (res.error) return setError(res.error)
-      cid = res.id
-    }
+    if (saving) return
     if (!brand) return setError('Elegí la marca del dispositivo.')
     if (!model) return setError('Elegí el modelo del dispositivo.')
     if (diagnosisType === 'visible' && Number(price) <= 0) {
       return setError('Para un problema visible ingresá el presupuesto del arreglo.')
     }
+    if (!selectedCustomerId && !newCustomer.fullName.trim()) {
+      return setError('Ingresá el nombre del cliente.')
+    }
     setSaving(true)
     setError('')
     try {
+      let cid = selectedCustomerId
+      if (!cid) {
+        const res = await addCustomer({
+          ...newCustomer,
+          fullName: titleCase(newCustomer.fullName),
+          address: titleCase(newCustomer.address),
+          phone2: '',
+          phone3: '',
+          email: '',
+        })
+        if (res.error) throw new Error(res.error)
+        cid = res.id
+      }
       const accList = [...accessories, customAccessory.trim()].filter(Boolean)
       const res = await addOrder({
         customerId: cid,
@@ -402,6 +403,14 @@ setIssue('')
                         {a}
                       </button>
                     ))}
+                    {accessories.filter((a) => !COMMON_ACCESSORIES.includes(a)).map((a) => (
+                      <span key={a} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
+                        {a}
+                        <button type="button" onClick={() => toggleAccessory(a)} aria-label={`Quitar ${a}`} className="transition hover:text-red-500">
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
                     <span className="flex items-center gap-1">
                       <input type="text" value={customAccessory} onChange={(e) => setCustomAccessory(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomAccessory() } }}
@@ -452,6 +461,14 @@ setIssue('')
                       className={fixes.includes(f) ? chipSelected : chipIdle}>
                       {f}
                     </button>
+                  ))}
+                  {fixes.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
+                    <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
+                      {f}
+                      <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500">
+                        <X size={12} />
+                      </button>
+                    </span>
                   ))}
                   <span className="flex items-center gap-1">
                     <input type="text" value={customFix} onChange={(e) => setCustomFix(e.target.value)}

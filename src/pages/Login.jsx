@@ -20,6 +20,7 @@ export default function Login() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const menuRef = useRef(null)
 
   const loadProfiles = async () => {
@@ -77,9 +78,11 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (submitting) return
     setError('')
     if (!selected) return setError('Elegí tu perfil.')
     if (!password) return setError('Ingresá tu contraseña.')
+    setSubmitting(true)
     try {
       await login(selected.id, password)
       saveLastProfile(selected.id)
@@ -87,6 +90,8 @@ export default function Login() {
       navigate('/', { replace: true })
     } catch (err) {
       setError(err.message)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -271,11 +276,11 @@ export default function Login() {
 
               <button
                 type="submit"
-                disabled={!selected}
+                disabled={!selected || submitting}
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <LogIn size={16} />
-                Iniciar sesión
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
+                {submitting ? 'Ingresando...' : 'Iniciar sesión'}
               </button>
             </form>
           </div>

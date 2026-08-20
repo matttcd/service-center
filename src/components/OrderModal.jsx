@@ -17,6 +17,7 @@ import {
   Phone,
   Smartphone,
   User,
+  X,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Badge from './Badge.jsx'
@@ -149,10 +150,19 @@ export default function OrderModal({ order, onClose }) {
 
   const finish = async () => {
     setBusy(true)
+    // Si el presupuesto ya estaba confirmado y se editó el trabajo, guardar
+    // desmarca la confirmación: no se puede avanzar sin reconfirmar.
+    const wasConfirmedBudget = order.status === 'presupuesto' && order.confirmed
+    const changedBudget = editingWork && workDirty
     const saved = await savePending()
     if (saved.error) {
       setBusy(false)
       alert(saved.error)
+      return
+    }
+    if (wasConfirmedBudget && changedBudget) {
+      setBusy(false)
+      alert('El presupuesto cambió: la confirmación quedó desmarcada. Confirmá el arreglo de nuevo antes de reparar.')
       return
     }
     const res = await setOrderStatus(order.id, next)
@@ -194,17 +204,21 @@ export default function OrderModal({ order, onClose }) {
   const accessories = (order.accessories || '').split(',').map((a) => a.trim()).filter(Boolean)
   const conditions = (order.conditions || '').split(',').map((c) => c.trim()).filter(Boolean)
 
+  // Para pasar a "Presupuesto" hace falta un monto cargado.
+  const effectivePrice = editingWork ? Number(priceText) || 0 : order.price || 0
+  const missingBudget = order.status === 'en_revision' && effectivePrice <= 0
+
   return (
     <Modal open onClose={onClose} title={`${order.orderNumber} · ${order.brand} ${order.model}`} maxWidth="max-w-3xl">
       <div className="space-y-6">
         {/* Estado */}
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={orderStatusTone(order.status)}>{ORDER_STATUS_LABEL[order.status]}</Badge>
           {order.diagnosisType === 'revision' ? (
             <Badge tone="primary">Revisión</Badge>
           ) : (
             <Badge tone="slate">Reparación</Badge>
           )}
+          <Badge tone={orderStatusTone(order.status)}>{ORDER_STATUS_LABEL[order.status]}</Badge>
           {['presupuesto', 'terminado'].includes(order.status) && (
             <Badge tone={order.notified ? 'green' : 'yellow'}>
               {order.notified ? 'Avisado' : 'Sin avisar'}
@@ -337,9 +351,14 @@ export default function OrderModal({ order, onClose }) {
                     Confirmó {order.confirmedByName || '—'} · {formatDateTime(order.confirmedAt)}
                   </p>
                 )}
+                {!order.confirmed && !order.notified && (
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    Avisá al cliente antes de confirmar el arreglo.
+                  </p>
+                )}
               </div>
             </div>
-            <button onClick={doConfirm} disabled={busy} className={btnGhost}>
+            <button onClick={doConfirm} disabled={busy} className={btnGhost} title={!order.confirmed && !order.notified ? 'Avisá al cliente antes de confirmar el arreglo' : ''}>
               {order.confirmed ? 'Desmarcar' : 'Confirmar arreglo'}
             </button>
           </div>
@@ -370,6 +389,14 @@ export default function OrderModal({ order, onClose }) {
                   >
                     {f}
                   </button>
+                ))}
+                {fixList.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
+                  <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
+                    {f}
+                    <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500">
+                      <X size={12} />
+                    </button>
+                  </span>
                 ))}
                 <span className="flex items-center gap-1">
                   <input
@@ -468,7 +495,7 @@ export default function OrderModal({ order, onClose }) {
               {order.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
             </button>
           )}
-          {dirty && (!next || lockedBudget) && (
+          {dirty && !lockedBudget && (
             <button onClick={saveOnly} disabled={busy} className={btnGhost}>
               <Check size={14} />
               Guardar
@@ -484,11 +511,11 @@ export default function OrderModal({ order, onClose }) {
           {next && (
             <button
               onClick={finish}
-              disabled={busy || lockedBudget}
-              className={`ml-auto ${lockedBudget ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''} ${btnPrimary} !px-5 !py-2.5 !text-sm`}
-              title={lockedBudget ? 'El cliente debe confirmar el arreglo antes de reparar' : ''}
+              disabled={busy || lockedBudget || missingBudget}
+              className={`ml-auto ${lockedBudget || missingBudget ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''} ${btnPrimary} !px-5 !py-2.5 !text-sm`}
+              title={lockedBudget ? 'El cliente debe confirmar el arreglo antes de reparar' : missingBudget ? 'Cargá el arreglo y el presupuesto primero' : ''}
             >
-              {lockedBudget ? <Lock size={15} /> : <ChevronRight size={15} />}
+              {lockedBudget || missingBudget ? <Lock size={15} /> : <ChevronRight size={15} />}
               {nextLabel(order)}
             </button>
           )}

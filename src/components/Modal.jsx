@@ -4,13 +4,24 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
 
+// Contador de modales abiertos: el Escape solo cierra el modal superior,
+// así los modales anidados (ej. picker de marca/modelo) no cierran el de afuera.
+let modalStack = 0
+
 export default function Modal({ open, onClose, title, children, maxWidth = 'max-w-lg' }) {
   // Cierra con la tecla Escape.
   useEffect(() => {
     if (!open) return
-    const onKey = (e) => e.key === 'Escape' && onClose()
+    modalStack += 1
+    const myDepth = modalStack
+    const onKey = (e) => {
+      if (e.key === 'Escape' && modalStack === myDepth) onClose()
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      modalStack -= 1
+      window.removeEventListener('keydown', onKey)
+    }
   }, [open, onClose])
 
   if (!open) return null

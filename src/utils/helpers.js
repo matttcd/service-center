@@ -110,6 +110,15 @@ export function parseISO(iso) {
   return new Date(y, m - 1, d)
 }
 
+// Convierte un ISO (fecha sola o timestamp completo) a milisegundos.
+// Las fechas solas (YYYY-MM-DD) se interpretan en hora local.
+export function toTime(iso) {
+  if (!iso) return 0
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return parseISO(iso).getTime()
+  const t = new Date(iso).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
 // Suma días a una fecha ISO y devuelve otra fecha ISO.
 export function addDays(iso, days) {
   const d = parseISO(iso)

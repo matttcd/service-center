@@ -28,6 +28,30 @@ if (NODE_ENV !== 'production' && !process.env.JWT_SECRET) {
   console.warn('[WARN] Usando JWT_SECRET por defecto (solo desarrollo). Definí JWT_SECRET para entornos productivos.')
 }
 
+// Límite de intentos de login por IP+cuenta (anti fuerza bruta).
+const MAX_LOGIN_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS || 5)
+const LOGIN_WINDOW_MS = 15 * 60 * 1000
+const loginAttempts = new Map()
+// Contraseñas del seed: si un usuario aún usa una, se le exige cambiarla.
+const DEFAULT_PASSWORDS = ['admin123', 'tecnico123', 'lucas123', 'mostrador123']
+function checkLoginLimit(key) {
+  const now = Date.now()
+  if (loginAttempts.size > 10000) {
+    for (const [k, r] of loginAttempts) {
+      if (now >= r.resetAt) loginAttempts.delete(k)
+    }
+  }
+  const rec = loginAttempts.get(key)
+  if (rec && rec.count >= MAX_LOGIN_ATTEMPTS && now < rec.resetAt) return true
+  return false
+}
+function noteLoginFailure(key) {
+  const now = Date.now()
+  const rec = loginAttempts.get(key)
+  if (rec && now < rec.resetAt) rec.count += 1
+  else loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
+}
+
 app.use(cors())
 app.use(express.json())
 
@@ -211,14 +235,47 @@ app.post('/api/auth/login', (req, res) => {
     : getDB().users.find(
         (u) => u.email.toLowerCase() === String(email || '').trim().toLowerCase(),
       )
+  const rateKey = `${req.ip}:${String(profileId || email || '').toLowerCase()}`
+  if (checkLoginLimit(rateKey)) {
+    return res
+      .status(429)
+      .json({ error: 'Demasiados intentos fallidos. Probá de nuevo en unos minutos.' })
+  }
   if (!user || !bcrypt.compareSync(String(password || ''), user.password)) {
+    noteLoginFailure(rateKey)
     return res.status(401).json({ error: 'Credenciales inválidas.' })
   }
   if (!user.active) {
+    noteLoginFailure(rateKey)
     return res.status(403).json({ error: 'Usuario desactivado. Contactá al administrador.' })
   }
+  loginAttempts.delete(rateKey)
   const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '12h' })
-  return res.json({ token, user: publicUser(user) })
+  return res.json({ token, user: { ...publicUser(user), mustChangePassword: usesDefaultPassword(user) } })
+})
+
+function usesDefaultPassword(user) {
+  if (!user?.password) return false
+  return DEFAULT_PASSWORDS.some((p) => bcrypt.compareSync(p, user.password))
+}
+
+app.post('/api/auth/change-password', auth, (req, res) => {
+  const { currentPassword, newPassword } = req.body || {}
+  const user = getDB().users.find((u) => u.id === req.user.id)
+  if (!user) return res.status(401).json({ error: 'No autorizado.' })
+  if (!bcrypt.compareSync(String(currentPassword || ''), user.password)) {
+    return res.status(400).json({ error: 'La contraseña actual es incorrecta.' })
+  }
+  const pw = String(newPassword || '')
+  if (pw.length < 4) {
+    return res.status(400).json({ error: 'La contraseña nueva debe tener al menos 4 caracteres.' })
+  }
+  const hash = bcrypt.hashSync(pw, 10)
+  mutate((d) => {
+    const target = d.users.find((u) => u.id === req.user.id)
+    if (target) target.password = hash
+    audit(d, 'password_change', 'users', req.user.id, req.user.id, `Cambio de contraseña (${req.user.name})`)
+  }).then(() => res.json({ ok: true }))
 })
 
 function auth(req, res, next) {
@@ -228,7 +285,7 @@ function auth(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET)
     req.user = getDB().users.find((u) => u.id === payload.id) || null
-    if (!req.user) return res.status(401).json({ error: 'No autorizado.' })
+    if (!req.user || !req.user.active) return res.status(401).json({ error: 'No autorizado.' })
     next()
   } catch {
     return res.status(401).json({ error: 'Sesión expirada.' })
@@ -300,7 +357,7 @@ app.get('/api/bootstrap', auth, (req, res) => {
       .map(publicUser),
     config: {
       revisionFee: db.config?.revisionFee ?? 0,
-      ...(req.user.role === 'admin' ? { whatsapp: db.config?.whatsapp || {} } : {}),
+      ...(req.user.role === 'admin' ? { whatsapp: { ...(db.config?.whatsapp || {}), apiToken: undefined } } : {}),
     },
   })
 })
@@ -377,6 +434,9 @@ app.post('/api/customers', auth, (req, res) => {
     return res.status(400).json({ error: 'El nombre completo es obligatorio.' })
   }
   const dniNorm = String(dni || '').trim()
+  if (dniNorm && !/^\d{6,8}$/.test(dniNorm)) {
+    return res.status(400).json({ error: 'El DNI debe tener entre 6 y 8 dígitos.' })
+  }
   const dupDni = getDB().customers.some(
     (c) => !c.deletedAt && dniNorm && String(c.dni).trim() === dniNorm,
   )
@@ -409,6 +469,9 @@ app.put('/api/customers/:id', auth, (req, res) => {
     return res.status(400).json({ error: 'El nombre completo es obligatorio.' })
   }
   const dniNorm = String(dni || '').trim()
+  if (dniNorm && !/^\d{6,8}$/.test(dniNorm)) {
+    return res.status(400).json({ error: 'El DNI debe tener entre 6 y 8 dígitos.' })
+  }
   const dupDni = db.customers.some(
     (c) => c.id !== req.params.id && !c.deletedAt && dniNorm && String(c.dni).trim() === dniNorm,
   )
@@ -576,7 +639,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
     presupuesto: ['en_reparacion', 'entregado'],
     en_reparacion: ['terminado', 'presupuesto', 'entregado'],
     terminado: ['entregado', 'en_reparacion'],
-    entregado: [],
+    entregado: ['en_reparacion'],
   }
 
   const allowed = transitions[from]?.includes(status)
@@ -617,7 +680,9 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
           ? 'Cliente retiró el equipo'
           : status === 'entregado' && previous === 'presupuesto' && !retiro
             ? 'Cliente rechazó el presupuesto'
-            : undefined,
+            : status === 'en_reparacion' && previous === 'entregado'
+              ? 'Reingreso por garantía'
+              : undefined,
     })
     if (['en_revision', 'en_reparacion', 'terminado'].includes(status)) o.repairedBy = req.user.id
     if (['presupuesto', 'terminado'].includes(status)) {
@@ -630,7 +695,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
       o.confirmedAt = null
       o.confirmedBy = null
     }
-    if (status === 'entregado') {
+    if (status === 'entregado' && !o.deliveredAt) {
       o.deliveredAt = todayISO()
       o.deliveredBy = req.user.id
     }
@@ -653,6 +718,9 @@ app.put('/api/orders/:id', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
+  if (!['tecnico', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Solo el técnico puede editar notas y presupuesto.' })
+  }
   const { technicianNotes, fix, price, issue } = req.body || {}
   const touched = technicianNotes !== undefined || fix !== undefined || price !== undefined || issue !== undefined
   mutate((d) => {

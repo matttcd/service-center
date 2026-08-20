@@ -2,6 +2,7 @@
 // OrderCard: tarjeta de equipo del taller (tamaño grande).
 // Reutilizada por el Taller y la página de equipos listos.
 // ============================================
+import { useState } from 'react'
 import { Bell, BellOff, CheckCircle2, ChevronRight, RotateCcw, Lock } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Badge from './Badge.jsx'
@@ -39,11 +40,16 @@ function nextLabel(o) {
 
 export default function OrderCard({ order, onOpen, onChanged }) {
   const { setOrderStatus } = useData()
+  const [busy, setBusy] = useState(null)
   const next = nextStatus(order)
+  const missingBudget = order.status === 'en_revision' && (order.price || 0) <= 0
 
   const move = async (status) => {
+    if (busy) return
+    setBusy(status)
     const res = await setOrderStatus(order.id, status)
     if (res.error) alert(res.error)
+    setBusy(null)
   }
 
   return (
@@ -132,14 +138,15 @@ export default function OrderCard({ order, onOpen, onChanged }) {
           next && (
             <button
               type="button"
+              disabled={busy === next || missingBudget}
               onClick={(e) => {
                 e.stopPropagation()
                 move(next)
               }}
-              className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+              title={missingBudget ? 'Cargá el arreglo y el presupuesto primero' : ''}
+              className={`inline-flex w-full items-center justify-center gap-1 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500`}
             >
-              {nextLabel(order)}
-              <ChevronRight size={15} />
+              {missingBudget ? <Lock size={15} /> : <>{nextLabel(order)}<ChevronRight size={15} /></>}
             </button>
           )
         )}

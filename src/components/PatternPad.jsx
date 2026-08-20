@@ -63,7 +63,8 @@ function PatternSvg({ value = [], size = 120, live = null, variant = 'preview', 
           <circle cx={live.x} cy={live.y} r="5" fill="currentColor" opacity="0.5" className="text-primary-400" />
         )}
         {DOTS.map(([cx, cy], i) => {
-          const active = pts.includes(i)
+          const seq = pts.indexOf(i)
+          const active = seq >= 0
           return (
             <g key={i}>
               <circle
@@ -76,12 +77,14 @@ function PatternSvg({ value = [], size = 120, live = null, variant = 'preview', 
                 strokeWidth="2.5"
                 style={active ? { filter: 'drop-shadow(0 1px 3px rgba(59,130,246,0.45))' } : undefined}
               />
-              <text
-                x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="bold"
-                className={active ? 'fill-white' : 'fill-slate-400 dark:fill-slate-500'}
-              >
-                {i + 1}
-              </text>
+              {active && (
+                <text
+                  x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="bold"
+                  className="fill-white"
+                >
+                  {seq + 1}
+                </text>
+              )}
             </g>
           )
         })}
@@ -102,31 +105,34 @@ function PatternSvg({ value = [], size = 120, live = null, variant = 'preview', 
       {live && last && (
         <circle cx={live.x} cy={live.y} r="5" fill="#1d4ed8" opacity="0.35" />
       )}
-      {DOTS.map(([cx, cy], i) => {
-        const active = pts.includes(i)
-        return (
-          <g key={i}>
-            <circle
-              cx={cx} cy={cy} r="13"
-              className={
-                active
-                  ? 'fill-primary-600 stroke-primary-300 dark:fill-primary-500 dark:stroke-primary-300/60'
-                  : 'fill-white stroke-slate-400 dark:fill-slate-800 dark:stroke-slate-500'
-              }
-              strokeWidth="2.5"
-            />
-            <text
-              x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="bold"
-              className={active ? 'fill-white' : 'fill-slate-400 dark:fill-slate-500'}
-            >
-              {i + 1}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
+{DOTS.map(([cx, cy], i) => {
+          const seq = pts.indexOf(i)
+          const active = seq >= 0
+          return (
+            <g key={i}>
+              <circle
+                cx={cx} cy={cy} r="13"
+                className={
+                  active
+                    ? 'fill-primary-600 stroke-primary-300 dark:fill-primary-500 dark:stroke-primary-300/60'
+                    : 'fill-white stroke-slate-400 dark:fill-slate-800 dark:stroke-slate-500'
+                }
+                strokeWidth="2.5"
+              />
+              {active && (
+                <text
+                  x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="bold"
+                  className="fill-white"
+                >
+                  {seq + 1}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    )
+  }
 
 export function PatternPreview({ value, size = 120, className = '' }) {
   return <PatternSvg value={value} size={size} className={className} />

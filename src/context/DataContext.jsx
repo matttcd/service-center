@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { api } from '../utils/api.js'
 import { useAuth } from './AuthContext.jsx'
 import { loadSession } from '../utils/storage.js'
-import { todayISO } from '../utils/helpers.js'
+import { todayISO, toTime } from '../utils/helpers.js'
 
 const DataContext = createContext(null)
 
@@ -41,7 +41,8 @@ export function DataProvider({ children }) {
       })
       try {
         const act = await api(`/actividad?page=1&limit=${ACTIVIDAD_PAGE_SIZE}`)
-        setActividad(act.logs || [])
+        // Si ya se cargaron más páginas, no pisarlas: solo la primera se recarga.
+        setActividad((prev) => (prev.length > ACTIVIDAD_PAGE_SIZE ? prev : act.logs || []))
         setActividadHasMore((act.page || 1) < (act.pages || 1))
       } catch {
         setActividad([])
@@ -82,7 +83,10 @@ export function DataProvider({ children }) {
     es.addEventListener('connected', () => {
       connected = true
     })
-    es.addEventListener('data-changed', () => refresh({ silent: true }))
+    es.addEventListener('data-changed', () => {
+      refresh({ silent: true })
+      if (currentUser.role === 'admin') loadAdminMetrics()
+    })
     es.onerror = () => {
       // Si ya llegamos a conectar y ahora la conexión falla, puede ser un
       // token expirado: validamos contra la API (refresh hace logout en 401).
@@ -91,14 +95,17 @@ export function DataProvider({ children }) {
     return () => es.close()
   }, [currentUser, refresh, loadAdminMetrics])
 
+  // Ejecuta una mutación y refresca en silencio. Si el refresh falla no se
+  // reporta como error: la mutación ya se aplicó (el SSE la sincroniza).
   const run = async (promise) => {
+    let error = null
     try {
       await promise
-      await refresh({ silent: true })
-      return { error: null }
     } catch (err) {
-      return { error: err.message }
+      error = err.message
     }
+    if (!error) await refresh({ silent: true })
+    return { error }
   }
 
   // ---------- Clientes ----------
@@ -232,12 +239,14 @@ export function DataProvider({ children }) {
     const byLastActivity = (list) =>
       [...list].sort((a, b) => {
         const last = (o) => o.history?.[o.history.length - 1]?.at || o.createdAt
-        return String(last(b)).localeCompare(String(last(a)))
+        return toTime(last(b)) - toTime(last(a))
       })
 
     return {
       readyOrders: byLastActivity(byStatus('terminado')),
-      pendingBudgetOrders: byLastActivity(byStatus('presupuesto')),
+      pendingBudgetOrders: byLastActivity(
+        byStatus('presupuesto').filter((o) => !o.confirmed),
+      ),
       porAvisarOrders: byLastActivity(
         data.orders.filter(
           (o) => ['presupuesto', 'terminado'].includes(o.status) && !o.notified,
