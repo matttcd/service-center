@@ -19,9 +19,6 @@ import {
   BellRing,
   BellOff,
   Lock,
-  AlertTriangle,
-  Plus,
-  X,
   Smartphone,
   User,
 } from 'lucide-react'
@@ -41,7 +38,7 @@ import {
   titleCase,
   sentenceCase,
 } from '../utils/helpers.js'
-import { WARRANTY_DAYS, COMMON_FIXES } from '../utils/constants.js'
+import { WARRANTY_DAYS } from '../utils/constants.js'
 
 function initials(name) {
   return String(name || '')
@@ -56,12 +53,11 @@ export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { orders, customers, config, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder } = useData()
+  const { orders, customers, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder } = useData()
   const [printing, setPrinting] = useState(false)
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
-  const [drafts, setDrafts] = useState({ fix: [], price: '', technicianNotes: '' })
-  const [customFix, setCustomFix] = useState('')
+  const [technicianNotes, setTechnicianNotes] = useState('')
 
   const order = orders.find((o) => o.id === id)
   const customer = customers.find((c) => c.id === order?.customerId)
@@ -69,18 +65,12 @@ export default function OrderDetail() {
   const isAdmin = role === 'admin'
   const isTech = role === 'tecnico' || role === 'admin'
   const isCounter = role === 'mostrador' || role === 'admin'
-  const revisionFee = config?.revisionFee ?? 0
 
   useEffect(() => {
     if (!order) return
-    setDrafts({
-      fix: (order.fix || '').split(',').map((s) => s.trim()).filter(Boolean),
-      price: order.price || '',
-      technicianNotes: order.technicianNotes || '',
-    })
-    setCustomFix('')
+    setTechnicianNotes(order.technicianNotes || '')
     setNotice('')
-    // Solo resetear los borradores cuando cambia la orden (evita pisar ediciones en curso).
+    // Solo resetear la nota cuando cambia la orden (evita pisar ediciones en curso).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id])
 
@@ -120,33 +110,20 @@ export default function OrderDetail() {
     }
   }
 
-  // Carga presupuesto (caso revisión): guarda notas + presupuesto y pasa a "presupuesto".
-  const sendBudget = async () => {
-    if (Number(drafts.price) <= 0) return showNotice('Cargá el presupuesto antes de pasarlo.')
-    setBusy('budget')
-    setNotice('')
-    try {
-      const save = await updateOrder(order.id, {
-        fix: [...drafts.fix, customFix.trim()].filter(Boolean).map((f) => titleCase(f)).join(', '),
-        price: Number(drafts.price) || 0,
-      })
-      if (save.error) return showNotice(save.error)
-      const res = await setOrderStatus(order.id, 'presupuesto')
-      if (res.error) return showNotice(res.error)
-      showNotice('Presupuesto cargado. Avisá al cliente para que confirme.')
-    } finally {
-      setBusy(null)
-    }
+  const handleRetiro = async () => {
+    if (!window.confirm('¿Confirmás que el cliente retiró el equipo?')) return
+    setBusy('retiro')
+    const res = await setOrderStatus(order.id, 'entregado', { retiro: true })
+    showNotice(res.error ? res.error : 'Equipo retirado por el cliente.')
+    setBusy(null)
   }
 
   const saveNotes = async () => {
     setBusy('notes')
     const res = await updateOrder(order.id, {
-      fix: [...drafts.fix, customFix.trim()].filter(Boolean).map((f) => titleCase(f)).join(', '),
-      price: Number(drafts.price) || 0,
-      technicianNotes: sentenceCase(drafts.technicianNotes),
+      technicianNotes: sentenceCase(technicianNotes),
     })
-    showNotice(res.error ? res.error : 'Notas y presupuesto guardados.')
+    showNotice(res.error ? res.error : 'Notas guardadas.')
     setBusy(null)
   }
 
@@ -175,10 +152,6 @@ export default function OrderDetail() {
     'inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50'
   const btnGhost =
     'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-  const chipSelected =
-    'inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50'
-  const chipIdle =
-    'inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
   const chipReadonly =
     'inline-flex items-center rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300'
   const inputCls =
@@ -189,6 +162,7 @@ export default function OrderDetail() {
 
   const accessories = (order.accessories || '').split(',').map((a) => a.trim()).filter(Boolean)
   const conditions = (order.conditions || '').split(',').map((c) => c.trim()).filter(Boolean)
+  const displayedFixes = (order.fix || '').split(',').map((f) => f.trim()).filter(Boolean)
 
   return (
     <div className="space-y-6">
@@ -217,23 +191,28 @@ export default function OrderDetail() {
                 <Badge tone={order.diagnosisType === 'revision' ? 'primary' : 'slate'}>
                   {order.diagnosisType === 'revision' ? 'Revisión' : 'Reparación'}
                 </Badge>
-                <Badge tone={order.notified ? 'green' : 'yellow'}>
-                  {order.notified ? 'Avisado' : 'Sin avisar'}
-                </Badge>
+                {['presupuesto', 'terminado'].includes(status) && (
+                  <Badge tone={order.notified ? 'green' : 'yellow'}>
+                    {order.notified ? 'Avisado' : 'Sin avisar'}
+                  </Badge>
+                )}
                 {order.confirmed && <Badge tone="green">Confirmado</Badge>}
               </div>
               <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-                {titleCase(order.brand)} {titleCase(order.model)} ·{' '}
-                <button
-                  onClick={() => navigate(`/clientes/${customer?.id}`)}
-                  className="font-semibold text-primary-600 transition hover:text-primary-700 dark:text-primary-400"
-                >
-                  {titleCase(customer?.fullName || order.customerName)}
-                </button>{' '}
-                · Recibió {titleCase(order.receivedByName)} · {formatDate(order.createdAt)}
+                Recibió {titleCase(order.receivedByName)} · {formatDate(order.createdAt)}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={async () => {
+                  const res = await printLabel(order.id)
+                  showNotice(res.error ? res.error : 'Etiqueta enviada a la impresora.')
+                }}
+                className={btnGhost}
+              >
+                <Sticker size={14} />
+                Imprimir etiqueta
+              </button>
               <button onClick={() => setPrinting(true)} className={btnPrimary}>
                 <Printer size={14} />
                 Imprimir orden
@@ -378,26 +357,28 @@ export default function OrderDetail() {
           </div>
         </section>
 
-        {/* Aviso al cliente */}
-        <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center">
-          <div className="flex-1 text-sm">
-            {order.notified ? (
-              <p className="text-slate-600 dark:text-slate-300">
-                <BellRing size={16} className="mr-1.5 inline text-emerald-500" />
-                Cliente <span className="font-semibold">avisado</span> por {order.notifiedByName || '—'} el{' '}
-                {formatDateTime(order.notifiedAt)}
-              </p>
-            ) : (
-              <p className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                <BellOff size={16} className="text-accent-500" />
-                Todavía <span className="font-semibold">no se avisó</span> al cliente.
-              </p>
-            )}
+        {/* Aviso al cliente (solo cuando hay algo que avisar) */}
+        {['presupuesto', 'terminado'].includes(status) && (
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center">
+            <div className="flex-1 text-sm">
+              {order.notified ? (
+                <p className="text-slate-600 dark:text-slate-300">
+                  <BellRing size={16} className="mr-1.5 inline text-emerald-500" />
+                  Cliente <span className="font-semibold">avisado</span> por {order.notifiedByName || '—'} el{' '}
+                  {formatDateTime(order.notifiedAt)}
+                </p>
+              ) : (
+                <p className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                  <BellOff size={16} className="text-accent-500" />
+                  Todavía <span className="font-semibold">no se avisó</span> al cliente.
+                </p>
+              )}
+            </div>
+            <button onClick={handleNotified} disabled={busy === 'notified'} className={btnGhost}>
+              {order.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
+            </button>
           </div>
-          <button onClick={handleNotified} disabled={busy === 'notified'} className={btnGhost}>
-            {order.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
-          </button>
-        </div>
+        )}
 
         {/* Confirmación del arreglo (presupuesto) */}
         {order.status === 'presupuesto' && (
@@ -432,69 +413,24 @@ export default function OrderDetail() {
               <div className="space-y-3">
                 <div>
                   <label className={labelCls}>Arreglo a realizar</label>
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    {COMMON_FIXES.map((f) => (
-                      <button
-                        key={f}
-                        type="button"
-                        disabled={!isTech}
-                        onClick={() => setDrafts((d) => ({ ...d, fix: d.fix.includes(f) ? d.fix.filter((x) => x !== f) : [...d.fix, f] }))}
-                        className={drafts.fix.includes(f) ? chipSelected : chipIdle}
-                      >
-                        {f}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={customFix}
-                      onChange={(e) => setCustomFix(e.target.value)}
-                      placeholder="Otro arreglo..."
-                      className={inputCls}
-                      disabled={!isTech}
-                    />
-                    <button
-                      type="button"
-                      disabled={!isTech}
-                      onClick={() => {
-                        const v = customFix.trim()
-                        if (!v) return
-                        setDrafts((d) => ({ ...d, fix: d.fix.includes(v) ? [...d.fix] : [...d.fix, v] }))
-                        setCustomFix('')
-                      }}
-                      className={chipIdle}
-                    >
-                      <Plus size={13} />
-                    </button>
-                  </div>
-                  {[...drafts.fix, customFix.trim()].filter(Boolean).length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      {drafts.fix.map((f) => (
-                        <span key={f} className="inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white">
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {displayedFixes.length > 0 ? (
+                      displayedFixes.map((f) => (
+                        <span key={f} className={chipReadonly}>
                           {f}
-                          {isTech && (
-                            <button type="button" onClick={() => setDrafts((d) => ({ ...d, fix: d.fix.filter((x) => x !== f) }))} aria-label="Quitar arreglo">
-                              <X size={12} />
-                            </button>
-                          )}
                         </span>
-                      ))}
-                    </div>
-                  )}
+                      ))
+                    ) : (
+                      <span className="text-sm text-slate-400">Sin definir</span>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={labelCls}>Presupuesto ($)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={drafts.price}
-                      onChange={(e) => setDrafts((d) => ({ ...d, price: e.target.value }))}
-                      className={inputCls}
-                      disabled={!isTech}
-                    />
+                    <label className={labelCls}>Presupuesto</label>
+                    <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      {formatMoney(order.price)}
+                    </p>
                   </div>
                   <div>
                     <label className={labelCls}>Seña recibida</label>
@@ -503,19 +439,13 @@ export default function OrderDetail() {
                     </p>
                   </div>
                 </div>
-                {status === 'presupuesto' && (
-                  <p className="flex items-start gap-1.5 rounded-lg bg-accent-50 px-3 py-2 text-xs text-accent-700 dark:bg-accent-500/10 dark:text-accent-400">
-                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                    Si el cliente no acepta, se cobra solo la revisión ({formatMoney(revisionFee)}).
-                  </p>
-                )}
               </div>
 
               <div>
                 <label className={labelCls}>Notas del técnico</label>
                 <textarea
-                  value={drafts.technicianNotes}
-                  onChange={(e) => setDrafts((d) => ({ ...d, technicianNotes: e.target.value }))}
+                  value={technicianNotes}
+                  onChange={(e) => setTechnicianNotes(e.target.value)}
                   rows={6}
                   placeholder="Diagnóstico, repuestos, qué decirle al cliente..."
                   className={inputCls}
@@ -524,27 +454,102 @@ export default function OrderDetail() {
                 {isTech && (
                   <button onClick={saveNotes} disabled={busy === 'notes'} className={`${btnPrimary} mt-2`}>
                     <Save size={14} />
-                    Guardar notas y presupuesto
+                    Guardar notas
                   </button>
                 )}
               </div>
             </div>
 
-            {/* En revisión: carga de presupuesto */}
-            {status === 'en_revision' && (
-              <div className="mt-4 flex flex-col gap-3 rounded-xl bg-primary-50 px-4 py-3 dark:bg-primary-500/10 sm:flex-row sm:items-center sm:justify-between">
-                <p className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
-                  <Search size={15} className="shrink-0 text-primary-500" />
-                  Revisá el equipo, cargá el arreglo y el presupuesto arriba, y pasálo a presupuesto.
-                </p>
-                {isTech && (
-                  <button onClick={sendBudget} disabled={busy === 'budget'} className={btnPrimary}>
-                    <PackageCheck size={14} />
-                    Cargar presupuesto
+            {/* Acciones según el estado */}
+            <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+              {status === 'recibido' && order.diagnosisType === 'visible' && isTech && (
+                <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnPrimary}>
+                  <Play size={14} />
+                  Iniciar reparación
+                </button>
+              )}
+              {status === 'recibido' && order.diagnosisType === 'revision' && isTech && (
+                <button onClick={() => doStatus('en_revision')} disabled={busy === 'en_revision'} className={btnPrimary}>
+                  <Search size={14} />
+                  Iniciar revisión
+                </button>
+              )}
+              {status === 'presupuesto' && (
+                <>
+                  <p className="flex-1 text-sm text-slate-500 dark:text-slate-400">
+                    ¿Qué decidió el cliente sobre el presupuesto?
+                  </p>
+                  {isTech && (
+                    <button
+                      onClick={() => doStatus('en_reparacion')}
+                      disabled={busy === 'en_reparacion' || !order.confirmed}
+                      title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : ''}
+                      className={`${btnPrimary} ${!order.confirmed ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                    >
+                      <Play size={14} />
+                      Aceptó → reparar
+                    </button>
+                  )}
+                  {isCounter && (
+                    <button
+                      onClick={() => doStatus('entregado')}
+                      disabled={busy === 'entregado' || !order.notified}
+                      title={!order.notified ? 'Marcá primero al cliente como avisado antes de entregar el equipo' : ''}
+                      className={`${btnGhost} !text-emerald-600 ${!order.notified ? '!cursor-not-allowed !opacity-50' : ''}`}
+                    >
+                      <PackageCheck size={14} />
+                      Rechazó → entregar (cobra revisión)
+                    </button>
+                  )}
+                </>
+              )}
+              {status === 'en_reparacion' && isTech && (
+                <>
+                  <button onClick={() => doStatus('terminado')} disabled={busy === 'terminado'} className={btnPrimary}>
+                    <CheckCircle2 size={14} />
+                    Marcar terminado (listo)
                   </button>
-                )}
-              </div>
-            )}
+                  <button onClick={() => doStatus('presupuesto')} disabled={busy === 'presupuesto'} className={btnGhost}>
+                    <RotateCcw size={14} />
+                    Volver a presupuesto
+                  </button>
+                </>
+              )}
+              {status === 'terminado' && (
+                <>
+                  {isCounter && (
+                    <button
+                      onClick={() => doStatus('entregado')}
+                      disabled={busy === 'entregado' || !order.notified}
+                      title={!order.notified ? 'Marcá primero al cliente como avisado antes de entregar el equipo' : ''}
+                      className={`${btnPrimary} ${!order.notified ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                    >
+                      <PackageCheck size={14} />
+                      Entregar al cliente
+                    </button>
+                  )}
+                  {isTech && (
+                    <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnGhost}>
+                      <RotateCcw size={14} />
+                      Volver a reparación
+                    </button>
+                  )}
+                </>
+              )}
+              {status === 'entregado' && (
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600">
+                  <Phone size={14} />
+                  Entregado el {formatDate(order.deliveredAt)} por {order.deliveredByName || '—'} · Garantía{' '}
+                  {WARRANTY_DAYS} días
+                </p>
+              )}
+              {status !== 'entregado' && isCounter && (
+                <button onClick={handleRetiro} disabled={busy === 'retiro'} className={btnGhost}>
+                  <PackageCheck size={14} />
+                  Cliente retiró el equipo
+                </button>
+              )}
+            </div>
           </div>
         </section>
 
@@ -571,95 +576,6 @@ export default function OrderDetail() {
             </ul>
           </section>
         )}
-
-        {/* Acciones según el estado */}
-        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
-          {status === 'recibido' && order.diagnosisType === 'visible' && isTech && (
-            <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnPrimary}>
-              <Play size={14} />
-              Iniciar reparación
-            </button>
-          )}
-          {status === 'recibido' && order.diagnosisType === 'revision' && isTech && (
-            <button onClick={() => doStatus('en_revision')} disabled={busy === 'en_revision'} className={btnPrimary}>
-              <Search size={14} />
-              Iniciar revisión
-            </button>
-          )}
-          {status === 'presupuesto' && (
-            <>
-              <p className="flex-1 text-sm text-slate-500 dark:text-slate-400">
-                ¿Qué decidió el cliente sobre el presupuesto?
-              </p>
-              {isTech && (
-                <button
-                  onClick={() => doStatus('en_reparacion')}
-                  disabled={busy === 'en_reparacion' || !order.confirmed}
-                  title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : ''}
-                  className={`${btnPrimary} ${!order.confirmed ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
-                >
-                  <Play size={14} />
-                  Aceptó → reparar
-                </button>
-              )}
-              {isCounter && (
-                <button
-                  onClick={() => doStatus('entregado')}
-                  disabled={busy === 'entregado' || !order.notified}
-                  title={!order.notified ? 'Marcá primero al cliente como avisado antes de entregar el equipo' : ''}
-                  className={`${btnGhost} !text-emerald-600 ${!order.notified ? '!cursor-not-allowed !opacity-50' : ''}`}
-                >
-                  <PackageCheck size={14} />
-                  Rechazó → entregar (cobra revisión)
-                </button>
-              )}
-            </>
-          )}
-          {status === 'en_reparacion' && isTech && (
-            <button onClick={() => doStatus('terminado')} disabled={busy === 'terminado'} className={btnPrimary}>
-              <CheckCircle2 size={14} />
-              Marcar terminado (listo)
-            </button>
-          )}
-          {status === 'terminado' && (
-            <>
-              {isCounter && (
-                <button
-                  onClick={() => doStatus('entregado')}
-                  disabled={busy === 'entregado' || !order.notified}
-                  title={!order.notified ? 'Marcá primero al cliente como avisado antes de entregar el equipo' : ''}
-                  className={`${btnPrimary} ${!order.notified ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
-                >
-                  <PackageCheck size={14} />
-                  Entregar al cliente
-                </button>
-              )}
-              {isTech && (
-                <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnGhost}>
-                  <RotateCcw size={14} />
-                  Volver a reparación
-                </button>
-              )}
-              <button
-                onClick={async () => {
-                  const res = await printLabel(order.id)
-                  showNotice(res.error ? res.error : 'Etiqueta enviada a la impresora.')
-                }}
-                className={btnGhost}
-              >
-                <Sticker size={14} />
-                Imprimir etiqueta
-              </button>
-            </>
-          )}
-          {status === 'entregado' && (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600">
-              <Phone size={14} />
-              Entregado el {formatDate(order.deliveredAt)} por {order.deliveredByName || '—'} · Garantía{' '}
-              {WARRANTY_DAYS} días
-            </p>
-          )}
-        </div>
       </Card>
 
       <OrderPrint open={printing} order={order} customer={customer} onClose={() => setPrinting(false)} />

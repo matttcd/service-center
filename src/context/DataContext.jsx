@@ -149,9 +149,9 @@ export function DataProvider({ children }) {
   const deleteOrder = (id) => run(api(`/orders/${id}`, { method: 'DELETE' }))
 
   // Cambia el estado de una orden.
-  const setOrderStatus = async (orderId, status) => {
+  const setOrderStatus = async (orderId, status, extras = {}) => {
     try {
-      const res = await api(`/orders/${orderId}/status`, { method: 'POST', body: { status } })
+      const res = await api(`/orders/${orderId}/status`, { method: 'POST', body: { status, ...extras } })
       await refresh({ silent: true })
       return { error: null, order: res.order }
     } catch (err) {

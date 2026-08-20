@@ -23,6 +23,8 @@ server/data/
 __pycache__/
 *.pyc
 session-*.md
+session-*.json
+tools/
 
 # Editor directories and files
 .vscode/*
