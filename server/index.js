@@ -10,7 +10,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { initDB, getDB, mutate, persist, createBackup, listBackups, restoreBackup, purgeTrash, onDataChange } from './store.js'
 import { buildSeed } from './seed.js'
-import { todayISO, titleCase, uid } from './helpers.js'
+import { todayISO, titleCase, uid, addDays, daysBetween, toISODate } from './helpers.js'
 import { printZplLabel } from './printer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -764,6 +764,101 @@ app.get('/api/actividad', auth, (req, res) => {
     .slice(start, start + limit)
     .map((l) => ({ ...l, userName: names.get(l.userId) || '—' }))
   return res.json({ logs, total, page, pages: Math.max(1, Math.ceil(total / limit)) })
+})
+
+// ---------- Métricas para el admin ----------
+app.get('/api/metrics', auth, adminOnly, (req, res) => {
+  const db = getDB()
+  const live = (o) => !o.deletedAt
+  const orders = db.orders.filter(live)
+  const today = todayISO()
+
+  // Ingresos por período (suma del precio de entregadas).
+  const inRange = (deliveredAt, fromISO, toISO) =>
+    deliveredAt && deliveredAt >= fromISO && deliveredAt <= toISO
+  const now = new Date()
+  const startOfWeek = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)))
+  const startOfMonth = toISODate(new Date(now.getFullYear(), now.getMonth(), 1))
+  const sumPrice = (list) => list.reduce((acc, o) => acc + (Number(o.price) || 0), 0)
+
+  const income = {
+    today: sumPrice(orders.filter((o) => o.deliveredAt === today)),
+    week: sumPrice(orders.filter((o) => inRange(o.deliveredAt, startOfWeek, today))),
+    month: sumPrice(orders.filter((o) => inRange(o.deliveredAt, startOfMonth, today))),
+  }
+
+  // Tiempo promedio de reparación (creación → entrega) por técnico.
+  const techNames = new Map(db.users.map((u) => [u.id, u.name]))
+  const byTech = new Map()
+  for (const o of orders) {
+    if (!o.deliveredAt || !o.repairedBy) continue
+    const entry = byTech.get(o.repairedBy) || { totalDays: 0, count: 0 }
+    entry.totalDays += Math.max(0, daysBetween(o.createdAt, o.deliveredAt))
+    entry.count += 1
+    byTech.set(o.repairedBy, entry)
+  }
+  const avgRepairDaysByTech = [...byTech.entries()]
+    .map(([id, e]) => ({ technicianId: id, name: techNames.get(id) || '—', count: e.count, avgDays: e.count ? +(e.totalDays / e.count).toFixed(1) : 0 }))
+    .sort((a, b) => b.count - a.count)
+
+  // Entregadas por día (últimos 7 días).
+  const deliveredByDay = []
+  for (let i = 6; i >= 0; i -= 1) {
+    const date = addDays(today, -i)
+    deliveredByDay.push({ date, count: orders.filter((o) => o.deliveredAt === date).length })
+  }
+
+  // Marcas y modelos más reparados (top 5 por cantidad de órdenes vivas).
+  const top = (key) => {
+    const counts = new Map()
+    for (const o of orders) {
+      const v = o[key]
+      if (!v) continue
+      counts.set(v, (counts.get(v) || 0) + 1)
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .slice(0, 5)
+  }
+
+  // Dispositivos recibidos por semana y por mes (cantidad de órdenes creadas).
+  const devicesByPeriod = (() => {
+    const receivedAt = (o) => o.createdAt
+    const inPeriod = (list, fromISO, toISO) => list.filter((o) => receivedAt(o) >= fromISO && receivedAt(o) <= toISO)
+
+    // Últimas 8 semanas (lunes a domingo).
+    const weeks = []
+    for (let i = 7; i >= 0; i -= 1) {
+      const from = addDays(startOfWeek, -7 * i)
+      const to = addDays(from, 6)
+      weeks.push({ label: `${formatDateLabel(from)} - ${formatDateLabel(to)}`, count: inPeriod(orders, from, to).length })
+    }
+
+    // Últimos 6 meses (desde el 1° de cada mes).
+    const months = []
+    for (let i = 5; i >= 0; i -= 1) {
+      const first = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const from = toISODate(first)
+      const to = toISODate(new Date(first.getFullYear(), first.getMonth() + 1, 0))
+      months.push({ label: from.slice(0, 7), count: inPeriod(orders, from, to).length })
+    }
+
+    return { weeks, months }
+  })()
+
+  return res.json({
+    income,
+    avgRepairDaysByTech,
+    deliveredByDay,
+    devicesByPeriod,
+    topBrands: top('brand'),
+    topModels: top('model'),
+    totals: {
+      deliveredMonth: orders.filter((o) => inRange(o.deliveredAt, startOfMonth, today)).length,
+      activeOrders: orders.filter((o) => o.status !== 'entregado').length,
+    },
+  })
 })
 
 // ---------- Copias de seguridad (solo admin) ----------

@@ -17,6 +17,7 @@ import {
   History,
   Wrench,
   PackageCheck,
+  BarChart3,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { BRAND_NAME, BRAND_SUBTITLE } from '../utils/brand.js'
@@ -37,6 +38,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/listos', label: 'Listos', icon: PackageCheck, end: false },
         { to: '/clientes', label: 'Clientes', icon: Users, end: false },
         { to: '/actividad', label: 'Actividad', icon: History, end: false },
+        { to: '/metricas', label: 'Métricas', icon: BarChart3, end: false },
         { to: '/usuarios', label: 'Usuarios', icon: UserCog, end: false },
         { to: '/backups', label: 'Copias de seguridad', icon: Database, end: false },
         { to: '/configuracion', label: 'Configuración', icon: Settings, end: false },

@@ -23,6 +23,7 @@ export function DataProvider({ children }) {
   })
   const [actividad, setActividad] = useState([])
   const [actividadHasMore, setActividadHasMore] = useState(false)
+  const [adminMetrics, setAdminMetrics] = useState(null)
   const [loading, setLoading] = useState(true)
   const today = todayISO()
 
@@ -53,14 +54,25 @@ export function DataProvider({ children }) {
     }
   }, [logout])
 
+  const loadAdminMetrics = useCallback(async () => {
+    try {
+      const m = await api('/metrics')
+      setAdminMetrics(m)
+    } catch {
+      // Silencioso: la página de métricas muestra estado vacío.
+    }
+  }, [])
+
   useEffect(() => {
     if (!currentUser) {
       setData({ customers: [], orders: [], users: [], technicians: [], config: null, catalog: { brands: [], models: [] } })
       setActividad([])
+      setAdminMetrics(null)
       setLoading(false)
       return
     }
     refresh()
+    if (currentUser.role === 'admin') loadAdminMetrics()
 
     // Canal de tiempo real: recibe avisos cuando algo cambió y recarga en silencio.
     const token = loadSession()?.token
@@ -77,7 +89,7 @@ export function DataProvider({ children }) {
       if (connected) refresh({ silent: true })
     }
     return () => es.close()
-  }, [currentUser, refresh])
+  }, [currentUser, refresh, loadAdminMetrics])
 
   const run = async (promise) => {
     try {
@@ -213,11 +225,8 @@ export function DataProvider({ children }) {
   // ---------- Configuración ----------
   const saveConfig = async (fields) => run(api('/config', { method: 'POST', body: fields }))
 
-  // ---------- Derivados / métricas ----------
+  // ---------- Derivados / listas por estado ----------
   const derived = useMemo(() => {
-    const receivedToday = data.orders.filter((o) => o.createdAt === today).length
-    const deliveredToday = data.orders.filter((o) => o.deliveredAt === today).length
-
     const byStatus = (s) => data.orders.filter((o) => o.status === s)
 
     const byLastActivity = (list) =>
@@ -227,15 +236,7 @@ export function DataProvider({ children }) {
       })
 
     return {
-      metrics: {
-        receivedToday,
-        inRevisionCount: byStatus('en_revision').length,
-        pendingBudgetCount: byStatus('presupuesto').length,
-        inRepairCount: byStatus('en_reparacion').length,
-        readyCount: byStatus('terminado').length,
-        deliveredToday,
-      },
-readyOrders: byLastActivity(byStatus('terminado')),
+      readyOrders: byLastActivity(byStatus('terminado')),
       pendingBudgetOrders: byLastActivity(byStatus('presupuesto')),
       porAvisarOrders: byLastActivity(
         data.orders.filter(
@@ -257,6 +258,8 @@ readyOrders: byLastActivity(byStatus('terminado')),
     catalog: data.catalog,
     actividad,
     actividadHasMore,
+    adminMetrics,
+    loadAdminMetrics,
     ...derived,
     addCustomer,
     updateCustomer,

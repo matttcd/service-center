@@ -16,6 +16,7 @@ import Users from './pages/Users.jsx'
 import Backups from './pages/Backups.jsx'
 import Actividad from './pages/Actividad.jsx'
 import Settings from './pages/Settings.jsx'
+import Metrics from './pages/Metrics.jsx'
 
 // Protege rutas: sin sesión se redirige a /login.
 function RequireAuth({ children }) {
@@ -87,6 +88,14 @@ export default function App() {
           element={
             <RequireRole roles={['admin']}>
               <Backups />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="metricas"
+          element={
+            <RequireRole roles={['admin']}>
+              <Metrics />
             </RequireRole>
           }
         />
