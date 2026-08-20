@@ -52,7 +52,7 @@ export default function Orders() {
       .filter((o) => (brand === 'all' ? true : o.brand === brand))
       .filter((o) => (from ? o.createdAt >= from : true))
       .filter((o) => (to ? o.createdAt <= to : true))
-      .filter((o) => (onlyNotNotified ? !o.notified && o.status !== 'entregado' : true))
+      .filter((o) => (onlyNotNotified ? !o.notified && ['presupuesto', 'terminado'].includes(o.status) : true))
       .filter((o) => (onlyNotConfirmed ? !o.confirmed : true))
       .filter((o) => {
         if (!query) return true
@@ -267,7 +267,7 @@ export default function Orders() {
                     <td className="whitespace-nowrap px-3 py-2.5">
                       <span className="flex flex-wrap items-center gap-1.5">
                         <Badge tone={orderStatusTone(o.status)}>{ORDER_STATUS_LABEL[o.status]}</Badge>
-                        {!o.notified && o.status !== 'entregado' && (
+                        {!o.notified && ['presupuesto', 'terminado'].includes(o.status) && (
                           <Badge tone="yellow">
                             <BellOff size={12} />
                             Sin avisar

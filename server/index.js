@@ -195,11 +195,22 @@ function formatDateLabel(iso) {
 }
 
 // ---------- Autenticación ----------
+// Lista pública de perfiles (usuarios activos) para el login: solo nombre y rol.
+app.get('/api/auth/profiles', (req, res) => {
+  const profiles = getDB()
+    .users.filter((u) => u.active)
+    .map((u) => ({ id: u.id, name: u.name, role: u.role }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  res.json({ profiles })
+})
+
 app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body || {}
-  const user = getDB().users.find(
-    (u) => u.email.toLowerCase() === String(email || '').trim().toLowerCase(),
-  )
+  const { email, password, profileId } = req.body || {}
+  const user = profileId
+    ? getDB().users.find((u) => u.id === profileId)
+    : getDB().users.find(
+        (u) => u.email.toLowerCase() === String(email || '').trim().toLowerCase(),
+      )
   if (!user || !bcrypt.compareSync(String(password || ''), user.password)) {
     return res.status(401).json({ error: 'Credenciales inválidas.' })
   }
@@ -544,7 +555,7 @@ app.delete('/api/orders/:id', auth, adminOnly, (req, res) => {
 
 // ---------- Estado de una orden ----------
 app.post('/api/orders/:id/status', auth, (req, res) => {
-  const { status } = req.body || {}
+  const { status, retiro } = req.body || {}
   const db = getDB()
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
@@ -560,10 +571,10 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
 
   // Transiciones permitidas (respetan el flujo real del taller).
   const transitions = {
-    recibido: order.diagnosisType === 'revision' ? ['en_revision'] : ['en_reparacion'],
-    en_revision: ['presupuesto'],
+    recibido: order.diagnosisType === 'revision' ? ['en_revision', 'entregado'] : ['en_reparacion', 'entregado'],
+    en_revision: ['presupuesto', 'entregado'],
     presupuesto: ['en_reparacion', 'entregado'],
-    en_reparacion: ['terminado', 'presupuesto'],
+    en_reparacion: ['terminado', 'presupuesto', 'entregado'],
     terminado: ['entregado', 'en_reparacion'],
     entregado: [],
   }
@@ -582,7 +593,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
     return res.status(400).json({ error: 'El cliente debe confirmar el arreglo antes de reparar.' })
   }
   // No se puede entregar un equipo sin haber avisado al cliente.
-  if (status === 'entregado' && !order.notified) {
+  if (status === 'entregado' && !order.notified && !retiro) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
   }
   if (['en_revision', 'presupuesto', 'en_reparacion', 'terminado'].includes(status) && !isTech) {
@@ -601,7 +612,12 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
       status,
       at: new Date().toISOString(),
       by: req.user.id,
-      note: status === 'entregado' && previous === 'presupuesto' ? 'Cliente rechazó el presupuesto' : undefined,
+      note:
+        status === 'entregado' && retiro
+          ? 'Cliente retiró el equipo'
+          : status === 'entregado' && previous === 'presupuesto' && !retiro
+            ? 'Cliente rechazó el presupuesto'
+            : undefined,
     })
     if (['en_revision', 'en_reparacion', 'terminado'].includes(status)) o.repairedBy = req.user.id
     if (['presupuesto', 'terminado'].includes(status)) {
@@ -751,15 +767,15 @@ app.post('/api/config', auth, adminOnly, (req, res) => {
 app.post('/api/users', auth, adminOnly, (req, res) => {
   const { name, email, password, role } = req.body || {}
   const db = getDB()
-  if (db.users.some((u) => u.email.toLowerCase() === String(email || '').trim().toLowerCase())) {
-    return res.status(400).json({ error: 'Ya existe un usuario con ese email.' })
-  }
   if (!name || !name.trim()) return res.status(400).json({ error: 'El nombre es obligatorio.' })
   if (!password || password.length < 4) {
     return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres.' })
   }
   if (!['admin', 'tecnico', 'mostrador'].includes(role)) {
     return res.status(400).json({ error: 'Rol inválido.' })
+  }
+  if (email && db.users.some((u) => u.email.toLowerCase() === String(email).trim().toLowerCase())) {
+    return res.status(400).json({ error: 'Ya existe un usuario con ese email.' })
   }
   const id = uid()
   mutate((d) => {

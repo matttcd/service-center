@@ -4,17 +4,17 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
-import { isValidEmail, titleCase } from '../utils/helpers.js'
+import { titleCase } from '../utils/helpers.js'
 
 export default function UserForm({ open, onClose, onSubmit }) {
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'mostrador' })
+  const [form, setForm] = useState({ name: '', password: '', role: 'mostrador' })
   const [snapshot, setSnapshot] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!open) return
-    const base = { name: '', email: '', password: '', role: 'mostrador' }
+    const base = { name: '', password: '', role: 'mostrador' }
     setSnapshot(JSON.stringify(base))
     setForm(base)
     setError('')
@@ -39,7 +39,6 @@ export default function UserForm({ open, onClose, onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) return setError('El nombre es obligatorio.')
-    if (!isValidEmail(form.email)) return setError('Ingresá un email válido.')
     if (form.password.length < 4) return setError('La contraseña debe tener al menos 4 caracteres.')
     const res = await onSubmit({ ...form, name: titleCase(form.name) })
     if (res && res.error) return setError(res.error)
@@ -68,18 +67,6 @@ export default function UserForm({ open, onClose, onSubmit }) {
             value={form.name}
             onChange={set('name')}
             placeholder="Ej: Laura Medina"
-            className={inputCls}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Email
-          </label>
-          <input
-            type="email"
-            value={form.email}
-            onChange={set('email')}
-            placeholder="usuario@local.com"
             className={inputCls}
           />
         </div>

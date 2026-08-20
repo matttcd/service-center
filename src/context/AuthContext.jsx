@@ -2,7 +2,7 @@
 // Contexto de autenticación
 // ============================================
 import { createContext, useCallback, useContext, useState } from 'react'
-import { clearSession, loadSession, saveSession } from '../utils/storage.js'
+import { clearSession, loadSession, saveLastProfile, saveSession } from '../utils/storage.js'
 import { api } from '../utils/api.js'
 
 const AuthContext = createContext(null)
@@ -11,9 +11,10 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => loadSession()?.user || null)
 
   // Valida credenciales contra la API y guarda la sesión.
-  const login = useCallback(async (email, password) => {
-    const data = await api('/auth/login', { method: 'POST', body: { email, password } })
+  const login = useCallback(async (profileId, password) => {
+    const data = await api('/auth/login', { method: 'POST', body: { profileId, password } })
     saveSession({ token: data.token, user: data.user })
+    saveLastProfile(profileId)
     setCurrentUser(data.user)
     return data.user
   }, [])

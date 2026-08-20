@@ -89,7 +89,6 @@ export default function Users() {
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
                 <th className="px-5 py-3 font-semibold">Usuario</th>
-                <th className="px-4 py-3 font-semibold">Email</th>
                 <th className="px-4 py-3 font-semibold">Rol</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
                 <th className="px-4 py-3 font-semibold text-right">Acción</th>
@@ -122,7 +121,6 @@ export default function Users() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{u.email}</td>
                     <td className="px-4 py-3">
                       {u.role === 'admin' ? (
                         <Badge tone="primary">
