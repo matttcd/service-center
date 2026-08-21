@@ -63,74 +63,69 @@ export default function OrderPrint({ open, order, customer, onClose }) {
 
       <div className="absolute inset-0 overflow-y-auto p-4 pt-20">
         <div className="mx-auto w-full max-w-2xl">
-          <div id="order-print" className="rounded-xl bg-white p-8 text-slate-900 shadow-lg">
+          <div id="order-print" className="border border-gray-300 bg-white p-8 text-gray-900">
             {/* Encabezado */}
-            <div className="flex items-start justify-between rounded-lg bg-primary-600 px-5 py-4 text-white">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-400 text-primary-600">
-                  <span className="text-3xl font-black leading-none">G</span>
-                </div>
-                <div>
-                  <p className="text-base font-bold leading-tight">{BRAND_NAME}</p>
-                  <p className="text-xs text-primary-100">{BRAND_SUBTITLE}</p>
-                </div>
+            <div className="flex items-start justify-between border-b-2 border-black pb-3">
+              <div>
+                <p className="text-lg font-bold leading-tight">{BRAND_NAME}</p>
+                <p className="text-xs">{BRAND_SUBTITLE}</p>
               </div>
               <div className="text-right">
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary-200">Orden de servicio</p>
-                <p className="text-xl font-black" data-order-number>{order.orderNumber}</p>
-                <p className="text-xs text-primary-100">{formatDate(order.createdAt)}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide">Orden de servicio</p>
+                <p className="text-xl font-bold leading-tight" data-order-number>{order.orderNumber}</p>
+                <p className="text-xs">{formatDate(order.createdAt)}</p>
               </div>
             </div>
 
             {/* Cliente */}
-            <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-              <p>
-                <span className="text-slate-500">Cliente:</span>{' '}
-                <span className="font-semibold">{customer?.fullName || order.customerName}</span>
-              </p>
-              <p><span className="text-slate-500">DNI:</span> {customer?.dni || '—'}</p>
-              <p>
-                <span className="text-slate-500">Teléfono:</span>{' '}
-                {[customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' · ') || '—'}
-              </p>
-              <p>
-                <span className="text-slate-500">Domicilio:</span> {customer?.address || '—'}
-              </p>
-              <p><span className="text-slate-500">Recibió:</span> {order.receivedByName || '—'}</p>
+            <div className="border-b border-gray-300 py-3">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider">Datos del cliente</p>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs">
+                <p>
+                  <span className="font-bold">Cliente:</span>{' '}
+                  {customer?.fullName || order.customerName}
+                </p>
+                <p><span className="font-bold">DNI:</span> {customer?.dni || '—'}</p>
+                <p>
+                  <span className="font-bold">Teléfono:</span>{' '}
+                  {[customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' / ') || '—'}
+                </p>
+                <p><span className="font-bold">Domicilio:</span> {customer?.address || '—'}</p>
+                <p><span className="font-bold">Recibió:</span> {order.receivedByName || '—'}</p>
+              </div>
             </div>
 
             {/* Equipo */}
-            <div className="mt-5 rounded-lg border border-slate-300 p-4 text-sm">
-              <div className="flex items-start justify-between">
-                <p className="text-base font-bold">
+            <div className="border-b border-gray-300 py-3">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider">Equipo</p>
+              <div className="flex items-baseline justify-between">
+                <p className="text-sm font-bold">
                   {order.brand} {order.model}
                 </p>
-                <span className="rounded-full bg-slate-200 px-3 py-0.5 text-xs font-semibold text-slate-700">
-                  {ORDER_STATUS_LABEL[order.status] || order.status}
-                </span>
+                <p className="text-xs">{ORDER_STATUS_LABEL[order.status] || order.status}</p>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+              <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-1 text-xs">
                 <p>
-                  <span className="text-slate-500">PIN / contraseña:</span>{' '}
+                  <span className="font-bold">PIN / contraseña:</span>{' '}
                   {order.pin || '—'}
                 </p>
                 <p>
-                  <span className="text-slate-500">Accesorios:</span>{' '}
+                  <span className="font-bold">Accesorios:</span>{' '}
                   {order.accessories || '—'}
                 </p>
                 <p>
-                  <span className="text-slate-500">Estado del equipo:</span>{' '}
+                  <span className="font-bold">Estado del equipo:</span>{' '}
                   {order.conditions || '—'}
                 </p>
                 <p className="col-span-2">
-                  <span className="text-slate-500">Chequeos / notas generales:</span>{' '}
+                  <span className="font-bold">Chequeos / notas generales:</span>{' '}
                   {order.issue || '—'}
                 </p>
               </div>
               {order.pattern?.length > 0 && (
-                <div className="mt-3 flex items-center gap-4">
-                  <p className="text-sm">
-                    <span className="text-slate-500">Patrón de desbloqueo:</span>
+                <div className="mt-2 flex items-center gap-4">
+                  <p className="text-xs">
+                    <span className="font-bold">Patrón de desbloqueo:</span>
                   </p>
                   <PatternPreview value={order.pattern} size={80} />
                 </div>
@@ -138,20 +133,21 @@ export default function OrderPrint({ open, order, customer, onClose }) {
             </div>
 
             {/* Presupuesto */}
-            <div className="mt-4 rounded-lg bg-slate-100 px-4 py-3 text-sm">
+            <div className="border-t border-gray-300 pt-3 text-xs">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider">Presupuesto</p>
               {order.diagnosisType === 'visible' ? (
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-1">
                   <p>
-                    <span className="text-slate-500">Arreglo a realizar:</span>{' '}
+                    <span className="font-bold">Arreglo a realizar:</span>{' '}
                     <span className="font-semibold">{order.fix || '—'}</span>
                   </p>
                   <p className="text-right">
-                    <span className="text-slate-500">Presupuesto:</span>{' '}
+                    <span className="font-bold">Presupuesto:</span>{' '}
                     <span className="font-bold">{formatMoney(order.price)}</span>
                   </p>
                   {order.advance > 0 && (
                     <p className="col-span-2 text-right">
-                      <span className="text-slate-500">Seña recibida:</span>{' '}
+                      <span className="font-bold">Seña recibida:</span>{' '}
                       <span className="font-semibold">{formatMoney(order.advance)}</span>
                     </p>
                   )}
@@ -164,27 +160,33 @@ export default function OrderPrint({ open, order, customer, onClose }) {
               )}
             </div>
 
-            {/* Firmas */}
-            <div className="mt-10 grid grid-cols-2 gap-10 text-center">
-              <div>
-                <div className="mb-14 border-b border-slate-700" />
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Firma del cliente</p>
-              </div>
-              <div>
-                <div className="mb-14 border-b border-slate-700" />
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Firma del encargado</p>
+            {/* Firma del cliente */}
+            <div className="mt-10">
+              <p className="flex items-end text-xs">
+                <span className="font-bold whitespace-nowrap">Firma:</span>{' '}
+                <span className="ml-2 flex-1 border-b border-black" />
+              </p>
+              <div className="mt-6 flex items-end gap-8 text-xs">
+                <p className="flex flex-1 items-end gap-2">
+                  <span className="font-bold whitespace-nowrap">Aclaración:</span>
+                  <span className="flex-1 border-b border-black" />
+                </p>
+                <p className="flex w-40 items-end gap-2">
+                  <span className="font-bold whitespace-nowrap">DNI:</span>
+                  <span className="flex-1 border-b border-black" />
+                </p>
               </div>
             </div>
 
             {/* Condiciones */}
-            <p className="mt-8 text-[11px] leading-relaxed text-slate-500">
+            <p className="mt-8 text-[10px] leading-relaxed text-gray-500">
               El cliente declara recibir el equipo en las condiciones detalladas y autoriza su reparación.
               Se lo avisa por teléfono cuando el arreglo está listo para retirar. Si el presupuesto no se
               acepta, se cobra únicamente la revisión. Este equipo queda cubierto por una garantía de{' '}
               <span className="font-semibold">{WARRANTY_DAYS} días</span> a partir de su entrega, por el
               trabajo realizado.
             </p>
-            <p className="mt-2 text-[11px] text-slate-400">
+            <p className="mt-2 text-[10px] text-gray-400">
               {BRAND_NAME} · {BRAND_SUBTITLE}
             </p>
           </div>

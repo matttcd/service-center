@@ -28,6 +28,7 @@ import {
 import { useData } from '../context/DataContext.jsx'
 import TechnicianSelect from '../components/TechnicianSelect.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
+import { api } from '../utils/api.js'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import OrderPrint from '../components/OrderPrint.jsx'
@@ -57,7 +58,7 @@ export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { orders, customers, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder } = useData()
+  const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder } = useData()
   const [printing, setPrinting] = useState(false)
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
@@ -67,14 +68,31 @@ export default function OrderDetail() {
   const [budgetCustomFix, setBudgetCustomFix] = useState('')
   const [budgetPriceText, setBudgetPriceText] = useState('')
   const [editingBudget, setEditingBudget] = useState(false)
+  // Orden en modo "override" local: cuando el bootstrap deja de traer una orden
+  // entregada (las entregadas se filtran para no saturar la red), la seguimos
+  // mostrando trayéndola directo por GET /api/orders/:id.
+  const [localOrder, setLocalOrder] = useState(null)
 
-  const order = orders.find((o) => o.id === id)
+  const order = localOrder || orders.find((o) => o.id === id)
   const customer = customers.find((c) => c.id === order?.customerId)
   const role = currentUser?.role
   const isAdmin = role === 'admin'
   const isTech = role === 'tecnico' || role === 'admin'
   const isCounter = role === 'mostrador' || role === 'admin'
   const canBudget = ['mostrador', 'admin'].includes(role)
+
+  useEffect(() => {
+    setLocalOrder(null)
+    // Si la orden no está en el bootstrap (las entregadas se filtran para no
+    // saturar la red), la traemos directo por id para poder seguir viéndola.
+    if (!loading && !orders.some((o) => o.id === id)) {
+      let active = true
+      api(`/orders/${id}`)
+        .then((r) => { if (active) setLocalOrder(r.order) })
+        .catch(() => { if (active) setLocalOrder(null) })
+      return () => { active = false }
+    }
+  }, [id, loading, orders])
 
   useEffect(() => {
     if (!order) return
@@ -117,8 +135,11 @@ export default function OrderDetail() {
     try {
       const res = await setOrderStatus(order.id, next)
       if (res.error) return showNotice(res.error)
-      if (next === 'terminado') showNotice('Equipo marcado como listo. Avisale al cliente.')
-      else if (next === 'entregado') showNotice('Equipo entregado.')
+      if (next === 'entregado') {
+        showNotice('Equipo entregado.')
+        const fresh = await api(`/orders/${order.id}`)
+        setLocalOrder(fresh.order)
+      } else if (next === 'terminado') showNotice('Equipo marcado como listo. Avisale al cliente.')
       else showNotice('Estado actualizado.')
     } finally {
       setBusy(null)
@@ -129,7 +150,13 @@ export default function OrderDetail() {
     if (!window.confirm('¿Confirmás que el cliente retiró el equipo?')) return
     setBusy('retiro')
     const res = await setOrderStatus(order.id, 'entregado', { retiro: true })
-    showNotice(res.error ? res.error : 'Equipo retirado por el cliente.')
+    if (res.error) {
+      showNotice(res.error)
+    } else {
+      showNotice('Equipo retirado por el cliente.')
+      const fresh = await api(`/orders/${order.id}`)
+      setLocalOrder(fresh.order)
+    }
     setBusy(null)
   }
 

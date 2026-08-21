@@ -105,6 +105,9 @@ body {
     position: absolute;
     inset: 0;
     width: 100%;
+    height: 273mm;
+    max-height: 273mm;
+    overflow: hidden;
     color: #0f172a !important;
     background: #ffffff !important;
     border-radius: 0 !important;
