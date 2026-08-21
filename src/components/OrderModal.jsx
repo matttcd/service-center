@@ -23,6 +23,7 @@ import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Badge from './Badge.jsx'
 import Modal from './Modal.jsx'
+import TechnicianSelect from './TechnicianSelect.jsx'
 import { PatternPreview } from './PatternPad.jsx'
 import { COMMON_FIXES } from '../utils/constants.js'
 import {
@@ -67,8 +68,9 @@ export default function OrderModal({ order, onClose }) {
   const [techNotes, setTechNotes] = useState(order?.technicianNotes || '')
   const [busy, setBusy] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-  const canBudget = currentUser?.role === 'admin'
-  const [editingWork, setEditingWork] = useState(() => order?.diagnosisType === 'revision' && !order?.fix && canBudget)
+  const canBudget = ['mostrador', 'admin'].includes(currentUser?.role)
+  const canEditWork = ['tecnico', 'admin'].includes(currentUser?.role)
+  const [editingWork, setEditingWork] = useState(() => canEditWork && !order?.fix)
 
   // Resincroniza el estado local cuando la orden cambia por fuera (SSE/otra
   // pestaña). No pisa ediciones en curso: solo re-sincroniza si no hay cambios.
@@ -82,7 +84,7 @@ export default function OrderModal({ order, onClose }) {
       setCustomFix('')
       setPriceText(order.price ? String(order.price) : '')
       setTechNotes(order.technicianNotes || '')
-      setEditingWork(order.diagnosisType === 'revision' && !order.fix && canBudget)
+      setEditingWork(canEditWork && !order.fix)
       return
     }
     const notesClean = (techNotes.trim() || '') === (order.technicianNotes || '')
@@ -104,19 +106,23 @@ export default function OrderModal({ order, onClose }) {
   const fixValue = [...fixList, customFix.trim()].filter(Boolean).join(', ')
   const displayedFixes = (order.fix || '').split(',').map((s) => s.trim()).filter(Boolean)
   const lockedBudget = order.status === 'presupuesto' && !order.confirmed
+  const missingTech = (next === 'en_reparacion' || next === 'en_revision') && !order.assignedTo
 
   const notesDirty = (techNotes.trim() || '') !== (order.technicianNotes || '')
   const workDirty =
     fixValue !== (order.fix || '') ||
     Math.abs((Number(priceText) || 0) - (order.price || 0)) > 0.001
   const dirty = notesDirty || (editingWork && workDirty)
+  const wantsPresupuesto = order.status === 'en_reparacion' && editingWork && workDirty
+  const effectiveNext = wantsPresupuesto ? 'presupuesto' : next
+  const effectiveLabel = wantsPresupuesto ? 'Presupuestar' : nextStatusLabel(order)
 
   const savePending = async () => {
     const fields = { technicianNotes: sentenceCase(techNotes.trim()) }
     let workChanged = false
     if (editingWork) {
       fields.fix = fixValue.split(',').map((s) => titleCase(s.trim())).filter(Boolean).join(', ')
-      fields.price = Number(priceText) || 0
+      if (canBudget) fields.price = Number(priceText) || 0
       workChanged = workDirty
     }
     if (!workChanged && !notesDirty) return { error: null }
@@ -168,7 +174,7 @@ export default function OrderModal({ order, onClose }) {
       alert('El presupuesto cambió: la confirmación quedó desmarcada. Confirmá el arreglo de nuevo antes de reparar.')
       return
     }
-    const res = await setOrderStatus(order.id, next)
+    const res = await setOrderStatus(order.id, effectiveNext)
     setBusy(false)
     if (res.error) alert(res.error)
     else onClose()
@@ -207,9 +213,9 @@ export default function OrderModal({ order, onClose }) {
   const accessories = (order.accessories || '').split(',').map((a) => a.trim()).filter(Boolean)
   const conditions = (order.conditions || '').split(',').map((c) => c.trim()).filter(Boolean)
 
-  // Para pasar a "Presupuesto" hace falta un monto cargado.
-  const effectivePrice = editingWork ? Number(priceText) || 0 : order.price || 0
-  const missingBudget = order.status === 'en_revision' && effectivePrice <= 0
+  // Para pasar de "En revisión" a "Presupuesto" hace falta al menos una reparación registrada.
+  const hasRepair = (fixValue || order.fix || '').trim().length > 0
+  const missingRepair = order.status === 'en_revision' && next === 'presupuesto' && !hasRepair
 
   return (
     <Modal open onClose={onClose} title={`${order.orderNumber} · ${order.brand} ${order.model}`} maxWidth="max-w-3xl">
@@ -361,9 +367,11 @@ export default function OrderModal({ order, onClose }) {
                 )}
               </div>
             </div>
-            <button onClick={doConfirm} disabled={busy} className={btnGhost} title={!order.confirmed && !order.notified ? 'Avisá al cliente antes de confirmar el arreglo' : ''}>
-              {order.confirmed ? 'Desmarcar' : 'Confirmar arreglo'}
-            </button>
+            {canBudget && (
+              <button onClick={doConfirm} disabled={busy} className={btnGhost} title={!order.confirmed && !order.notified ? 'Avisá al cliente antes de confirmar el arreglo' : ''}>
+                {order.confirmed ? 'Desmarcar' : 'Confirmar arreglo'}
+              </button>
+            )}
           </div>
         )}
 
@@ -373,85 +381,106 @@ export default function OrderModal({ order, onClose }) {
             Reparación
           </p>
 
-          {/* Arreglo y presupuesto */}
-          {editingWork ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className={labelCls}>Tipo de arreglo</span>
-                <button type="button" onClick={cancelEdit} disabled={busy} className={`${btnGhost} !px-2 !py-1`}>
-                  Cancelar
-                </button>
+          {/* Técnico y arreglo en la misma fila */}
+          <div className="flex flex-col gap-3 md:flex-row md:gap-4">
+            {/* Técnico */}
+            <div className="md:w-48 md:shrink-0">
+              <span className={labelCls}>Técnico encargado</span>
+              <div className="mt-1">
+                <TechnicianSelect order={order} />
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {COMMON_FIXES.map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => toggleFix(f)}
-                    className={fixList.includes(f) ? chipSelected : chipIdle}
-                  >
-                    {f}
-                  </button>
-                ))}
-                {fixList.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
-                  <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
-                    {f}
-                    <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500">
-                      <X size={12} />
+            </div>
+
+            {/* Arreglo */}
+            <div className="flex-1 min-w-0">
+              {editingWork ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className={labelCls}>Tipo de arreglo</span>
+                    <button type="button" onClick={cancelEdit} disabled={busy} className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-500/10">
+                      <X size={13} /> Cancelar
                     </button>
-                  </span>
-                ))}
-                <span className="flex items-center gap-1">
-                  <input
-                    type="text"
-                    value={customFix}
-                    onChange={(e) => setCustomFix(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAddCustomFix() } }}
-                    placeholder="Otro arreglo..."
-                    className={`${inputCls} max-w-[10rem]`}
-                  />
-                  <button type="button" onClick={onAddCustomFix} className={chipIdle}>
-                    <Check size={13} />
-                  </button>
-                </span>
-              </div>
-              <div className="max-w-xs">
-                <label className={labelCls}>Presupuesto ($)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={priceText}
-                  onChange={(e) => setPriceText(e.target.value)}
-                  placeholder="0"
-                  className={inputCls}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-3">
-              {displayedFixes.length > 0 ? (
-                displayedFixes.map((f) => (
-                  <span key={f} className={chipReadonly}>{f}</span>
-                ))
+                  </div>
+                  {canEditWork && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {COMMON_FIXES.map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => toggleFix(f)}
+                        className={fixList.includes(f) ? chipSelected : chipIdle}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                    {fixList.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
+                      <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
+                        {f}
+                        <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500">
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                    <span className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={customFix}
+                        onChange={(e) => setCustomFix(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAddCustomFix() } }}
+                        placeholder="Otro arreglo..."
+                        className={`${inputCls} max-w-[10rem]`}
+                      />
+                      <button type="button" onClick={onAddCustomFix} className={chipIdle}>
+                        <Check size={13} />
+                      </button>
+                    </span>
+                  </div>
+                  )}
+                  {canBudget && (
+                  <div className="max-w-xs">
+                    <label className={labelCls}>Presupuesto ($)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={priceText}
+                      onChange={(e) => setPriceText(e.target.value)}
+                      placeholder="0"
+                      className={inputCls}
+                    />
+                  </div>
+                  )}
+                </div>
               ) : (
-                <span className={chipReadonly}>Sin definir</span>
+                <div>
+                  <span className={labelCls}>Tipo de arreglo</span>
+                  <div className="flex flex-wrap items-center gap-3 mt-1">
+                    {displayedFixes.length > 0 ? (
+                      displayedFixes.map((f) => (
+                        <span key={f} className={chipReadonly}>{f}</span>
+                      ))
+                    ) : (
+                      <span className={chipReadonly}>Sin definir</span>
+                    )}
+                    <span className="text-lg font-bold text-slate-900 dark:text-white">{formatMoney(order.price)}</span>
+                    {(canEditWork || canBudget) && ['en_revision', 'en_reparacion'].includes(order.status) && (
+                    <button
+                      type="button"
+                      onClick={startEdit}
+                      className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10"
+                    >
+                      <Pencil size={12} />
+                      Editar
+                    </button>
+                    )}
+                  </div>
+                </div>
               )}
-              <span className="text-lg font-bold text-slate-900 dark:text-white">{formatMoney(order.price)}</span>
-              {canBudget && (
-              <button
-                type="button"
-                onClick={startEdit}
-                className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10"
-              >
-                <Pencil size={12} />
-                Editar
-              </button>
-            )}
             </div>
-          )}
+          </div>
 
           {/* Notas del técnico */}
+          {['en_revision', 'en_reparacion'].includes(order.status) && (
           <label className="mt-4 block">
             <span className={labelCls}>Notas del técnico</span>
             <textarea
@@ -462,6 +491,7 @@ export default function OrderModal({ order, onClose }) {
               className={`${inputCls} resize-none`}
             />
           </label>
+          )}
 
           </section>
 
@@ -494,16 +524,14 @@ export default function OrderModal({ order, onClose }) {
 
         {/* Acciones */}
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-          {['presupuesto', 'terminado'].includes(order.status) && (
+          <button onClick={saveOnly} disabled={busy || !dirty} className={`${btnPrimary} !px-4 !py-2.5 !text-sm`}>
+            <Check size={14} />
+            Guardar
+          </button>
+          {canBudget && ['presupuesto', 'terminado'].includes(order.status) && (
             <button onClick={doNotify} disabled={busy} className={btnGhost}>
               {order.notified ? <BellOff size={14} /> : <Bell size={14} />}
               {order.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
-            </button>
-          )}
-          {dirty && (
-            <button onClick={saveOnly} disabled={busy} className={btnGhost}>
-              <Check size={14} />
-              Guardar
             </button>
           )}
           <button
@@ -513,15 +541,15 @@ export default function OrderModal({ order, onClose }) {
             Ver orden completa
             <ArrowRight size={16} />
           </button>
-          {next && (next !== 'presupuesto' || canBudget) && (
+          {effectiveNext && (
             <button
               onClick={finish}
-              disabled={busy || lockedBudget || missingBudget}
-              className={`ml-auto ${lockedBudget || missingBudget ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''} ${btnPrimary} !px-5 !py-2.5 !text-sm`}
-              title={lockedBudget ? 'El cliente debe confirmar el arreglo antes de reparar' : missingBudget ? 'Cargá el arreglo y el presupuesto primero' : ''}
+              disabled={busy || lockedBudget || missingRepair || missingTech}
+              className={`ml-auto ${lockedBudget || missingRepair || missingTech ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''} ${btnPrimary} !px-5 !py-2.5 !text-sm`}
+              title={lockedBudget ? 'El cliente debe confirmar el arreglo antes de reparar' : missingTech ? 'Asigná un técnico antes de iniciar la reparación' : missingRepair ? 'Registrá al menos una reparación antes de pasar a presupuesto' : ''}
             >
-              {lockedBudget || missingBudget ? <Lock size={15} /> : <ChevronRight size={15} />}
-              {nextStatusLabel(order)}
+              {lockedBudget || missingRepair || missingTech ? <Lock size={15} /> : <ChevronRight size={15} />}
+              {effectiveLabel}
             </button>
           )}
         </div>

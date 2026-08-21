@@ -148,7 +148,9 @@ export function DataProvider({ children }) {
     setOrdersLoading(true)
     try {
       const res = await api(`/orders?${params.toString()}`)
-      setOrdersPage({ orders: res.orders || [], total: res.total || 0 })
+      const page = { orders: res.orders || [], total: res.total || 0 }
+      setOrdersPage(page)
+      return page
     } catch (err) {
       if (err.status === 401) logout()
     } finally {

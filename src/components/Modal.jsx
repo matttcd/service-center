@@ -27,7 +27,7 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4">
       {/* Overlay */}
       <div
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -36,7 +36,7 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
       />
       {/* Panel */}
       <div
-        className={`relative w-full ${maxWidth} max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900`}
+        className={`relative flex h-full w-full flex-col ${maxWidth} rounded-none bg-white p-6 shadow-2xl dark:bg-slate-900 md:h-auto md:max-h-[90vh] md:rounded-2xl`}
         role="dialog"
         aria-modal="true"
       >
@@ -50,7 +50,9 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
             <X size={20} />
           </button>
         </div>
-        {children}
+        <div className="flex-1 overflow-y-auto">
+          {children}
+        </div>
       </div>
     </div>
   )

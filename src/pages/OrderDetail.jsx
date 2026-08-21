@@ -605,23 +605,33 @@ export default function OrderDetail() {
             {/* Acciones según el estado */}
             <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
               {status === 'recibido' && order.diagnosisType === 'visible' && isTech && (
-                <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnPrimary}>
+                <button
+                  onClick={() => doStatus('en_reparacion')}
+                  disabled={busy === 'en_reparacion' || !order.assignedTo}
+                  title={!order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
+                  className={`${btnPrimary} ${!order.assignedTo ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                >
                   <Play size={14} />
                   Iniciar reparación
                 </button>
               )}
               {status === 'recibido' && order.diagnosisType === 'revision' && isTech && (
-                <button onClick={() => doStatus('en_revision')} disabled={busy === 'en_revision'} className={btnPrimary}>
+                <button
+                  onClick={() => doStatus('en_revision')}
+                  disabled={busy === 'en_revision' || !order.assignedTo}
+                  title={!order.assignedTo ? 'Asigná un técnico antes de iniciar la revisión' : ''}
+                  className={`${btnPrimary} ${!order.assignedTo ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                >
                   <Search size={14} />
                   Iniciar revisión
                 </button>
               )}
-              {status === 'en_revision' && canBudget && (
+              {status === 'en_revision' && (canBudget || isTech) && (
                 <button
                   onClick={() => doStatus('presupuesto')}
-                  disabled={busy === 'presupuesto' || (order.price || 0) <= 0}
-                  title={(order.price || 0) <= 0 ? 'Cargá el arreglo y el presupuesto arriba antes de pasar a presupuesto' : ''}
-                  className={`${btnPrimary} ${(order.price || 0) <= 0 ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                  disabled={busy === 'presupuesto' || !(order.fix || '').trim()}
+                  title={!(order.fix || '').trim() ? 'Registrá al menos una reparación antes de pasar a presupuesto' : ''}
+                  className={`${btnPrimary} ${!(order.fix || '').trim() ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
                 >
                   <Play size={14} />
                   Cargar presupuesto
@@ -635,9 +645,9 @@ export default function OrderDetail() {
                   {isTech && (
                     <button
                       onClick={() => doStatus('en_reparacion')}
-                      disabled={busy === 'en_reparacion' || !order.confirmed}
-                      title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : ''}
-                      className={`${btnPrimary} ${!order.confirmed ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                      disabled={busy === 'en_reparacion' || !order.confirmed || !order.assignedTo}
+                      title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : !order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
+                      className={`${btnPrimary} ${(!order.confirmed || !order.assignedTo) ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
                     >
                       <Play size={14} />
                       Aceptó → reparar

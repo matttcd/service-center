@@ -38,7 +38,7 @@ export default function Listos() {
           <p className="text-sm">No hay equipos listos</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {listos.map((o) => (
             <OrderCard key={o.id} order={o} onOpen={setSelected} />
           ))}

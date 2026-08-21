@@ -668,6 +668,18 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   if (from === 'presupuesto' && status === 'en_reparacion' && !order.confirmed) {
     return res.status(400).json({ error: 'El cliente debe confirmar el arreglo antes de reparar.' })
   }
+  // Sin técnico asignado no se puede reparar.
+  if (status === 'en_reparacion' && !order.assignedTo) {
+    return res.status(400).json({ error: 'Asigná un técnico antes de iniciar la reparación.' })
+  }
+  // Sin técnico asignado no se puede revisar.
+  if (status === 'en_revision' && !order.assignedTo) {
+    return res.status(400).json({ error: 'Asigná un técnico antes de iniciar la revisión.' })
+  }
+  // No se puede pasar de revisión a presupuesto sin registrar al menos una reparación.
+  if (from === 'en_revision' && status === 'presupuesto' && !(order.fix || '').trim()) {
+    return res.status(400).json({ error: 'Registrá al menos una reparación antes de pasar a presupuesto.' })
+  }
   // No se puede entregar un equipo sin haber avisado al cliente.
   if (status === 'entregado' && !order.notified && !retiro) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
@@ -737,15 +749,19 @@ app.put('/api/orders/:id', auth, (req, res) => {
   const { technicianNotes, fix, price, issue } = req.body || {}
   const canBudget = ['mostrador', 'admin'].includes(req.user.role)
   const canNotes = ['tecnico', 'admin'].includes(req.user.role)
-  const touchesBudget = fix !== undefined || price !== undefined || issue !== undefined
+  const touchesWork = fix !== undefined || issue !== undefined
+  const touchesPrice = price !== undefined
   const touchesNotes = technicianNotes !== undefined
-  if (touchesBudget && !canBudget) {
+  if (touchesWork && !canNotes) {
+    return res.status(403).json({ error: 'Solo el técnico o el administrador pueden editar la revisión y el arreglo.' })
+  }
+  if (touchesPrice && !canBudget) {
     return res.status(403).json({ error: 'Solo empleados o administradores pueden cargar el presupuesto.' })
   }
   if (touchesNotes && !canNotes) {
     return res.status(403).json({ error: 'Solo el técnico o el administrador pueden editar las notas.' })
   }
-  const touched = touchesNotes || touchesBudget
+  const touched = touchesNotes || touchesWork || touchesPrice
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
     const budgetChanged =
