@@ -420,62 +420,6 @@ export default function OrderDetail() {
           </div>
         </section>
 
-        {/* Aviso al cliente (solo cuando hay algo que avisar) */}
-        {['presupuesto', 'terminado'].includes(status) && (
-          <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center">
-            <div className="flex-1 text-sm">
-              {order.notified ? (
-                <p className="text-slate-600 dark:text-slate-300">
-                  <BellRing size={16} className="mr-1.5 inline text-emerald-500" />
-                  Cliente <span className="font-semibold">avisado</span> por {order.notifiedByName || '—'} el{' '}
-                  {formatDateTime(order.notifiedAt)}
-                </p>
-              ) : (
-                <p className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                  <BellOff size={16} className="text-accent-500" />
-                  Todavía <span className="font-semibold">no se avisó</span> al cliente.
-                </p>
-              )}
-            </div>
-            <button onClick={handleNotified} disabled={busy === 'notified'} className={btnGhost}>
-              {order.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
-            </button>
-          </div>
-        )}
-
-        {/* Confirmación del arreglo (presupuesto) */}
-        {order.status === 'presupuesto' && (
-          <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center">
-            <div className="flex-1 text-sm">
-              {order.confirmed ? (
-                <p className="text-slate-600 dark:text-slate-300">
-                  <CheckCircle2 size={16} className="mr-1.5 inline text-emerald-500" />
-                  Arreglo <span className="font-semibold">confirmado</span> por el cliente ·{' '}
-                  {order.confirmedByName || '—'} el {formatDateTime(order.confirmedAt)}
-                </p>
-              ) : (
-                <p className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                  <Lock size={16} className="text-amber-500" />
-                  El cliente <span className="font-semibold">aún no confirma</span> el arreglo. Sin confirmación no se puede reparar.
-                </p>
-              )}
-              {!order.confirmed && !order.notified && (
-                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                  Avisá al cliente antes de confirmar el arreglo.
-                </p>
-              )}
-            </div>
-            <button
-              onClick={handleConfirm}
-              disabled={busy === 'confirm'}
-              className={btnGhost}
-              title={!order.confirmed && !order.notified ? 'Avisá al cliente antes de confirmar el arreglo' : ''}
-            >
-              {order.confirmed ? 'Desmarcar confirmación' : 'Confirmar arreglo'}
-            </button>
-          </div>
-        )}
-
         {/* Reparación */}
         <section>
           <div className="px-6 pb-2 pt-5">
@@ -487,7 +431,7 @@ export default function OrderDetail() {
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <label className={labelCls}>Arreglo a realizar</label>
-                    {status === 'en_revision' && canBudget && !editingBudget && (
+                    {['en_revision', 'presupuesto'].includes(status) && canBudget && !editingBudget && (
                       <button
                         type="button"
                         onClick={startEditBudget}
@@ -604,6 +548,66 @@ export default function OrderDetail() {
 
             {/* Acciones según el estado */}
             <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+
+              {/* === BOTÓN INTELIGENTE (empleado / mostrador) === */}
+              {isCounter && (() => {
+                if (status === 'presupuesto') {
+                  if (!order.notified) {
+                    return (
+                      <button onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
+                        <BellRing size={14} />
+                        Avisar al cliente
+                      </button>
+                    )
+                  }
+                  if (!order.confirmed) {
+                    return (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button onClick={handleConfirm} disabled={busy === 'confirm'} className={btnPrimary}>
+                          <CheckCircle2 size={14} />
+                          Confirmar arreglo
+                        </button>
+                        <button onClick={() => doStatus('entregado')} disabled={busy === 'entregado' || !order.notified} className={btnGhost}>
+                          No aprobó → entregar
+                        </button>
+                      </div>
+                    )
+                  }
+                  return (
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
+                      <Lock size={14} className="text-amber-500" />
+                      Esperando reparación del técnico...
+                    </p>
+                  )
+                }
+                if (status === 'terminado') {
+                  if (!order.notified) {
+                    return (
+                      <button onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
+                        <BellRing size={14} />
+                        Avisar al cliente
+                      </button>
+                    )
+                  }
+                  return (
+                    <button onClick={() => doStatus('entregado')} disabled={busy === 'entregado'} className={`${btnPrimary} !text-emerald-600`}>
+                      <PackageCheck size={14} />
+                      Entregar al cliente
+                    </button>
+                  )
+                }
+                return null
+              })()}
+
+              {/* "Cliente retiró el equipo" (cualquier estado no entregado) */}
+              {isCounter && status !== 'entregado' && (
+                <button onClick={handleRetiro} disabled={busy === 'retiro'} className={btnGhost}>
+                  <PackageCheck size={14} />
+                  Cliente retiró el equipo
+                </button>
+              )}
+
+              {/* === ACCIONES DEL TÉCNICO === */}
               {status === 'recibido' && order.diagnosisType === 'visible' && isTech && (
                 <button
                   onClick={() => doStatus('en_reparacion')}
@@ -637,34 +641,16 @@ export default function OrderDetail() {
                   Cargar presupuesto
                 </button>
               )}
-              {status === 'presupuesto' && (
-                <>
-                  <p className="flex-1 text-sm text-slate-500 dark:text-slate-400">
-                    ¿Qué decidió el cliente sobre el presupuesto?
-                  </p>
-                  {isTech && (
-                    <button
-                      onClick={() => doStatus('en_reparacion')}
-                      disabled={busy === 'en_reparacion' || !order.confirmed || !order.assignedTo}
-                      title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : !order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
-                      className={`${btnPrimary} ${(!order.confirmed || !order.assignedTo) ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
-                    >
-                      <Play size={14} />
-                      Aceptó → reparar
-                    </button>
-                  )}
-                  {isCounter && (
-                    <button
-                      onClick={() => doStatus('entregado')}
-                      disabled={busy === 'entregado' || !order.notified}
-                      title={!order.notified ? 'Marcá primero al cliente como avisado antes de entregar el equipo' : ''}
-                      className={`${btnGhost} !text-emerald-600 ${!order.notified ? '!cursor-not-allowed !opacity-50' : ''}`}
-                    >
-                      <PackageCheck size={14} />
-                      Rechazó → entregar (cobra revisión)
-                    </button>
-                  )}
-                </>
+              {status === 'presupuesto' && isTech && (
+                <button
+                  onClick={() => doStatus('en_reparacion')}
+                  disabled={busy === 'en_reparacion' || !order.confirmed || !order.assignedTo}
+                  title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : !order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
+                  className={`${btnPrimary} ${(!order.confirmed || !order.assignedTo) ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                >
+                  <Play size={14} />
+                  Aceptó → reparar
+                </button>
               )}
               {status === 'en_reparacion' && isTech && (
                 <>
@@ -680,46 +666,16 @@ export default function OrderDetail() {
                   )}
                 </>
               )}
-              {status === 'terminado' && (
-                <>
-                  {isCounter && (
-                    <button
-                      onClick={() => doStatus('entregado')}
-                      disabled={busy === 'entregado' || !order.notified}
-                      title={!order.notified ? 'Marcá primero al cliente como avisado antes de entregar el equipo' : ''}
-                      className={`${btnPrimary} ${!order.notified ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
-                    >
-                      <PackageCheck size={14} />
-                      Entregar al cliente
-                    </button>
-                  )}
-                  {isTech && (
-                    <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnGhost}>
-                      <RotateCcw size={14} />
-                      Volver a reparación
-                    </button>
-                  )}
-                </>
+              {status === 'terminado' && isTech && (
+                <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnGhost}>
+                  <RotateCcw size={14} />
+                  Volver a reparación
+                </button>
               )}
-              {status === 'entregado' && (
-                <>
-                  <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600">
-                    <Phone size={14} />
-                    Entregado el {formatDate(order.deliveredAt)} por {order.deliveredByName || '—'} · Garantía hasta{' '}
-                    {order.deliveredAt ? formatDate(addDays(order.deliveredAt, WARRANTY_DAYS)) : '—'}
-                  </p>
-                  {isTech && (
-                    <button onClick={handleGarantia} disabled={busy === 'en_reparacion'} className={btnGhost}>
-                      <RotateCcw size={14} />
-                      Volver a reparación (garantía)
-                    </button>
-                  )}
-                </>
-              )}
-              {status !== 'entregado' && isCounter && (
-                <button onClick={handleRetiro} disabled={busy === 'retiro'} className={btnGhost}>
-                  <PackageCheck size={14} />
-                  Cliente retiró el equipo
+              {status === 'entregado' && isTech && (
+                <button onClick={handleGarantia} disabled={busy === 'en_reparacion'} className={btnGhost}>
+                  <RotateCcw size={14} />
+                  Volver a reparación (garantía)
                 </button>
               )}
             </div>
