@@ -10,8 +10,9 @@ RUN apk add --no-cache python3
 COPY server/package*.json ./server/
 RUN cd server && npm install --omit=dev
 
-# Copia el código del servidor
+# Copia el código del servidor y los módulos compartidos (shared/)
 COPY server ./server
+COPY shared ./shared
 
 ENV PORT=3000
 ENV DATA_DIR=/app/data
