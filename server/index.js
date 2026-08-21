@@ -761,6 +761,11 @@ app.put('/api/orders/:id', auth, (req, res) => {
   if (touchesNotes && !canNotes) {
     return res.status(403).json({ error: 'Solo el técnico o el administrador pueden editar las notas.' })
   }
+  // Para órdenes a revisión, el tipo de arreglo no se puede definir hasta que
+  // haya un técnico asignado y la orden esté en "en_revision".
+  if (fix !== undefined && order.diagnosisType === 'revision' && !(order.fix || '').trim() && (!order.assignedTo || order.status !== 'en_revision')) {
+    return res.status(400).json({ error: 'Asigná un técnico y pasá la orden a revisión antes de definir el arreglo.' })
+  }
   const touched = touchesNotes || touchesWork || touchesPrice
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)

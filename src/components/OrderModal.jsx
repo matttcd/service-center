@@ -70,7 +70,13 @@ export default function OrderModal({ order, onClose }) {
   const [showHistory, setShowHistory] = useState(false)
   const canBudget = ['mostrador', 'admin'].includes(currentUser?.role)
   const canEditWork = ['tecnico', 'admin'].includes(currentUser?.role)
-  const [editingWork, setEditingWork] = useState(() => canEditWork && !order?.fix)
+  // Para órdenes a revisión, el tipo de arreglo no se puede definir hasta que
+  // haya un técnico asignado y la orden esté en "en_revision".
+  const fixLocked =
+    order?.diagnosisType === 'revision' &&
+    !(order?.fix || '').trim() &&
+    (!order?.assignedTo || order?.status !== 'en_revision')
+  const [editingWork, setEditingWork] = useState(() => canEditWork && !order?.fix && !fixLocked)
 
   // Resincroniza el estado local cuando la orden cambia por fuera (SSE/otra
   // pestaña). No pisa ediciones en curso: solo re-sincroniza si no hay cambios.
@@ -84,7 +90,7 @@ export default function OrderModal({ order, onClose }) {
       setCustomFix('')
       setPriceText(order.price ? String(order.price) : '')
       setTechNotes(order.technicianNotes || '')
-      setEditingWork(canEditWork && !order.fix)
+      setEditingWork(canEditWork && !order.fix && !fixLocked)
       return
     }
     const notesClean = (techNotes.trim() || '') === (order.technicianNotes || '')
@@ -459,11 +465,15 @@ export default function OrderModal({ order, onClose }) {
                       displayedFixes.map((f) => (
                         <span key={f} className={chipReadonly}>{f}</span>
                       ))
+                    ) : fixLocked ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                        <Lock size={12} /> Asigná un técnico y pasá a revisión
+                      </span>
                     ) : (
                       <span className={chipReadonly}>Sin definir</span>
                     )}
                     <span className="text-lg font-bold text-slate-900 dark:text-white">{formatMoney(order.price)}</span>
-                    {(canEditWork || canBudget) && ['en_revision', 'en_reparacion'].includes(order.status) && (
+                    {!fixLocked && (canEditWork || canBudget) && ['en_revision', 'en_reparacion'].includes(order.status) && (
                     <button
                       type="button"
                       onClick={startEdit}
