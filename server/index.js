@@ -340,14 +340,22 @@ app.get('/api/events', (req, res) => {
 app.get('/api/bootstrap', auth, (req, res) => {
   const db = getDB()
   const live = (r) => !r.deletedAt
-  const orders = db.orders
-    .filter(live)
+  const allLive = db.orders.filter(live)
+  // El bootstrap solo envía las órdenes activas (no entregadas). El histórico
+  // se consulta paginado vía /api/orders para no saturar la red.
+  const orders = allLive
+    .filter((o) => o.status !== 'entregado')
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     .map((o) => decorateOrder(db, o))
   return res.json({
     user: publicUser(req.user),
     customers: db.customers.filter(live),
     orders,
+    ordersTotals: {
+      total: allLive.length,
+      active: orders.length,
+      delivered: allLive.filter((o) => o.status === 'entregado').length,
+    },
     catalog: db.catalog || { brands: [], models: [] },
     users: req.user.role === 'admin' ? db.users.map(publicUser) : [],
     technicians: db.users
@@ -579,14 +587,26 @@ app.post('/api/orders', auth, (req, res) => {
 
 app.get('/api/orders', auth, (req, res) => {
   const db = getDB()
-  const { status, q } = req.query
+  const { status, q, from, to, brand, onlyNotNotified, onlyNotConfirmed } = req.query
   const query = String(q || '').trim().toLowerCase()
+  const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 0))
+  const offset = Math.max(0, Number(req.query.offset) || 0)
+
   let list = db.orders
     .filter((o) => !o.deletedAt)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     .map((o) => decorateOrder(db, o))
 
   if (status && status !== 'all') list = list.filter((o) => o.status === status)
+  if (brand && brand !== 'all') list = list.filter((o) => o.brand === brand)
+  if (from) list = list.filter((o) => o.createdAt >= from)
+  if (to) list = list.filter((o) => o.createdAt <= to)
+  if (onlyNotNotified === '1') {
+    list = list.filter((o) => !o.notified && ['presupuesto', 'terminado'].includes(o.status))
+  }
+  if (onlyNotConfirmed === '1') {
+    list = list.filter((o) => !o.confirmed && o.status === 'presupuesto')
+  }
   if (query) {
     list = list.filter(
       (o) =>
@@ -595,7 +615,10 @@ app.get('/api/orders', auth, (req, res) => {
         (o.brand + ' ' + o.model).toLowerCase().includes(query),
     )
   }
-  res.json({ orders: list })
+
+  const total = list.length
+  if (limit) list = list.slice(offset, offset + limit)
+  res.json({ orders: list, total })
 })
 
 app.get('/api/orders/:id', auth, (req, res) => {

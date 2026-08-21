@@ -2,7 +2,7 @@
 // Orders: listado de órdenes de servicio en tabla
 // (estilo planilla, con ordenamiento, filtros y paginación)
 // ============================================
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Search, BellOff, ArrowUp, ArrowDown, ChevronUp, ChevronDown, ChevronsUpDown, X } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
@@ -16,13 +16,16 @@ import { ORDER_STATUS_LABEL, orderStatusTone, formatDate, formatMoney, titleCase
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
 export default function Orders() {
-  const { orders, customers, printLabel } = useData()
+  const { loadOrders, customers, printLabel, ordersRevision } = useData()
   const { currentUser } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
 
+  const [pageData, setPageData] = useState({ orders: [], total: 0 })
+
   // Filtros
   const [q, setQ] = useState(() => params.get('q') || '')
+  const [qInput, setQInput] = useState(() => params.get('q') || '')
   const [status, setStatus] = useState('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -38,34 +41,32 @@ export default function Orders() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[1])
 
+  // Búsqueda con debounce para no consultar el servidor en cada tecla.
+  useEffect(() => {
+    const t = setTimeout(() => setQ(qInput), 300)
+    return () => clearTimeout(t)
+  }, [qInput])
+
+  // Carga paginada desde el servidor (no todo el histórico en memoria).
+  useEffect(() => {
+    const offset = (page - 1) * pageSize
+    loadOrders({ status, q, from, to, brand, onlyNotNotified, onlyNotConfirmed, limit: pageSize, offset })
+      .then(setPageData)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadOrders, status, q, from, to, brand, onlyNotNotified, onlyNotConfirmed, page, pageSize, ordersRevision])
+
   const [formOpen, setFormOpen] = useState(false)
   const [printing, setPrinting] = useState(null)
   const [notice, setNotice] = useState(null)
   const canCreate = ['mostrador', 'admin'].includes(currentUser?.role)
 
   const brands = useMemo(
-    () => [...new Set(orders.map((o) => o.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es-AR')),
-    [orders],
+    () => [...new Set(pageData.orders.map((o) => o.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es-AR')),
+    [pageData.orders],
   )
 
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase()
-    return orders
-      .filter((o) => (status === 'all' ? true : o.status === status))
-      .filter((o) => (brand === 'all' ? true : o.brand === brand))
-      .filter((o) => (from ? o.createdAt >= from : true))
-      .filter((o) => (to ? o.createdAt <= to : true))
-      .filter((o) => (onlyNotNotified ? !o.notified && ['presupuesto', 'terminado'].includes(o.status) : true))
-      .filter((o) => (onlyNotConfirmed ? !o.confirmed && o.status === 'presupuesto' : true))
-      .filter((o) => {
-        if (!query) return true
-        return (
-          o.orderNumber.toLowerCase().includes(query) ||
-          (o.customerName || '').toLowerCase().includes(query) ||
-          `${o.brand} ${o.model}`.toLowerCase().includes(query)
-        )
-      })
-  }, [orders, status, brand, from, to, onlyNotNotified, onlyNotConfirmed, q])
+  // Los filtros ya se aplican en el servidor; acá solo tenemos la página actual.
+  const filtered = pageData.orders
 
   const sorted = useMemo(() => {
     const cmp = (a, b) => {
@@ -88,14 +89,15 @@ export default function Orders() {
     return sortDir === 'desc' ? list.reverse() : list
   }, [filtered, sortKey, sortDir])
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(pageData.total / pageSize))
   const safePage = Math.max(1, Math.min(page, totalPages))
-  const paged = sorted.slice((safePage - 1) * pageSize, safePage * pageSize)
+  const paged = sorted
 
   const hasFilters = q.trim() || status !== 'all' || brand !== 'all' || from || to || onlyNotNotified || onlyNotConfirmed
 
   const clearFilters = () => {
     setQ('')
+    setQInput('')
     setStatus('all')
     setBrand('all')
     setFrom('')
@@ -156,7 +158,7 @@ export default function Orders() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Órdenes de servicio</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{filtered.length} orden(es)</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{pageData.total} orden(es)</p>
         </div>
         {canCreate && (
           <button
@@ -184,8 +186,8 @@ export default function Orders() {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              value={q}
-              onChange={(e) => { setQ(e.target.value); setPage(1) }}
+              value={qInput}
+              onChange={(e) => { setQInput(e.target.value); setPage(1) }}
               placeholder="N.º, cliente o equipo..."
               className={`${inputCls} pl-9`}
             />
@@ -292,7 +294,7 @@ export default function Orders() {
         )}
 
         {/* Paginación */}
-        {filtered.length > 0 && (
+        {pageData.total > 0 && (
           <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row dark:border-slate-800">
             <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <span>Mostrando</span>
@@ -305,7 +307,7 @@ export default function Orders() {
                   <option key={n} value={n}>{n}</option>
                 ))}
               </select>
-              <span>por página · {sorted.length} en total</span>
+              <span>por página · {pageData.total} en total</span>
             </div>
             <div className="flex items-center gap-2">
               <button className={navBtn} onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>

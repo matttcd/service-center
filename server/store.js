@@ -12,6 +12,9 @@ const DB_FILE = process.env.DB_FILE || path.join(DATA_DIR, 'db.json')
 let db = null
 let writeQueue = Promise.resolve()
 
+// Máxima cantidad de entradas de auditoría a conservar (se poda el excedente).
+const MAX_AUDIT = Number(process.env.MAX_AUDIT || 5000)
+
 // Suscriptores que se notifican cuando la base cambia (para tiempo real).
 const changeListeners = new Set()
 
@@ -75,6 +78,10 @@ function atomicReplace(tmp, dest) {
 // Aplica una mutación a la base y la persiste.
 export function mutate(fn) {
   const result = fn(db)
+  // Poda la auditoría para que el archivo no crezca sin límite.
+  if (db.auditLogs && db.auditLogs.length > MAX_AUDIT) {
+    db.auditLogs = db.auditLogs.slice(-MAX_AUDIT)
+  }
   return persist().then(() => {
     changeListeners.forEach((l) => {
       try {

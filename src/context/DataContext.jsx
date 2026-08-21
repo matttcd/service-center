@@ -1,7 +1,7 @@
 // ============================================
 // Contexto global de datos (obtenidos de la API)
 // ============================================
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../utils/api.js'
 import { useAuth } from './AuthContext.jsx'
 import { loadSession } from '../utils/storage.js'
@@ -27,9 +27,14 @@ export function DataProvider({ children }) {
   const [adminMetrics, setAdminMetrics] = useState(null)
   const [adminMetricsError, setAdminMetricsError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [ordersRevision, setOrdersRevision] = useState(0)
+  const [ordersPage, setOrdersPage] = useState({ orders: [], total: 0 })
+  const [ordersLoading, setOrdersLoading] = useState(false)
   const today = todayISO()
 
-  const refresh = useCallback(async ({ silent = false } = {}) => {
+  const refreshTimer = useRef(null)
+
+  const doRefresh = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true)
     try {
       const res = await api('/bootstrap')
@@ -57,7 +62,19 @@ export function DataProvider({ children }) {
     } finally {
       if (!silent) setLoading(false)
     }
+    // Avisa a la vista de órdenes para que reconsulte su página paginada.
+    setOrdersRevision((v) => v + 1)
   }, [logout])
+
+  // Debounce: una mutación y el evento SSE disparan refresh casi al mismo
+  // tiempo; colapsamos ambos en una sola descarga de bootstrap.
+  const refresh = useCallback((opts) => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current)
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null
+      doRefresh(opts)
+    }, 120)
+  }, [doRefresh])
 
   const loadAdminMetrics = useCallback(async () => {
     try {
@@ -114,6 +131,30 @@ export function DataProvider({ children }) {
     if (!error) await refresh({ silent: true })
     return { error }
   }
+
+  // Carga la vista paginada de órdenes (histórico) desde el servidor,
+  // en lugar de traer todo el dataset en cada bootstrap.
+  const loadOrders = useCallback(async (filters = {}) => {
+    const params = new URLSearchParams()
+    if (filters.status && filters.status !== 'all') params.set('status', filters.status)
+    if (filters.q) params.set('q', filters.q)
+    if (filters.from) params.set('from', filters.from)
+    if (filters.to) params.set('to', filters.to)
+    if (filters.brand && filters.brand !== 'all') params.set('brand', filters.brand)
+    if (filters.onlyNotNotified) params.set('onlyNotNotified', '1')
+    if (filters.onlyNotConfirmed) params.set('onlyNotConfirmed', '1')
+    if (filters.limit) params.set('limit', String(filters.limit))
+    if (filters.offset != null) params.set('offset', String(filters.offset))
+    setOrdersLoading(true)
+    try {
+      const res = await api(`/orders?${params.toString()}`)
+      setOrdersPage({ orders: res.orders || [], total: res.total || 0 })
+    } catch (err) {
+      if (err.status === 401) logout()
+    } finally {
+      setOrdersLoading(false)
+    }
+  }, [logout])
 
   // ---------- Clientes ----------
   const addCustomer = async (fields) => {
@@ -268,6 +309,11 @@ export function DataProvider({ children }) {
     refresh,
     customers: data.customers,
     orders: data.orders,
+    ordersPage: ordersPage.orders,
+    ordersTotal: ordersPage.total,
+    ordersLoading,
+    loadOrders,
+    ordersRevision,
     users: data.users,
     technicians: data.technicians,
     config: data.config,
