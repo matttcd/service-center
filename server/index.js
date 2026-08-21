@@ -798,6 +798,9 @@ app.post('/api/orders/:id/notified', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
+  if (!['mostrador', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Solo los empleados pueden marcar al cliente como avisado.' })
+  }
   const notified = !!req.body?.notified
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
@@ -814,6 +817,9 @@ app.post('/api/orders/:id/confirm', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
+  if (!['mostrador', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Solo los empleados pueden confirmar el arreglo.' })
+  }
   const confirmed = !!req.body?.confirmed
   if (confirmed && !order.notified) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de confirmar el arreglo.' })

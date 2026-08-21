@@ -10,8 +10,9 @@ import OrderCard from '../components/OrderCard.jsx'
 import OrderModal from '../components/OrderModal.jsx'
 
 const COLUMNS = [
-  { key: 'entrantes', statuses: ['recibido', 'en_revision', 'presupuesto'], title: 'Entrantes' },
-  { key: 'reparacion', statuses: ['en_reparacion'], title: 'En reparación' },
+  { key: 'entrantes', statuses: ['recibido'], title: 'Entrantes' },
+  { key: 'taller', statuses: ['en_revision', 'en_reparacion'], title: 'En taller' },
+  { key: 'presupuesto', statuses: ['presupuesto'], title: 'Presupuesto' },
 ]
 
 function Column({ title, orders, onOpen }) {
