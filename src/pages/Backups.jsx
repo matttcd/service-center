@@ -151,7 +151,7 @@ export default function Backups() {
               <span className="flex-1">
                 ¿Seguro que querés restaurar la copia del{' '}
                 <span className="whitespace-nowrap font-semibold">{fmtDate(toRestore.mtime)}</span>? Se
-                reemplazarán los clientes, planes, cuotas y pagos actuales. Antes de restaurar se
+                reemplazarán las órdenes de servicio actuales. Antes de restaurar se
                 crea una copia de seguridad del estado actual para poder deshacer.
               </span>
             </p>

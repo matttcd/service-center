@@ -1,5 +1,5 @@
 // ============================================
-// ClientDetail: ficha del cliente, edición y baja (estilo cuotas2)
+// ClientDetail: ficha del cliente, edición y baja
 // + historial de sus órdenes de servicio.
 // ============================================
 import { useState } from 'react'

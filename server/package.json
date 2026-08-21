@@ -1,5 +1,5 @@
 {
-  "name": "cuotas-server",
+  "name": "service-center-server",
   "private": true,
   "version": "1.0.0",
   "type": "module",

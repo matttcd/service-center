@@ -5,38 +5,11 @@
 import { useState } from 'react'
 import { Bell, BellOff, CheckCircle2, ChevronRight, RotateCcw, Lock } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
+import { nextStatus, nextStatusLabel } from '../../shared/fsm.js'
 import Badge from './Badge.jsx'
 import TechnicianSelect from './TechnicianSelect.jsx'
 
-function nextStatus(o) {
-  switch (o.status) {
-    case 'recibido':
-      return o.diagnosisType === 'revision' ? 'en_revision' : 'en_reparacion'
-    case 'en_revision':
-      return 'presupuesto'
-    case 'presupuesto':
-      return 'en_reparacion'
-    case 'en_reparacion':
-      return 'terminado'
-    default:
-      return null
-  }
-}
 
-function nextLabel(o) {
-  switch (o.status) {
-    case 'recibido':
-      return o.diagnosisType === 'revision' ? 'Revisar' : 'Reparar'
-    case 'en_revision':
-      return 'Presupuesto'
-    case 'presupuesto':
-      return 'Reparar'
-    case 'en_reparacion':
-      return 'Listo'
-    default:
-      return ''
-  }
-}
 
 export default function OrderCard({ order, onOpen, onChanged }) {
   const { setOrderStatus } = useData()
@@ -146,7 +119,7 @@ export default function OrderCard({ order, onOpen, onChanged }) {
               title={missingBudget ? 'Cargá el arreglo y el presupuesto primero' : ''}
               className={`inline-flex w-full items-center justify-center gap-1 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500`}
             >
-              {missingBudget ? <Lock size={15} /> : <>{nextLabel(order)}<ChevronRight size={15} /></>}
+              {missingBudget ? <Lock size={15} /> : <>{nextStatusLabel(order)}<ChevronRight size={15} /></>}
             </button>
           )
         )}

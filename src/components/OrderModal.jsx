@@ -33,36 +33,9 @@ import {
   titleCase,
   sentenceCase,
 } from '../utils/helpers.js'
+import { nextStatus, nextStatusLabel } from '../../shared/fsm.js'
 
-function nextStatus(o) {
-  switch (o.status) {
-    case 'recibido':
-      return o.diagnosisType === 'revision' ? 'en_revision' : 'en_reparacion'
-    case 'en_revision':
-      return 'presupuesto'
-    case 'presupuesto':
-      return 'en_reparacion'
-    case 'en_reparacion':
-      return 'terminado'
-    default:
-      return null
-  }
-}
 
-function nextLabel(o) {
-  switch (o.status) {
-    case 'recibido':
-      return o.diagnosisType === 'revision' ? 'Revisar' : 'Reparar'
-    case 'en_revision':
-      return 'Presupuesto'
-    case 'presupuesto':
-      return 'Reparar'
-    case 'en_reparacion':
-      return 'Listo'
-    default:
-      return ''
-  }
-}
 
 function initials(name) {
   return String(name || '')
@@ -548,7 +521,7 @@ export default function OrderModal({ order, onClose }) {
               title={lockedBudget ? 'El cliente debe confirmar el arreglo antes de reparar' : missingBudget ? 'Cargá el arreglo y el presupuesto primero' : ''}
             >
               {lockedBudget || missingBudget ? <Lock size={15} /> : <ChevronRight size={15} />}
-              {nextLabel(order)}
+              {nextStatusLabel(order)}
             </button>
           )}
         </div>

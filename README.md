@@ -1,8 +1,8 @@
 # El Gringo Celulares
 
-Aplicación web para administrar las cuotas de clientes: clientes, planes, cuotas, pagos,
-reportes y usuarios. **Datos centralizados** en un backend Node/Express (la base es un
-archivo JSON que se comparte entre todos los dispositivos de la red).
+Sistema de gestión para un servicio técnico de celulares: órdenes de reparación,
+clientes, presupuestos, usuarios y reportes. **Datos centralizados** en un backend
+Node/Express (la base es un archivo JSON que se comparte entre todos los dispositivos de la red).
 
 ## Credenciales de prueba
 
@@ -70,9 +70,9 @@ docker compose up -d --build
 ### Acceder desde todos los dispositivos del local
 
 1. Obtené la IP de la PC del trabajo: `ipconfig` → anotá el **IPv4**.
-2. Cada dispositivo del local entra a `http://<IP-de-la-PC>:8080`.
+2. Cada dispositivo del local entra a `http://<IP-de-la-PC>:8081`.
 3. Si no se ve desde otros equipos, abrí el **Firewall de Windows** → *Permitir una app
-   o característica* → agregá el puerto **8080** (o Docker Desktop) para la red privada.
+   o característica* → agregá el puerto **8081** (o Docker Desktop) para la red privada.
 
 ### Comandos útiles
 
@@ -84,11 +84,11 @@ docker compose restart          # reiniciar
 docker compose down -v          # detener y BORRAR la base de datos (¡cuidado!)
 ```
 
-Los datos quedan en el volumen `cuotas_data` y sobreviven reinicios.
+Los datos quedan en el volumen `service-center_data` y sobreviven reinicios.
 
 ### Cambiar el puerto
 
-Editá `docker-compose.yml`, línea `- "8080:80"`, y cambiá el `8080` por otro puerto.
+Editá `docker-compose.yml`, línea `- "8081:80"`, y cambiá el `8081` por otro puerto.
 
 ---
 

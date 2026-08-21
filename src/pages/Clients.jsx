@@ -1,6 +1,6 @@
 // ============================================
 // Clientes: listado y búsqueda. La fila abre el detalle del cliente
-// (estilo cuotas2); el alta se hace acá y la edición / baja en el detalle.
+// el alta se hace acá y la edición / baja en el detalle.
 // ============================================
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'

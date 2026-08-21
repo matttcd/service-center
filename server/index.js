@@ -12,6 +12,7 @@ import { initDB, getDB, mutate, persist, createBackup, listBackups, restoreBacku
 import { buildSeed } from './seed.js'
 import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase, normalizeList } from './helpers.js'
 import { printZplLabel } from './printer.js'
+import { ORDER_STATUSES, allowedTransitions } from '../shared/fsm.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -188,9 +189,6 @@ const audit = (d, action, table, recordId, userId, details) => {
     timestamp: new Date().toISOString(),
   })
 }
-
-// ---------- Estados de una orden ----------
-const ORDER_STATUSES = ['recibido', 'en_revision', 'presupuesto', 'en_reparacion', 'terminado', 'entregado']
 
 // Adjunta a una orden datos legibles: cliente, responsables y estado.
 function decorateOrder(d, order) {
@@ -636,16 +634,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   const isCounter = ['mostrador', 'admin'].includes(role)
 
   // Transiciones permitidas (respetan el flujo real del taller).
-  const transitions = {
-    recibido: order.diagnosisType === 'revision' ? ['en_revision', 'entregado'] : ['en_reparacion', 'entregado'],
-    en_revision: ['presupuesto', 'entregado'],
-    presupuesto: ['en_reparacion', 'entregado'],
-    en_reparacion: ['terminado', 'presupuesto', 'entregado'],
-    terminado: ['entregado', 'en_reparacion'],
-    entregado: ['en_reparacion'],
-  }
-
-  const allowed = transitions[from]?.includes(status)
+  const allowed = allowedTransitions(order).includes(status)
   if (!allowed) {
     return res.status(400).json({
       error: `No se puede pasar de "${from}" a "${status}".`,
