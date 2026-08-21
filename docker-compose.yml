@@ -4,14 +4,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    container_name: cuotas-backend
+    container_name: service-center-backend
     restart: unless-stopped
     environment:
       - PORT=3000
       - DATA_DIR=/app/data
       - JWT_SECRET=${JWT_SECRET:?Definí JWT_SECRET antes de levantar el sistema}
     volumes:
-      - cuotas_data:/app/data
+      - service-center_data:/app/data
     expose:
       - "3000"
 
@@ -19,14 +19,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-    container_name: cuotas-frontend
+    container_name: service-center-frontend
     restart: unless-stopped
     ports:
       # Cambiá el puerto de la izquierda si 8080 está ocupado.
-      - "8080:80"
+      - "8081:80"
     depends_on:
       - backend
 
 volumes:
   # Los datos de la base central se guardan acá y sobreviven reinicios.
-  cuotas_data:
+  service-center_data:

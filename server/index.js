@@ -33,7 +33,7 @@ const MAX_LOGIN_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS || 5)
 const LOGIN_WINDOW_MS = 15 * 60 * 1000
 const loginAttempts = new Map()
 // Contraseñas del seed: si un usuario aún usa una, se le exige cambiarla.
-const DEFAULT_PASSWORDS = ['admin123', 'tecnico123', 'lucas123', 'mostrador123']
+const DEFAULT_PASSWORDS = ['admin123']
 function checkLoginLimit(key) {
   const now = Date.now()
   if (loginAttempts.size > 10000) {
