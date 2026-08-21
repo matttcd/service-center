@@ -472,7 +472,9 @@ export default function OrderModal({ order, onClose }) {
                     ) : (
                       <span className={chipReadonly}>Sin definir</span>
                     )}
-                    <span className="text-lg font-bold text-slate-900 dark:text-white">{formatMoney(order.price)}</span>
+                    {canBudget && (
+                      <span className="text-lg font-bold text-slate-900 dark:text-white">{formatMoney(order.price)}</span>
+                    )}
                     {!fixLocked && (canEditWork || canBudget) && ['en_revision', 'en_reparacion'].includes(order.status) && (
                     <button
                       type="button"
