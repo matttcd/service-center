@@ -663,9 +663,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
       error: `No se puede pasar de "${from}" a "${status}".`,
     })
   }
-  if (status === 'presupuesto' && Number(order.price) <= 0) {
-    return res.status(400).json({ error: 'Cargá el arreglo y el presupuesto antes de pasarlo a presupuesto.' })
-  }
+
   // Sin confirmación del cliente no se puede comenzar la reparación de un presupuesto.
   if (from === 'presupuesto' && status === 'en_reparacion' && !order.confirmed) {
     return res.status(400).json({ error: 'El cliente debe confirmar el arreglo antes de reparar.' })
@@ -677,7 +675,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   if (['en_revision', 'en_reparacion', 'terminado'].includes(status) && !isTech) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
   }
-  if (status === 'presupuesto' && !['mostrador', 'admin'].includes(role)) {
+  if (status === 'presupuesto' && !['mostrador', 'admin', 'tecnico'].includes(role)) {
     return res.status(403).json({ error: 'Solo empleados o administradores pueden cargar el presupuesto.' })
   }
   if (status === 'entregado' && !isCounter) {
@@ -821,8 +819,8 @@ app.post('/api/orders/:id/confirm', auth, (req, res) => {
     return res.status(403).json({ error: 'Solo los empleados pueden confirmar el arreglo.' })
   }
   const confirmed = !!req.body?.confirmed
-  if (confirmed && !order.notified) {
-    return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de confirmar el arreglo.' })
+  if (confirmed && (!order.notified || Number(order.price) <= 0)) {
+    return res.status(400).json({ error: 'Cargá el presupuesto y avisá al cliente antes de confirmar el arreglo.' })
   }
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)

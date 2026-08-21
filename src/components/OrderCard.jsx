@@ -17,7 +17,6 @@ export default function OrderCard({ order, onOpen, onChanged }) {
   const { currentUser } = useAuth()
   const [busy, setBusy] = useState(null)
   const next = nextStatus(order)
-  const missingBudget = order.status === 'en_revision' && (order.price || 0) <= 0
   const isEmployee = ['mostrador', 'admin'].includes(currentUser?.role)
 
   const move = async (status) => {
@@ -82,9 +81,13 @@ export default function OrderCard({ order, onOpen, onChanged }) {
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 size={14} /> Confirmado
             </span>
+          ) : (order.price || 0) > 0 ? (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 size={14} /> Cotizado ${order.price}
+            </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
-              <Lock size={14} /> Sin confirmar presupuesto
+              <Lock size={14} /> Sin cotizar
             </span>
           )}
         </div>
@@ -138,8 +141,8 @@ export default function OrderCard({ order, onOpen, onChanged }) {
                   e.stopPropagation()
                   confirm()
                 }}
-                disabled={busy === 'confirm' || !order.notified}
-                title={!order.notified ? 'Avisá al cliente antes de confirmar el arreglo' : ''}
+                disabled={busy === 'confirm' || !order.notified || (order.price || 0) <= 0}
+                title={!order.notified ? 'Avisá al cliente antes de confirmar el arreglo' : (order.price || 0) <= 0 ? 'Cargá el presupuesto antes de confirmar' : ''}
                 className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
               >
                 <Lock size={15} />
@@ -156,15 +159,14 @@ export default function OrderCard({ order, onOpen, onChanged }) {
           next && (
             <button
               type="button"
-              disabled={busy === next || missingBudget}
+              disabled={busy === next}
               onClick={(e) => {
                 e.stopPropagation()
                 move(next)
               }}
-              title={missingBudget ? 'Cargá el arreglo y el presupuesto primero' : ''}
-              className={`inline-flex w-full items-center justify-center gap-1 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500`}
+              className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
             >
-              {missingBudget ? <Lock size={15} /> : <>{nextStatusLabel(order)}<ChevronRight size={15} /></>}
+              {nextStatusLabel(order)}<ChevronRight size={15} />
             </button>
           )
         )}
