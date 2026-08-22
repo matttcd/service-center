@@ -18,20 +18,21 @@ import {
   Save,
   Phone,
   BellRing,
-  BellOff,
   Lock,
   Smartphone,
   User,
   X,
   Pencil,
+  MoreVertical,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
-import TechnicianSelect from '../components/TechnicianSelect.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../utils/api.js'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
+import TechnicianSelect from '../components/TechnicianSelect.jsx'
 import OrderPrint from '../components/OrderPrint.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 import { PatternPreview } from '../components/PatternPad.jsx'
 import {
   ORDER_STATUS_LABEL,
@@ -41,9 +42,8 @@ import {
   formatMoney,
   titleCase,
   sentenceCase,
-  addDays,
 } from '../utils/helpers.js'
-import { WARRANTY_DAYS, COMMON_FIXES } from '../utils/constants.js'
+import { COMMON_FIXES } from '../utils/constants.js'
 
 function initials(name) {
   return String(name || '')
@@ -68,6 +68,8 @@ export default function OrderDetail() {
   const [budgetCustomFix, setBudgetCustomFix] = useState('')
   const [budgetPriceText, setBudgetPriceText] = useState('')
   const [editingBudget, setEditingBudget] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [confirm, setConfirm] = useState(null)
   // Orden en modo "override" local: cuando el bootstrap deja de traer una orden
   // entregada (las entregadas se filtran para no saturar la red), la seguimos
   // mostrando trayéndola directo por GET /api/orders/:id.
@@ -147,7 +149,6 @@ export default function OrderDetail() {
   }
 
   const handleRetiro = async () => {
-    if (!window.confirm('¿Confirmás que el cliente retiró el equipo?')) return
     setBusy('retiro')
     const res = await setOrderStatus(order.id, 'entregado', { retiro: true })
     if (res.error) {
@@ -161,7 +162,6 @@ export default function OrderDetail() {
   }
 
   const handleGarantia = async () => {
-    if (!window.confirm('¿Volver a reparar el equipo por garantía?')) return
     setBusy('en_reparacion')
     const res = await setOrderStatus(order.id, 'en_reparacion')
     showNotice(res.error ? res.error : 'Equipo en reparación por garantía.')
@@ -228,7 +228,6 @@ export default function OrderDetail() {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`¿Eliminar la orden ${order.orderNumber}?`)) return
     const res = await deleteOrder(order.id)
     if (!res.error) navigate('/ordenes')
     else showNotice(res.error)
@@ -272,7 +271,7 @@ export default function OrderDetail() {
 
       <Card className="overflow-hidden">
         {/* Encabezado */}
-        <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
+        <div className="px-6 py-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -281,16 +280,22 @@ export default function OrderDetail() {
                   {order.diagnosisType === 'revision' ? 'Revisión' : 'Reparación'}
                 </Badge>
                 <Badge tone={orderStatusTone(status)}>{ORDER_STATUS_LABEL[status]}</Badge>
-                {['presupuesto', 'terminado'].includes(status) && (
-                  <Badge tone={order.notified ? 'green' : 'yellow'}>
-                    {order.notified ? 'Avisado' : 'Sin avisar'}
-                  </Badge>
-                )}
-                {order.confirmed && <Badge tone="green">Confirmado</Badge>}
               </div>
-              <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-                Recibió {titleCase(order.receivedByName)} · {formatDate(order.createdAt)}
-              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                <span>Recibió {titleCase(order.receivedByName)} · {formatDate(order.createdAt)}</span>
+                {['presupuesto', 'terminado'].includes(status) && (
+                  <span className="flex items-center gap-1">
+                    {order.notified ? <CheckCircle2 size={13} className="text-emerald-500" /> : <BellRing size={13} className="text-amber-500" />}
+                    {order.notified ? 'Avisado' : 'Sin avisar'}
+                  </span>
+                )}
+                {order.confirmed && (
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 size={13} className="text-emerald-500" />
+                    Confirmado
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -307,8 +312,30 @@ export default function OrderDetail() {
                 <Printer size={14} />
                 Imprimir orden
               </button>
+              {isCounter && status !== 'entregado' && (
+                <div className="relative">
+                  <button onClick={() => setMenuOpen(!menuOpen)} className={btnGhost}>
+                    <MoreVertical size={14} />
+                  </button>
+                  {menuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                      <div className="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                        <button
+                          onClick={() => { setMenuOpen(false); setConfirm({ title: 'Retirar equipo', message: '¿Confirmás que el cliente retiró el equipo?', onConfirm: handleRetiro }) }}
+                          disabled={busy === 'retiro'}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
+                        >
+                          <PackageCheck size={14} />
+                          Cliente retiró el equipo
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               {isAdmin && (
-                <button onClick={handleDelete} className={`${btnGhost} !text-red-500 hover:!bg-red-50 dark:hover:!bg-red-500/10`}>
+                <button onClick={() => setConfirm({ title: 'Eliminar orden', message: `¿Eliminar la orden ${order.orderNumber}? Esta acción no se puede deshacer.`, onConfirm: handleDelete, danger: true })} className={`${btnGhost} !text-red-500 hover:!bg-red-50 dark:hover:!bg-red-500/10`}>
                   <Trash2 size={14} />
                   Eliminar
                 </button>
@@ -323,33 +350,35 @@ export default function OrderDetail() {
             <p className={sectionHead}>Cliente</p>
           </div>
           <div className="px-6 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-600 dark:bg-primary-500/15 dark:text-primary-400">
-                {initials(customer?.fullName || order.customerName)}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-600 dark:bg-primary-500/15 dark:text-primary-400">
+                  {initials(customer?.fullName || order.customerName)}
+                </div>
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 truncate text-lg font-bold text-slate-900 dark:text-white">
+                    <User size={16} className="shrink-0 text-slate-400" />
+                    <button
+                      onClick={() => navigate(`/clientes/${customer?.id}`)}
+                      className="truncate text-primary-600 transition hover:text-primary-700 dark:text-primary-400"
+                    >
+                      {customer?.fullName || order.customerName}
+                    </button>
+                  </p>
+                  <p className="flex items-center gap-1.5 text-base text-slate-500 dark:text-slate-400">
+                    <Phone size={14} className="shrink-0" />
+                    {[customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' · ') || '—'}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="flex items-center gap-1.5 truncate text-lg font-bold text-slate-900 dark:text-white">
-                  <User size={16} className="shrink-0 text-slate-400" />
-                  <button
-                    onClick={() => navigate(`/clientes/${customer?.id}`)}
-                    className="truncate text-primary-600 transition hover:text-primary-700 dark:text-primary-400"
-                  >
-                    {customer?.fullName || order.customerName}
-                  </button>
+              <div className="flex flex-col gap-1 text-sm">
+                <p className="text-slate-600 dark:text-slate-300">
+                  <span className="text-slate-400">DNI:</span> {customer?.dni || '—'}
                 </p>
-                <p className="flex items-center gap-1.5 text-base text-slate-500 dark:text-slate-400">
-                  <Phone size={14} className="shrink-0" />
-                  {[customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' · ') || '—'}
+                <p className="text-slate-600 dark:text-slate-300">
+                  <span className="text-slate-400">Domicilio:</span> {customer?.address || '—'}
                 </p>
               </div>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-              <p className="text-slate-600 dark:text-slate-300">
-                <span className="text-slate-400">DNI:</span> {customer?.dni || '—'}
-              </p>
-              <p className="text-slate-600 dark:text-slate-300">
-                <span className="text-slate-400">Domicilio:</span> {customer?.address || '—'}
-              </p>
             </div>
           </div>
         </section>
@@ -369,10 +398,6 @@ export default function OrderDetail() {
 
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div className="flex flex-col gap-4">
-                <div>
-                  <label className={labelCls}>PIN / contraseña del equipo</label>
-                  <input type="text" value={order.pin || ''} readOnly disabled className={inputCls} placeholder="—" />
-                </div>
                 <div>
                   <label className={labelCls}>Con accesorios</label>
                   <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -401,48 +426,35 @@ export default function OrderDetail() {
                     )}
                   </div>
                 </div>
-              </div>
-              <div className="flex flex-col">
-                <label className={labelCls}>Patrón de desbloqueo</label>
-                <div className="flex flex-1 items-center py-1">
-                  {order.pattern?.length > 0 ? (
-                    <PatternPreview value={order.pattern} size={140} className="h-full w-auto" />
-                  ) : (
-                    <span className="text-sm text-slate-400">Sin patrón configurado</span>
-                  )}
+                <div>
+                  <label className={labelCls}>Chequeos / notas generales</label>
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    {order.issue ? sentenceCase(order.issue) : '—'}
+                  </p>
                 </div>
               </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label className={labelCls}>Seña recibida</label>
-                <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                  {formatMoney(order.advance)}
-                </p>
-              </div>
-              <div>
-                <label className={labelCls}>Técnico encargado</label>
-                {isTech ? (
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <TechnicianSelect order={order} onChanged={() => showNotice('Técnico asignado.')} />
-                    {order.assignedTo && (
-                      <p className="text-xs text-slate-400">{order.assignedToName || '—'}</p>
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className={labelCls}>PIN / contraseña del equipo</label>
+                  {order.pin ? (
+                    <p className="inline-block rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      {order.pin}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-slate-400">Sin PIN / contraseña</p>
+                  )}
+                </div>
+                <div>
+                  <label className={labelCls}>Patrón de desbloqueo</label>
+                  <div className="flex items-center py-1">
+                    {order.pattern?.length > 0 ? (
+                      <PatternPreview value={order.pattern} size={140} className="h-full w-auto" />
+                    ) : (
+                      <span className="text-sm text-slate-400">Sin patrón configurado</span>
                     )}
                   </div>
-                ) : (
-                  <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    {order.assignedToName || '—'}
-                  </p>
-                )}
+                </div>
               </div>
-            </div>
-
-            <div className="mt-3">
-              <label className={labelCls}>Chequeos / notas generales</label>
-              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                {order.issue ? sentenceCase(order.issue) : '—'}
-              </p>
             </div>
           </div>
         </section>
@@ -453,11 +465,26 @@ export default function OrderDetail() {
             <p className={sectionHead}>Reparación</p>
           </div>
           <div className="px-6 py-4">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div className="space-y-3">
                 <div>
+                  <label className={labelCls}>Técnico encargado</label>
+                  {isTech ? (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <TechnicianSelect order={order} onChanged={() => showNotice('Técnico asignado.')} />
+                      {order.assignedTo && (
+                        <p className="text-xs text-slate-400">{order.assignedToName || '—'}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      {order.assignedToName || '—'}
+                    </p>
+                  )}
+                </div>
+                <div>
                   <div className="flex items-center justify-between gap-2">
-                    <label className={labelCls}>Arreglo a realizar</label>
+                    <label className={labelCls}>Tipo de arreglo</label>
                     {['en_revision', 'presupuesto'].includes(status) && canBudget && !editingBudget && (
                       <button
                         type="button"
@@ -516,31 +543,6 @@ export default function OrderDetail() {
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>{editingBudget ? 'Presupuesto ($)' : 'Presupuesto'}</label>
-                    {editingBudget ? (
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={budgetPriceText}
-                        onChange={(e) => setBudgetPriceText(e.target.value)}
-                        className={inputCls}
-                      />
-                    ) : (
-                      <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {formatMoney(order.price)}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className={labelCls}>Seña recibida</label>
-                    <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {formatMoney(order.advance)}
-                    </p>
-                  </div>
-                </div>
                 {editingBudget && (
                   <div className="flex items-center gap-2 pt-1">
                     <button onClick={saveBudget} disabled={busy === 'budget'} className={btnPrimary}>
@@ -554,12 +556,38 @@ export default function OrderDetail() {
                 )}
               </div>
 
+              <div className="space-y-3">
+                <div>
+                  <label className={labelCls}>{editingBudget ? 'Presupuesto ($)' : 'Presupuesto'}</label>
+                  {editingBudget ? (
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={budgetPriceText}
+                      onChange={(e) => setBudgetPriceText(e.target.value)}
+                      className={inputCls}
+                    />
+                  ) : (
+                    <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      {formatMoney(order.price)}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className={labelCls}>Seña recibida</label>
+                  <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    {formatMoney(order.advance)}
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <label className={labelCls}>Notas del técnico</label>
                 <textarea
                   value={technicianNotes}
                   onChange={(e) => setTechnicianNotes(e.target.value)}
-                  rows={6}
+                  rows={4}
                   placeholder="Diagnóstico, repuestos, qué decirle al cliente..."
                   className={inputCls}
                   disabled={!isTech}
@@ -574,7 +602,7 @@ export default function OrderDetail() {
             </div>
 
             {/* Acciones según el estado */}
-            <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
 
               {/* === BOTÓN INTELIGENTE (empleado / mostrador) === */}
               {isCounter && (() => {
@@ -625,14 +653,6 @@ export default function OrderDetail() {
                 }
                 return null
               })()}
-
-              {/* "Cliente retiró el equipo" (cualquier estado no entregado) */}
-              {isCounter && status !== 'entregado' && (
-                <button onClick={handleRetiro} disabled={busy === 'retiro'} className={btnGhost}>
-                  <PackageCheck size={14} />
-                  Cliente retiró el equipo
-                </button>
-              )}
 
               {/* === ACCIONES DEL TÉCNICO === */}
               {status === 'recibido' && order.diagnosisType === 'visible' && isTech && (
@@ -700,7 +720,7 @@ export default function OrderDetail() {
                 </button>
               )}
               {status === 'entregado' && isTech && (
-                <button onClick={handleGarantia} disabled={busy === 'en_reparacion'} className={btnGhost}>
+                <button onClick={() => setConfirm({ title: 'Garantía', message: '¿Volver a reparar el equipo por garantía?', onConfirm: handleGarantia })} disabled={busy === 'en_reparacion'} className={btnGhost}>
                   <RotateCcw size={14} />
                   Volver a reparación (garantía)
                 </button>
@@ -715,26 +735,45 @@ export default function OrderDetail() {
             <div className="px-6 pb-2 pt-5">
               <p className={sectionHead}>Historial</p>
             </div>
-            <ul className="px-6 py-4">
-              {(order.history || []).map((h, idx) => (
-                <li key={idx} className="flex items-start justify-between gap-3 py-1.5 text-sm">
-                  <div>
-                    <p className="font-semibold text-slate-700 dark:text-slate-200">
-                      {ORDER_STATUS_LABEL[h.status] || h.status}
-                    </p>
-                    {h.note && <p className="text-xs text-slate-500">{h.note}</p>}
+            <div className="px-6 py-4">
+              {(order.history || []).map((h, idx) => {
+                const isLast = idx === (order.history || []).length - 1
+                return (
+                  <div key={idx} className="flex gap-3">
+                    <div className="flex w-3 flex-col items-center">
+                      <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                        isLast ? 'bg-primary-500' : 'bg-slate-300 dark:bg-slate-600'
+                      }`} />
+                      <div className={`w-px flex-1 ${isLast ? 'bg-transparent' : 'bg-slate-200 dark:bg-slate-700'}`} />
+                    </div>
+                    <div className={`min-w-0 flex-1 -mt-2 ${isLast ? '' : 'pb-5'}`}>
+                      <p className={`text-sm font-semibold ${isLast ? 'text-primary-600 dark:text-primary-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                        {ORDER_STATUS_LABEL[h.status] || h.status}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                        {h.byName || '—'} · {formatDateTime(h.at)}
+                      </p>
+                      {h.note && (
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{h.note}</p>
+                      )}
+                    </div>
                   </div>
-                  <p className="whitespace-nowrap text-xs text-slate-400">
-                    {formatDateTime(h.at)} · {h.byName || '—'}
-                  </p>
-                </li>
-              ))}
-            </ul>
+                )
+              })}
+            </div>
           </section>
         )}
       </Card>
 
       <OrderPrint open={printing} order={order} customer={customer} onClose={() => setPrinting(false)} />
+      <ConfirmModal
+        open={!!confirm}
+        onClose={() => setConfirm(null)}
+        onConfirm={confirm?.onConfirm}
+        title={confirm?.title}
+        message={confirm?.message}
+        danger={confirm?.danger}
+      />
     </div>
   )
 }

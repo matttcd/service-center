@@ -72,6 +72,23 @@ export function formatDateTime(iso) {
   return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+// Tiempo relativo ("hace 2h", "ayer", "hace 3 días").
+export function timeAgo(iso) {
+  if (!iso) return ''
+  const now = Date.now()
+  const diff = now - toTime(iso)
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'ahora'
+  if (mins < 60) return `hace ${mins}m`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `hace ${hrs}h`
+  const days = Math.floor(hrs / 24)
+  if (days === 1) return 'ayer'
+  if (days < 30) return `hace ${days}d`
+  const months = Math.floor(days / 30)
+  return `hace ${months}m`
+}
+
 export function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }

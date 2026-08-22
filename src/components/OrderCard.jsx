@@ -1,10 +1,13 @@
 // ============================================
 // OrderCard: card compacta para el taller.
-// Muestra modelo + cliente + badge. Toda acción va al modal.
+// Muestra modelo + cliente + badge + tiempo. Toda acción va al modal.
 // ============================================
 import Badge from './Badge.jsx'
+import { timeAgo } from '../utils/helpers.js'
 
 export default function OrderCard({ order, onOpen }) {
+  const lastActivity = order.history?.[order.history.length - 1]?.at || order.createdAt
+
   return (
     <div
       role="button"
@@ -22,13 +25,16 @@ export default function OrderCard({ order, onOpen }) {
             {order.customerName}
           </p>
         </div>
-        <span className="shrink-0">
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
           {order.diagnosisType === 'revision' ? (
             <Badge tone="primary">Revisión</Badge>
           ) : (
             <Badge tone="slate">Reparación</Badge>
           )}
-        </span>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500">
+            {timeAgo(lastActivity)}
+          </span>
+        </div>
       </div>
     </div>
   )

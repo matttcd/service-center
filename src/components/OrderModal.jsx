@@ -22,6 +22,7 @@ import {
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Badge from './Badge.jsx'
+import ConfirmModal from './ConfirmModal.jsx'
 import Modal from './Modal.jsx'
 import TechnicianSelect from './TechnicianSelect.jsx'
 import { PatternPreview } from './PatternPad.jsx'
@@ -67,6 +68,7 @@ export default function OrderModal({ order, onClose }) {
   const [priceText, setPriceText] = useState(order?.price ? String(order.price) : '')
   const [techNotes, setTechNotes] = useState(order?.technicianNotes || '')
   const [busy, setBusy] = useState(false)
+  const [alertModal, setAlertModal] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
   const canBudget = ['mostrador', 'admin'].includes(currentUser?.role)
   const canEditWork = ['tecnico', 'admin'].includes(currentUser?.role)
@@ -146,43 +148,41 @@ export default function OrderModal({ order, onClose }) {
     setBusy(true)
     const res = await toggleNotified(order.id, !order.notified)
     setBusy(false)
-    if (res.error) alert(res.error)
+    if (res.error) setAlertModal(res.error)
   }
 
   const doConfirm = async () => {
     setBusy(true)
     const res = await confirmOrder(order.id, !order.confirmed)
     setBusy(false)
-    if (res.error) alert(res.error)
+    if (res.error) setAlertModal(res.error)
   }
 
   const saveOnly = async () => {
     setBusy(true)
     const res = await savePending()
     setBusy(false)
-    if (res.error) alert(res.error)
+    if (res.error) setAlertModal(res.error)
   }
 
   const finish = async () => {
     setBusy(true)
-    // Si el presupuesto ya estaba confirmado y se editó el trabajo, guardar
-    // desmarca la confirmación: no se puede avanzar sin reconfirmar.
     const wasConfirmedBudget = order.status === 'presupuesto' && order.confirmed
     const changedBudget = editingWork && workDirty
     const saved = await savePending()
     if (saved.error) {
       setBusy(false)
-      alert(saved.error)
+      setAlertModal(saved.error)
       return
     }
     if (wasConfirmedBudget && changedBudget) {
       setBusy(false)
-      alert('El presupuesto cambió: la confirmación quedó desmarcada. Confirmá el arreglo de nuevo antes de reparar.')
+      setAlertModal('El presupuesto cambió: la confirmación quedó desmarcada. Confirmá el arreglo de nuevo antes de reparar.')
       return
     }
     const res = await setOrderStatus(order.id, effectiveNext)
     setBusy(false)
-    if (res.error) alert(res.error)
+    if (res.error) setAlertModal(res.error)
     else onClose()
   }
 
@@ -224,6 +224,7 @@ export default function OrderModal({ order, onClose }) {
   const missingRepair = order.status === 'en_revision' && next === 'presupuesto' && !hasRepair
 
   return (
+    <>
     <Modal open onClose={onClose} title={`${order.orderNumber} · ${order.brand} ${order.model}`} maxWidth="max-w-3xl">
       <div className="space-y-6">
         {/* Estado */}
@@ -567,5 +568,14 @@ export default function OrderModal({ order, onClose }) {
         </div>
       </div>
     </Modal>
+    <ConfirmModal
+      open={!!alertModal}
+      onClose={() => setAlertModal(null)}
+      onConfirm={() => setAlertModal(null)}
+      title="Aviso"
+      message={alertModal}
+      type="alert"
+    />
+    </>
   )
 }

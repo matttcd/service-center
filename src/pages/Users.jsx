@@ -10,6 +10,7 @@ import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import UserForm from '../components/UserForm.jsx'
 import Modal from '../components/Modal.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 
 // Etiquetas legibles para la auditoría.
 const actionLabel = {
@@ -43,6 +44,7 @@ export default function Users() {
   const [logPage, setLogPage] = useState(1)
   const [logPages, setLogPages] = useState(1)
   const [confirmToggle, setConfirmToggle] = useState(null)
+  const [alertModal, setAlertModal] = useState(null)
 
   // Carga el historial de auditoría paginado (solo admin llega a esta página).
   const loadLogs = useCallback(async (page) => {
@@ -204,7 +206,7 @@ export default function Users() {
                   const { id } = confirmToggle
                   setConfirmToggle(null)
                   const res = await toggleUserActive(id)
-                  if (res?.error) alert(res.error)
+                  if (res?.error) setAlertModal(res.error)
                 }}
                 className={`flex-1 rounded-lg px-4 py-2.5 font-semibold text-white transition ${
                   confirmToggle.active
@@ -292,6 +294,14 @@ export default function Users() {
           </>
         )}
       </Card>
+      <ConfirmModal
+        open={!!alertModal}
+        onClose={() => setAlertModal(null)}
+        onConfirm={() => setAlertModal(null)}
+        title="Aviso"
+        message={alertModal}
+        type="alert"
+      />
     </div>
   )
 }

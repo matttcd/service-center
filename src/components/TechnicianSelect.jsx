@@ -5,11 +5,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, Wrench } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
+import ConfirmModal from './ConfirmModal.jsx'
 
 export default function TechnicianSelect({ order, onChanged }) {
   const { technicians, assignTechnician } = useData()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [alertModal, setAlertModal] = useState(null)
   const boxRef = useRef(null)
 
   const value = order.assignedTo || ''
@@ -39,13 +41,14 @@ export default function TechnicianSelect({ order, onChanged }) {
     setBusy(true)
     const res = await assignTechnician(order.id, userId)
     setBusy(false)
-    if (res.error) alert(res.error)
+    if (res.error) setAlertModal(res.error)
     else onChanged?.()
   }
 
   const options = [{ id: '', name: 'Sin técnico' }, ...technicians]
 
   return (
+    <>
     <div
       ref={boxRef}
       onClick={(e) => e.stopPropagation()}
@@ -92,5 +95,14 @@ export default function TechnicianSelect({ order, onChanged }) {
         </div>
       )}
     </div>
+    <ConfirmModal
+      open={!!alertModal}
+      onClose={() => setAlertModal(null)}
+      onConfirm={() => setAlertModal(null)}
+      title="Aviso"
+      message={alertModal}
+      type="alert"
+    />
+    </>
   )
 }
