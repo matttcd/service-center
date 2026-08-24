@@ -5,25 +5,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft,
-  Printer,
-  Trash2,
-  Play,
-  Search,
-  Check,
-  CheckCircle2,
-  PackageCheck,
-  RotateCcw,
-  Sticker,
-  Save,
-  Phone,
-  BellRing,
-  Lock,
-  Smartphone,
-  User,
-  X,
-  Pencil,
-  MoreVertical,
+  ArrowLeft, Printer, Trash2, Play, Search, Check, CheckCircle2,
+  PackageCheck, PackageX, RotateCcw, Sticker, Save, Phone, BellRing,
+  Lock, Smartphone, User, X, Pencil, MoreVertical, Eye,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -33,7 +17,8 @@ import Badge from '../components/Badge.jsx'
 import TechnicianSelect from '../components/TechnicianSelect.jsx'
 import OrderPrint from '../components/OrderPrint.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
-import { PatternPreview } from '../components/PatternPad.jsx'
+import Modal from '../components/Modal.jsx'
+import PatternPad, { PatternPreview } from '../components/PatternPad.jsx'
 import {
   ORDER_STATUS_LABEL,
   orderStatusTone,
@@ -42,6 +27,7 @@ import {
   formatMoney,
   titleCase,
   sentenceCase,
+  normalizeList,
 } from '../utils/helpers.js'
 import { COMMON_FIXES } from '../utils/constants.js'
 
@@ -54,6 +40,16 @@ function initials(name) {
     .join('')
 }
 
+function groupNotesByDayAndTech(log) {
+  const groups = {}
+  for (const entry of log) {
+    const day = entry.at?.slice(0, 10) || '—'
+    if (!groups[day]) groups[day] = []
+    groups[day].push(entry)
+  }
+  return groups
+}
+
 export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -63,13 +59,32 @@ export default function OrderDetail() {
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
   const noticeTimer = useRef(null)
-  const [technicianNotes, setTechnicianNotes] = useState('')
-  const [budgetFixList, setBudgetFixList] = useState([])
-  const [budgetCustomFix, setBudgetCustomFix] = useState('')
-  const [budgetPriceText, setBudgetPriceText] = useState('')
-  const [editingBudget, setEditingBudget] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirm, setConfirm] = useState(null)
+
+  // Edición de equipo
+  const [editingEquip, setEditingEquip] = useState(false)
+  const [equipBrand, setEquipBrand] = useState('')
+  const [equipModel, setEquipModel] = useState('')
+  const [equipPin, setEquipPin] = useState('')
+  const [equipPattern, setEquipPattern] = useState([])
+  const [equipAccessories, setEquipAccessories] = useState('')
+  const [equipConditions, setEquipConditions] = useState('')
+  const [equipIssue, setEquipIssue] = useState('')
+
+  // Edición de reparación (empleado/admin: técnico + precio)
+  const [editingRepair, setEditingRepair] = useState(false)
+  const [repairPriceText, setRepairPriceText] = useState('')
+
+  // Edición de arreglo (técnico asignado: fix)
+  const [editingFix, setEditingFix] = useState(false)
+  const [fixList, setFixList] = useState([])
+  const [fixCustom, setFixCustom] = useState('')
+
+  // Notas del técnico
+  const [noteText, setNoteText] = useState('')
+  const [notesModalOpen, setNotesModalOpen] = useState(false)
+
   // Orden en modo "override" local: cuando el bootstrap deja de traer una orden
   // entregada (las entregadas se filtran para no saturar la red), la seguimos
   // mostrando trayéndola directo por GET /api/orders/:id.
@@ -79,9 +94,9 @@ export default function OrderDetail() {
   const customer = customers.find((c) => c.id === order?.customerId)
   const role = currentUser?.role
   const isAdmin = role === 'admin'
-  const isTech = role === 'tecnico' || role === 'admin'
+  const isTech = role === 'tecnico'
   const isCounter = role === 'mostrador' || role === 'admin'
-  const canBudget = ['mostrador', 'admin'].includes(role)
+  const isAssignedTech = isTech && order?.assignedTo === currentUser?.id
 
   useEffect(() => {
     setLocalOrder(null)
@@ -98,13 +113,11 @@ export default function OrderDetail() {
 
   useEffect(() => {
     if (!order) return
-    setTechnicianNotes(order.technicianNotes || '')
-    setBudgetFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
-    setBudgetPriceText(order.price ? String(order.price) : '')
-    setBudgetCustomFix('')
-    setEditingBudget(false)
+    setNoteText('')
+    setEditingEquip(false)
+    setEditingRepair(false)
+    setEditingFix(false)
     setNotice('')
-    // Solo resetear la nota cuando cambia la orden (evita pisar ediciones en curso).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id])
 
@@ -168,51 +181,6 @@ export default function OrderDetail() {
     setBusy(null)
   }
 
-  const saveNotes = async () => {
-    setBusy('notes')
-    const res = await updateOrder(order.id, {
-      technicianNotes: sentenceCase(technicianNotes),
-    })
-    showNotice(res.error ? res.error : 'Notas guardadas.')
-    setBusy(null)
-  }
-
-  const toggleBudgetFix = (name) =>
-    setBudgetFixList((list) => (list.includes(name) ? list.filter((f) => f !== name) : [...list, name]))
-
-  const addBudgetCustomFix = () => {
-    const v = budgetCustomFix.trim()
-    if (!v) return
-    setBudgetFixList((list) => (list.includes(v) ? list : [...list, v]))
-    setBudgetCustomFix('')
-  }
-
-  const startEditBudget = () => {
-    setBudgetFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
-    setBudgetPriceText(order.price ? String(order.price) : '')
-    setBudgetCustomFix('')
-    setEditingBudget(true)
-  }
-
-  const cancelEditBudget = () => {
-    setBudgetFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
-    setBudgetPriceText(order.price ? String(order.price) : '')
-    setBudgetCustomFix('')
-    setEditingBudget(false)
-  }
-
-  const saveBudget = async () => {
-    const fix = [...budgetFixList, budgetCustomFix.trim()].filter(Boolean).map((f) => titleCase(f)).join(', ')
-    const price = Number(budgetPriceText) || 0
-    setBusy('budget')
-    const res = await updateOrder(order.id, { fix, price })
-    if (!res.error) {
-      setEditingBudget(false)
-      showNotice('Presupuesto guardado.')
-    } else showNotice(res.error)
-    setBusy(null)
-  }
-
   const handleNotified = async () => {
     setBusy('notified')
     const res = await toggleNotified(order.id, !order.notified)
@@ -231,6 +199,72 @@ export default function OrderDetail() {
     const res = await deleteOrder(order.id)
     if (!res.error) navigate('/ordenes')
     else showNotice(res.error)
+  }
+
+  // ─── Equipo: abrir/cerrar edición ───
+  const startEditEquip = () => {
+    setEquipBrand(order.brand || '')
+    setEquipModel(order.model || '')
+    setEquipPin(order.pin || '')
+    setEquipPattern(order.pattern || [])
+    setEquipAccessories(order.accessories || '')
+    setEquipConditions(order.conditions || '')
+    setEquipIssue(order.issue || '')
+    setEditingEquip(true)
+  }
+  const cancelEditEquip = () => setEditingEquip(false)
+  const saveEditEquip = async () => {
+    setBusy('equip')
+    const res = await updateOrder(order.id, {
+      brand: titleCase(equipBrand), model: titleCase(equipModel), pin: equipPin,
+      pattern: equipPattern, accessories: equipAccessories, conditions: equipConditions, issue: equipIssue,
+    })
+    if (!res.error) { setEditingEquip(false); showNotice('Equipo actualizado.') } else showNotice(res.error)
+    setBusy(null)
+  }
+
+  // ─── Reparación: abrir/cerrar edición (empleado/admin: técnico + precio) ───
+  const startEditRepair = () => {
+    setRepairPriceText(order.price ? String(order.price) : '')
+    setEditingRepair(true)
+  }
+  const cancelEditRepair = () => setEditingRepair(false)
+  const saveEditRepair = async () => {
+    setBusy('repair')
+    const res = await updateOrder(order.id, { price: Number(repairPriceText) || 0 })
+    if (!res.error) { setEditingRepair(false); showNotice('Reparación actualizada.') } else showNotice(res.error)
+    setBusy(null)
+  }
+
+  // ─── Arreglo: abrir/cerrar edición (técnico asignado: fix) ───
+  const startEditFix = () => {
+    setFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
+    setFixCustom('')
+    setEditingFix(true)
+  }
+  const cancelEditFix = () => setEditingFix(false)
+  const toggleFix = (name) => setFixList((l) => l.includes(name) ? l.filter((f) => f !== name) : [...l, name])
+  const addCustomFix = () => {
+    const v = fixCustom.trim()
+    if (!v) return
+    setFixList((l) => (l.includes(v) ? l : [...l, v]))
+    setFixCustom('')
+  }
+  const saveEditFix = async () => {
+    const fix = [...fixList, fixCustom.trim()].filter(Boolean).map((f) => titleCase(f)).join(', ')
+    setBusy('fix')
+    const res = await updateOrder(order.id, { fix })
+    if (!res.error) { setEditingFix(false); showNotice('Tipo de arreglo actualizado.') } else showNotice(res.error)
+    setBusy(null)
+  }
+
+  // ─── Notas del técnico: guardar (append) ───
+  const saveNote = async () => {
+    if (!noteText.trim()) return
+    setBusy('note')
+    const res = await updateOrder(order.id, { note: noteText.trim() })
+    if (!res.error) { setNoteText(''); showNotice('Nota guardada.') } else showNotice(res.error)
+    setBusy(null)
   }
 
   const btnPrimary =
@@ -252,6 +286,17 @@ export default function OrderDetail() {
   const accessories = (order.accessories || '').split(',').map((a) => a.trim()).filter(Boolean)
   const conditions = (order.conditions || '').split(',').map((c) => c.trim()).filter(Boolean)
   const displayedFixes = (order.fix || '').split(',').map((f) => f.trim()).filter(Boolean)
+  const notesLog = order.notesLog || []
+
+  const menuItems = []
+  if (isCounter && status !== 'entregado') {
+    menuItems.push({ key: 'retiro', label: 'Cliente retiró el equipo', Icon: PackageCheck, onClick: () => { setMenuOpen(false); setConfirm({ title: 'Retirar equipo', message: '¿Confirmás que el cliente retiró el equipo?', onConfirm: handleRetiro }) } })
+  }
+  if (isAdmin) {
+    menuItems.push({ key: 'delete', label: 'Eliminar', Icon: Trash2, danger: true, onClick: () => { setMenuOpen(false); setConfirm({ title: 'Eliminar orden', message: `¿Eliminar la orden ${order.orderNumber}? Esta acción no se puede deshacer.`, onConfirm: handleDelete, danger: true }) } })
+  }
+
+  const groupedNotes = groupNotesByDayAndTech(notesLog)
 
   return (
     <div className="space-y-6">
@@ -312,33 +357,23 @@ export default function OrderDetail() {
                 <Printer size={14} />
                 Imprimir orden
               </button>
-              {isCounter && status !== 'entregado' && (
+              {menuItems.length > 0 && (
                 <div className="relative">
-                  <button onClick={() => setMenuOpen(!menuOpen)} className={btnGhost}>
-                    <MoreVertical size={14} />
-                  </button>
+                  <button onClick={() => setMenuOpen(!menuOpen)} className={btnGhost}><MoreVertical size={14} /></button>
                   {menuOpen && (
                     <>
                       <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                      <div className="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                        <button
-                          onClick={() => { setMenuOpen(false); setConfirm({ title: 'Retirar equipo', message: '¿Confirmás que el cliente retiró el equipo?', onConfirm: handleRetiro }) }}
-                          disabled={busy === 'retiro'}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
-                        >
-                          <PackageCheck size={14} />
-                          Cliente retiró el equipo
-                        </button>
+                      <div className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                        {menuItems.map((item) => (
+                          <button key={item.key} onClick={item.onClick} disabled={busy === item.key}
+                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-700 ${item.danger ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
+                            <item.Icon size={14} /> {item.label}
+                          </button>
+                        ))}
                       </div>
                     </>
                   )}
                 </div>
-              )}
-              {isAdmin && (
-                <button onClick={() => setConfirm({ title: 'Eliminar orden', message: `¿Eliminar la orden ${order.orderNumber}? Esta acción no se puede deshacer.`, onConfirm: handleDelete, danger: true })} className={`${btnGhost} !text-red-500 hover:!bg-red-50 dark:hover:!bg-red-500/10`}>
-                  <Trash2 size={14} />
-                  Eliminar
-                </button>
               )}
             </div>
           </div>
@@ -386,95 +421,137 @@ export default function OrderDetail() {
         {/* Detalles del equipo */}
         <section>
           <div className="px-6 pb-2 pt-5">
-            <p className={sectionHead}>Detalles del equipo</p>
+            <div className="flex items-center justify-between">
+              <p className={sectionHead}>Detalles del equipo</p>
+              {isCounter && status !== 'entregado' && !editingEquip && (
+                <button onClick={startEditEquip} className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10">
+                  <Pencil size={12} /> Editar
+                </button>
+              )}
+            </div>
           </div>
           <div className="px-6 py-4">
-            <div className="flex items-center gap-2 pb-2 text-base">
-              <Smartphone size={15} className="shrink-0 text-slate-400" />
-              <span className="truncate font-semibold text-slate-900 dark:text-white">
-                {titleCase(order.brand)} {titleCase(order.model)}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div className="flex flex-col gap-4">
-                <div>
-                  <label className={labelCls}>Con accesorios</label>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {accessories.length > 0 ? (
-                      accessories.map((a) => (
-                        <span key={a} className={chipReadonly}>
-                          {a}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm text-slate-400">Sin accesorios</span>
-                    )}
+            {editingEquip ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={labelCls}>Marca</label>
+                    <input value={equipBrand} onChange={(e) => setEquipBrand(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Modelo</label>
+                    <input value={equipModel} onChange={(e) => setEquipModel(e.target.value)} className={inputCls} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={labelCls}>PIN / contraseña</label>
+                    <input value={equipPin} onChange={(e) => setEquipPin(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Patrón de desbloqueo</label>
+                    <PatternPad value={equipPattern} onChange={setEquipPattern} />
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>Estado del equipo</label>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {conditions.length > 0 ? (
-                      conditions.map((c) => (
-                        <span key={c} className={chipReadonly}>
-                          {c}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm text-slate-400">Sin estado registrado</span>
-                    )}
-                  </div>
+                  <label className={labelCls}>Accesorios (separados por coma)</label>
+                  <input value={equipAccessories} onChange={(e) => setEquipAccessories(e.target.value)} className={inputCls} placeholder="Funda, cargador..." />
+                </div>
+                <div>
+                  <label className={labelCls}>Estado del equipo (separados por coma)</label>
+                  <input value={equipConditions} onChange={(e) => setEquipConditions(e.target.value)} className={inputCls} placeholder="Roto, golpeado..." />
                 </div>
                 <div>
                   <label className={labelCls}>Chequeos / notas generales</label>
-                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    {order.issue ? sentenceCase(order.issue) : '—'}
-                  </p>
+                  <textarea value={equipIssue} onChange={(e) => setEquipIssue(e.target.value)} rows={3} className={inputCls} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={saveEditEquip} disabled={busy === 'equip'} className={btnPrimary}><Save size={14} /> Guardar</button>
+                  <button onClick={cancelEditEquip} className={btnGhost}>Cancelar</button>
                 </div>
               </div>
-              <div className="flex flex-col gap-4">
-                <div>
-                  <label className={labelCls}>PIN / contraseña del equipo</label>
-                  {order.pin ? (
-                    <p className="inline-block rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {order.pin}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-slate-400">Sin PIN / contraseña</p>
-                  )}
+            ) : (
+              <div>
+                <div className="flex items-center gap-2 pb-2 text-base">
+                  <Smartphone size={15} className="shrink-0 text-slate-400" />
+                  <span className="truncate font-semibold text-slate-900 dark:text-white">
+                    {titleCase(order.brand)} {titleCase(order.model)}
+                  </span>
                 </div>
-                <div>
-                  <label className={labelCls}>Patrón de desbloqueo</label>
-                  <div className="flex items-center py-1">
-                    {order.pattern?.length > 0 ? (
-                      <PatternPreview value={order.pattern} size={140} className="h-full w-auto" />
-                    ) : (
-                      <span className="text-sm text-slate-400">Sin patrón configurado</span>
-                    )}
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <label className={labelCls}>Con accesorios</label>
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {accessories.length > 0 ? (
+                          accessories.map((a) => <span key={a} className={chipReadonly}>{a}</span>)
+                        ) : <span className="text-sm text-slate-400">Sin accesorios</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Estado del equipo</label>
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {conditions.length > 0 ? (
+                          conditions.map((c) => <span key={c} className={chipReadonly}>{c}</span>)
+                        ) : <span className="text-sm text-slate-400">Sin estado registrado</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Chequeos / notas generales</label>
+                      <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {order.issue ? sentenceCase(order.issue) : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <label className={labelCls}>PIN / contraseña del equipo</label>
+                      {order.pin ? (
+                        <p className="inline-block rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {order.pin}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-slate-400">Sin PIN / contraseña</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className={labelCls}>Patrón de desbloqueo</label>
+                      <div className="flex items-center py-1">
+                        {order.pattern?.length > 0 ? (
+                          <PatternPreview value={order.pattern} size={140} className="h-full w-auto" />
+                        ) : (
+                          <span className="text-sm text-slate-400">Sin patrón configurado</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </section>
 
         {/* Reparación */}
         <section>
           <div className="px-6 pb-2 pt-5">
-            <p className={sectionHead}>Reparación</p>
+            <div className="flex items-center justify-between">
+              <p className={sectionHead}>Reparación</p>
+              {isCounter && status !== 'entregado' && !editingRepair && (
+                <button onClick={startEditRepair} className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10">
+                  <Pencil size={12} /> Editar
+                </button>
+              )}
+            </div>
           </div>
           <div className="px-6 py-4">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div className="space-y-3">
                 <div>
                   <label className={labelCls}>Técnico encargado</label>
-                  {isTech ? (
+                  {editingRepair ? (
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <TechnicianSelect order={order} onChanged={() => showNotice('Técnico asignado.')} />
-                      {order.assignedTo && (
-                        <p className="text-xs text-slate-400">{order.assignedToName || '—'}</p>
-                      )}
+                      {order.assignedTo && <p className="text-xs text-slate-400">{order.assignedToName || '—'}</p>}
                     </div>
                   ) : (
                     <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
@@ -485,89 +562,51 @@ export default function OrderDetail() {
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <label className={labelCls}>Tipo de arreglo</label>
-                    {['en_revision', 'presupuesto'].includes(status) && canBudget && !editingBudget && (
-                      <button
-                        type="button"
-                        onClick={startEditBudget}
-                        className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10"
-                      >
-                        <Pencil size={12} />
-                        Editar presupuesto
+                    {isAssignedTech && !editingFix && ['en_revision', 'presupuesto'].includes(status) && (
+                      <button onClick={startEditFix} className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10">
+                        <Pencil size={12} /> Editar arreglo
                       </button>
                     )}
                   </div>
-
-                  {editingBudget ? (
+                  {editingFix ? (
                     <div className="space-y-3 pt-1">
                       <div className="flex flex-wrap items-center gap-2">
                         {COMMON_FIXES.map((f) => (
-                          <button key={f} type="button" onClick={() => toggleBudgetFix(f)}
-                            className={budgetFixList.includes(f) ? chipSelected : chipIdle}>
-                            {f}
-                          </button>
+                          <button key={f} type="button" onClick={() => toggleFix(f)} className={fixList.includes(f) ? chipSelected : chipIdle}>{f}</button>
                         ))}
-                        {budgetFixList.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
+                        {fixList.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
                           <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
                             {f}
-                            <button type="button" onClick={() => toggleBudgetFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500">
-                              <X size={12} />
-                            </button>
+                            <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500"><X size={12} /></button>
                           </span>
                         ))}
                         <span className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            value={budgetCustomFix}
-                            onChange={(e) => setBudgetCustomFix(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addBudgetCustomFix() } }}
-                            placeholder="Otro arreglo..."
-                            className={`${inputCls} !w-36`}
-                          />
-                          <button type="button" onClick={addBudgetCustomFix} className={chipIdle}>
-                            <Check size={13} />
-                          </button>
+                          <input type="text" value={fixCustom} onChange={(e) => setFixCustom(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomFix() } }}
+                            placeholder="Otro arreglo..." className={`${inputCls} !w-36`} />
+                          <button type="button" onClick={addCustomFix} className={chipIdle}><Check size={13} /></button>
                         </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={saveEditFix} disabled={busy === 'fix'} className={btnPrimary}><Save size={14} /> Guardar</button>
+                        <button onClick={cancelEditFix} className={btnGhost}>Cancelar</button>
                       </div>
                     </div>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       {displayedFixes.length > 0 ? (
-                        displayedFixes.map((f) => (
-                          <span key={f} className={chipReadonly}>
-                            {f}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-sm text-slate-400">Sin definir</span>
-                      )}
+                        displayedFixes.map((f) => <span key={f} className={chipReadonly}>{f}</span>)
+                      ) : <span className="text-sm text-slate-400">Sin definir</span>}
                     </div>
                   )}
                 </div>
-                {editingBudget && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <button onClick={saveBudget} disabled={busy === 'budget'} className={btnPrimary}>
-                      <Save size={14} />
-                      Guardar presupuesto
-                    </button>
-                    <button type="button" onClick={cancelEditBudget} className={btnGhost}>
-                      Cancelar
-                    </button>
-                  </div>
-                )}
               </div>
 
               <div className="space-y-3">
                 <div>
-                  <label className={labelCls}>{editingBudget ? 'Presupuesto ($)' : 'Presupuesto'}</label>
-                  {editingBudget ? (
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={budgetPriceText}
-                      onChange={(e) => setBudgetPriceText(e.target.value)}
-                      className={inputCls}
-                    />
+                  <label className={labelCls}>{editingRepair ? 'Presupuesto ($)' : 'Presupuesto'}</label>
+                  {editingRepair ? (
+                    <input type="number" min="0" step="0.01" value={repairPriceText} onChange={(e) => setRepairPriceText(e.target.value)} className={inputCls} />
                   ) : (
                     <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                       {formatMoney(order.price)}
@@ -583,25 +622,31 @@ export default function OrderDetail() {
               </div>
 
               <div>
-                <label className={labelCls}>Notas del técnico</label>
-                <textarea
-                  value={technicianNotes}
-                  onChange={(e) => setTechnicianNotes(e.target.value)}
-                  rows={4}
-                  placeholder="Diagnóstico, repuestos, qué decirle al cliente..."
-                  className={inputCls}
-                  disabled={!isTech}
-                />
-                {isTech && (
-                  <button onClick={saveNotes} disabled={busy === 'notes'} className={`${btnPrimary} mt-2`}>
-                    <Save size={14} />
-                    Guardar notas
-                  </button>
+                <div className="flex items-center justify-between gap-2">
+                  <label className={labelCls}>Notas del técnico</label>
+                  {notesLog.length > 0 && (
+                    <button onClick={() => setNotesModalOpen(true)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-0.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                      <Eye size={12} /> Ver notas
+                    </button>
+                  )}
+                </div>
+                {isAssignedTech ? (
+                  <>
+                    <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} rows={4}
+                      placeholder="Diagnóstico, repuestos, qué decirle al cliente..." className={inputCls} />
+                    <button onClick={saveNote} disabled={busy === 'note' || !noteText.trim()} className={`${btnPrimary} mt-2`}>
+                      <Save size={14} /> Guardar nota
+                    </button>
+                  </>
+                ) : (
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    {order.technicianNotes || '—'}
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Acciones según el estado */}
+              {/* Acciones según el estado */}
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
 
               {/* === BOTÓN INTELIGENTE (empleado / mostrador) === */}
@@ -609,7 +654,7 @@ export default function OrderDetail() {
                 if (status === 'presupuesto') {
                   if (!order.notified) {
                     return (
-                      <button onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
+                      <button key="avisar" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
                         <BellRing size={14} />
                         Avisar al cliente
                       </button>
@@ -617,7 +662,7 @@ export default function OrderDetail() {
                   }
                   if (!order.confirmed) {
                     return (
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div key="confirm" className="flex flex-wrap items-center gap-2">
                         <button onClick={handleConfirm} disabled={busy === 'confirm'} className={btnPrimary}>
                           <CheckCircle2 size={14} />
                           Confirmar arreglo
@@ -629,7 +674,7 @@ export default function OrderDetail() {
                     )
                   }
                   return (
-                    <p className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
+                    <p key="wait" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
                       <Lock size={14} className="text-amber-500" />
                       Esperando reparación del técnico...
                     </p>
@@ -638,14 +683,14 @@ export default function OrderDetail() {
                 if (status === 'terminado') {
                   if (!order.notified) {
                     return (
-                      <button onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
+                      <button key="avisar2" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
                         <BellRing size={14} />
                         Avisar al cliente
                       </button>
                     )
                   }
                   return (
-                    <button onClick={() => doStatus('entregado')} disabled={busy === 'entregado'} className={`${btnPrimary} !text-emerald-600`}>
+                    <button key="entregar" onClick={() => doStatus('entregado')} disabled={busy === 'entregado'} className={`${btnPrimary} !text-emerald-600`}>
                       <PackageCheck size={14} />
                       Entregar al cliente
                     </button>
@@ -677,7 +722,7 @@ export default function OrderDetail() {
                   Iniciar revisión
                 </button>
               )}
-              {status === 'en_revision' && (canBudget || isTech) && (
+              {status === 'en_revision' && isTech && (
                 <button
                   onClick={() => doStatus('presupuesto')}
                   disabled={busy === 'presupuesto' || !(order.fix || '').trim()}
@@ -705,13 +750,17 @@ export default function OrderDetail() {
                     <CheckCircle2 size={14} />
                     Marcar terminado (listo)
                   </button>
-                  {canBudget && (
-                    <button onClick={() => doStatus('presupuesto')} disabled={busy === 'presupuesto'} className={btnGhost}>
-                      <RotateCcw size={14} />
-                      Volver a presupuesto
-                    </button>
-                  )}
+                  <button onClick={() => doStatus('falta_repuestos')} disabled={busy === 'falta_repuestos'} className={btnGhost}>
+                    <PackageX size={14} />
+                    Falta de repuestos
+                  </button>
                 </>
+              )}
+              {status === 'falta_repuestos' && isTech && (
+                <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnPrimary}>
+                  <Play size={14} />
+                  Repuestos llegaron
+                </button>
               )}
               {status === 'terminado' && isTech && (
                 <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnGhost}>
@@ -774,6 +823,30 @@ export default function OrderDetail() {
         message={confirm?.message}
         danger={confirm?.danger}
       />
+
+      {/* Modal de notas del técnico */}
+      <Modal open={notesModalOpen} onClose={() => setNotesModalOpen(false)} title="Notas del técnico">
+        {Object.keys(groupedNotes).length === 0 ? (
+          <p className="text-sm text-slate-400">Sin notas registradas.</p>
+        ) : (
+          <div className="space-y-4">
+            {Object.entries(groupedNotes).map(([day, entries]) => (
+              <div key={day}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{formatDate(day)}</p>
+                <div className="space-y-3">
+                  {entries.map((entry) => (
+                    <div key={entry.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{entry.byName}</p>
+                      <p className="text-xs text-slate-400">{formatDateTime(entry.at)}</p>
+                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{entry.text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

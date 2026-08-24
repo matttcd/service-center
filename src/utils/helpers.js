@@ -100,6 +100,7 @@ export function orderStatusTone(status) {
     en_revision: 'primary',
     presupuesto: 'yellow',
     en_reparacion: 'primary',
+    falta_repuestos: 'orange',
     terminado: 'green',
     entregado: 'slate',
   }

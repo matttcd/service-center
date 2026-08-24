@@ -11,7 +11,7 @@ import OrderModal from '../components/OrderModal.jsx'
 
 const COLUMNS = [
   { key: 'entrantes', statuses: ['recibido'], title: 'Entrantes' },
-  { key: 'taller', statuses: ['en_revision', 'en_reparacion'], title: 'En taller' },
+  { key: 'taller', statuses: ['en_revision', 'en_reparacion', 'falta_repuestos'], title: 'En taller' },
   { key: 'presupuesto', statuses: ['presupuesto'], title: 'Presupuesto' },
 ]
 

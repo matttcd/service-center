@@ -13,7 +13,8 @@ import { buildSeed } from './seed.js'
 import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase, normalizeList } from './helpers.js'
 import { printZplLabel } from './printer.js'
 import { ORDER_STATUSES, allowedTransitions } from '../shared/fsm.js'
-
+import { buildOrderHtml } from './pdf/orderTemplate.js'
+import { htmlToPdf } from './pdf/puppeteerPdf.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 8080
@@ -84,6 +85,7 @@ function migrateNormalizedText() {
     o.issue = touch(o.issue, sentenceCase(o.issue))
     o.fix = touch(o.fix, normalizeList(o.fix))
     o.technicianNotes = touch(o.technicianNotes, sentenceCase(o.technicianNotes))
+    if (!Array.isArray(o.notesLog)) o.notesLog = []
   }
   for (const b of db.catalog?.brands || []) {
     b.name = touch(b.name, titleCase(b.name))
@@ -556,6 +558,7 @@ app.post('/api/orders', auth, (req, res) => {
       advance,
       status: 'recibido',
       technicianNotes: '',
+      notesLog: [],
       assignedTo: null,
       repairedBy: null,
       notified: false,
@@ -628,6 +631,23 @@ app.get('/api/orders/:id', auth, (req, res) => {
   res.json({ order: decorateOrder(db, order) })
 })
 
+app.get('/api/orders/:id/pdf', auth, async (req, res) => {
+  try {
+    const db = getDB()
+    const order = db.orders.find((o) => o.id === req.params.id)
+    if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
+    const customer = db.customers.find((c) => c.id === order.customerId)
+    const html = buildOrderHtml(order, customer)
+    const pdfBuffer = await htmlToPdf(html)
+    res.type('application/pdf')
+    res.set('Content-Disposition', `inline; filename="orden-${order.orderNumber}.pdf"`)
+    res.send(pdfBuffer)
+  } catch (err) {
+    console.error('Error generando PDF:', err)
+    res.status(500).json({ error: 'No se pudo generar el PDF.' })
+  }
+})
+
 app.delete('/api/orders/:id', auth, adminOnly, (req, res) => {
   const db = getDB()
   const order = db.orders.find((o) => o.id === req.params.id)
@@ -684,7 +704,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   if (status === 'entregado' && !order.notified && !retiro) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
   }
-  if (['en_revision', 'en_reparacion', 'terminado'].includes(status) && !isTech) {
+  if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) && !isTech) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
   }
   if (status === 'presupuesto' && !['mostrador', 'admin', 'tecnico'].includes(role)) {
@@ -710,9 +730,13 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
             ? 'Cliente rechazó el presupuesto'
             : status === 'en_reparacion' && previous === 'entregado'
               ? 'Reingreso por garantía'
-              : undefined,
+              : status === 'falta_repuestos'
+                ? 'Esperando repuestos'
+                : status === 'en_reparacion' && previous === 'falta_repuestos'
+                  ? 'Repuestos recibidos'
+                  : undefined,
     })
-    if (['en_revision', 'en_reparacion', 'terminado'].includes(status)) o.repairedBy = req.user.id
+    if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status)) o.repairedBy = req.user.id
     if (['presupuesto', 'terminado'].includes(status)) {
       o.notified = false
       o.notifiedAt = null
@@ -746,36 +770,65 @@ app.put('/api/orders/:id', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
-  const { technicianNotes, fix, price, issue } = req.body || {}
-  const canBudget = ['mostrador', 'admin'].includes(req.user.role)
-  const canNotes = ['tecnico', 'admin'].includes(req.user.role)
-  const touchesWork = fix !== undefined || issue !== undefined
-  const touchesPrice = price !== undefined
-  const touchesNotes = technicianNotes !== undefined
-  if (touchesWork && !canNotes) {
-    return res.status(403).json({ error: 'Solo el técnico o el administrador pueden editar la revisión y el arreglo.' })
+  const {
+    brand, model, pin, pattern, accessories, conditions,
+    technicianNotes, fix, price, issue, note,
+  } = req.body || {}
+  const role = req.user.role
+  const isAssignedTech = role === 'tecnico' && order.assignedTo === req.user.id
+  const isEmpOrAdmin = ['mostrador', 'admin'].includes(role)
+
+  // Permisos por campo
+  if (fix !== undefined && !isAssignedTech) {
+    return res.status(403).json({ error: 'Solo el técnico encargado puede modificar el tipo de arreglo.' })
   }
-  if (touchesPrice && !canBudget) {
+  if (price !== undefined && !isEmpOrAdmin) {
     return res.status(403).json({ error: 'Solo empleados o administradores pueden cargar el presupuesto.' })
   }
-  if (touchesNotes && !canNotes) {
-    return res.status(403).json({ error: 'Solo el técnico o el administrador pueden editar las notas.' })
+  if (technicianNotes !== undefined && !isAssignedTech) {
+    return res.status(403).json({ error: 'Solo el técnico encargado puede editar las notas.' })
   }
+  if (note !== undefined && !isAssignedTech) {
+    return res.status(403).json({ error: 'Solo el técnico encargado puede agregar notas.' })
+  }
+  const equipFields = [brand, model, pin, pattern, accessories, conditions]
+  const touchesEquip = equipFields.some((v) => v !== undefined)
+  if (touchesEquip && !isEmpOrAdmin) {
+    return res.status(403).json({ error: 'Solo empleados o administradores pueden editar los detalles del equipo.' })
+  }
+
   // Para órdenes a revisión, el tipo de arreglo no se puede definir hasta que
   // haya un técnico asignado y la orden esté en "en_revision".
   if (fix !== undefined && order.diagnosisType === 'revision' && !(order.fix || '').trim() && (!order.assignedTo || order.status !== 'en_revision')) {
     return res.status(400).json({ error: 'Asigná un técnico y pasá la orden a revisión antes de definir el arreglo.' })
   }
-  const touched = touchesNotes || touchesWork || touchesPrice
+
+  const touched = touchesEquip || fix !== undefined || price !== undefined || technicianNotes !== undefined || note !== undefined || issue !== undefined
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
     const budgetChanged =
       (fix !== undefined && normalizeList(String(fix)) !== normalizeList(String(o.fix || ''))) ||
       (price !== undefined && String(Math.max(0, Number(price) || 0)) !== String(o.price || 0))
-    if (technicianNotes !== undefined) o.technicianNotes = sentenceCase(String(technicianNotes))
+    // Equipo
+    if (brand !== undefined) o.brand = String(brand)
+    if (model !== undefined) o.model = String(model)
+    if (pin !== undefined) o.pin = String(pin)
+    if (pattern !== undefined) o.pattern = Array.isArray(pattern) ? pattern : []
+    if (accessories !== undefined) o.accessories = normalizeList(String(accessories))
+    if (conditions !== undefined) o.conditions = normalizeList(String(conditions))
+    // Reparación
     if (fix !== undefined) o.fix = normalizeList(String(fix))
     if (price !== undefined) o.price = Math.max(0, Number(price) || 0)
     if (issue !== undefined) o.issue = sentenceCase(String(issue))
+    // Notas del técnico (legacy)
+    if (technicianNotes !== undefined) o.technicianNotes = sentenceCase(String(technicianNotes))
+    // Notas vía note (append a notesLog)
+    if (note !== undefined && String(note).trim()) {
+      const entry = { id: uid(), at: new Date().toISOString(), by: req.user.id, byName: req.user.name || '—', text: sentenceCase(String(note).trim()) }
+      o.notesLog = o.notesLog || []
+      o.notesLog.push(entry)
+      o.technicianNotes = entry.text
+    }
     if (budgetChanged && o.status === 'presupuesto' && o.confirmed) {
       o.confirmed = false
       o.confirmedAt = null
@@ -793,9 +846,9 @@ app.post('/api/orders/:id/assign', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
-  const isTech = ['tecnico', 'admin'].includes(req.user.role)
-  if (!isTech) {
-    return res.status(403).json({ error: 'Solo el técnico (o el admin) puede asignar un técnico.' })
+  const canAssign = ['tecnico', 'admin', 'mostrador'].includes(req.user.role)
+  if (!canAssign) {
+    return res.status(403).json({ error: 'No tenés permiso para asignar un técnico.' })
   }
   const userId = req.body?.userId || null
   if (userId) {
@@ -1095,4 +1148,10 @@ app.use((err, req, res, _next) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor de servicio técnico corriendo en http://0.0.0.0:${PORT}`)
+})
+
+process.on('SIGINT', async () => {
+  const { closeBrowser } = await import('./pdf/puppeteerPdf.js')
+  await closeBrowser()
+  process.exit(0)
 })

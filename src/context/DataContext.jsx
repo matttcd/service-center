@@ -302,6 +302,10 @@ export function DataProvider({ children }) {
           (o) => ['presupuesto', 'terminado'].includes(o.status) && !o.notified,
         ),
       ),
+      faltaRepuestosOrders: byLastActivity(byStatus('falta_repuestos')),
+      ingresaronHoyOrders: data.orders.filter(
+        (o) => o.createdAt && o.createdAt.slice(0, 10) === today,
+      ),
     }
   }, [data.orders])
 

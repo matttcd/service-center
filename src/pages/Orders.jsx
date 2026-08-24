@@ -4,14 +4,14 @@
 // ============================================
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Search, BellOff, ArrowUp, ArrowDown, ChevronUp, ChevronDown, ChevronsUpDown, X } from 'lucide-react'
+import { Plus, Search, ArrowUp, ArrowDown, ChevronUp, ChevronDown, ChevronsUpDown, X } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import OrderForm from '../components/OrderForm.jsx'
 import OrderPrint from '../components/OrderPrint.jsx'
-import { ORDER_STATUS_LABEL, orderStatusTone, formatDate, formatMoney, titleCase, normalizeList } from '../utils/helpers.js'
+import { ORDER_STATUS_LABEL, orderStatusTone, formatDate, formatMoney, titleCase } from '../utils/helpers.js'
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
@@ -245,9 +245,9 @@ export default function Orders() {
                   <Th col="orderNumber">Nº</Th>
                   <Th col="customerName">Cliente</Th>
                   <Th col="model">Equipo</Th>
-                  <Th col="fix">Tipo de arreglo</Th>
                   <Th col="price" className="text-right">Precio</Th>
                   <Th col="status">Estado</Th>
+                  <Th col="notified">Aviso</Th>
                   <Th col="createdAt">Fecha</Th>
                 </tr>
               </thead>
@@ -265,25 +265,22 @@ export default function Orders() {
                       {titleCase(o.customerName)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-slate-700 dark:text-slate-200">{titleCase(o.brand)} {titleCase(o.model)}</td>
-                    <td className="max-w-[220px] truncate px-3 py-2.5 text-slate-500 dark:text-slate-400" title={o.fix || '—'}>
-                      {o.fix ? normalizeList(o.fix) : '—'}
-                    </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold text-slate-900 dark:text-white">
                       {o.price ? formatMoney(o.price) : '—'}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">
-                      <span className="flex flex-wrap items-center gap-1.5">
+                      {['en_revision', 'en_reparacion'].includes(o.status) ? (
                         <Badge tone={orderStatusTone(o.status)}>{ORDER_STATUS_LABEL[o.status]}</Badge>
-                        {!o.notified && ['presupuesto', 'terminado'].includes(o.status) && (
-                          <Badge tone="yellow">
-                            <BellOff size={12} />
-                            Sin avisar
-                          </Badge>
-                        )}
-                        {!o.confirmed && o.status === 'presupuesto' && (
-                          <Badge tone="orange">Sin confirmar</Badge>
-                        )}
-                      </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      {o.notified ? (
+                        <Badge tone="green">Avisado</Badge>
+                      ) : (
+                        <Badge tone="yellow">Sin avisar</Badge>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-slate-500 dark:text-slate-400">{formatDate(o.createdAt)}</td>
                   </tr>

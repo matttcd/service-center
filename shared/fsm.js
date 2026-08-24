@@ -9,6 +9,7 @@ export const ORDER_STATUSES = [
   'en_revision',
   'presupuesto',
   'en_reparacion',
+  'falta_repuestos',
   'terminado',
   'entregado',
 ]
@@ -16,9 +17,10 @@ export const ORDER_STATUSES = [
 // Etiqueta legible de cada estado.
 export const ORDER_STATUS_LABEL = {
   recibido: 'Recibido',
-  en_revision: 'En revisión',
+  en_revision: 'En revision',
   presupuesto: 'Presupuesto',
-  en_reparacion: 'En reparación',
+  en_reparacion: 'En reparacion',
+  falta_repuestos: 'Falta de repuestos',
   terminado: 'Listo para retirar',
   entregado: 'Entregado',
 }
@@ -37,7 +39,9 @@ export function allowedTransitions(order) {
     case 'presupuesto':
       return ['en_reparacion', 'entregado']
     case 'en_reparacion':
-      return ['terminado', 'presupuesto', 'entregado']
+      return ['terminado', 'presupuesto', 'entregado', 'falta_repuestos']
+    case 'falta_repuestos':
+      return ['en_reparacion', 'entregado']
     case 'terminado':
       return ['entregado', 'en_reparacion']
     case 'entregado':
@@ -71,7 +75,7 @@ const COUNTER_ROLES = ['mostrador', 'admin']
 
 // Indica si un rol puede disparar la transición hacia `to`.
 export function canTransitionForRole(to, role) {
-  if (['en_revision', 'en_reparacion', 'terminado'].includes(to) && !TECH_ROLES.includes(role)) {
+  if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(to) && !TECH_ROLES.includes(role)) {
     return false
   }
   if (['presupuesto', 'entregado'].includes(to) && !COUNTER_ROLES.includes(role)) {
