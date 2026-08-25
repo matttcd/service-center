@@ -71,14 +71,10 @@ export function buildPickupHtml(order, customer, pickup) {
 
   .note { background: #f8f8f8; border: 1px solid #ddd; border-radius: 3mm; padding: 3mm 4mm; font-size: 9.5pt; color: #555; margin-bottom: 3mm; line-height: 1.4; }
 
-  .signatures { position: fixed; bottom: 14mm; left: 14mm; right: 14mm; display: flex; gap: 6mm; }
-  .sig-block { flex: 1; border: 0.5px solid #ccc; border-radius: 2mm; padding: 3mm 4mm; }
-  .sig-block-title { font-size: 7.5pt; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 1px; text-align: center; margin-bottom: 2mm; padding-bottom: 1.5mm; border-bottom: 0.5px solid #ddd; }
-  .sig-row { display: flex; gap: 3mm; }
+  .signatures { position: fixed; bottom: 14mm; left: 14mm; right: 14mm; display: flex; gap: 4mm; }
   .sig-col { flex: 1; text-align: center; }
-  .sig-col .sig-line { border-top: 0.5px solid #333; margin-top: 10mm; margin-bottom: 1.5mm; }
+  .sig-col .sig-line { border-top: 0.5px solid #333; margin-bottom: 1mm; }
   .sig-col .sig-label { font-size: 7pt; color: #666; text-transform: uppercase; letter-spacing: 1px; }
-  .sig-col .sig-hint { font-size: 6.5pt; color: #aaa; margin-top: 0.5mm; }
 </style>
 </head>
 <body>
@@ -140,40 +136,17 @@ export function buildPickupHtml(order, customer, pickup) {
 </div>
 
 <div class="signatures">
-  <div class="sig-block">
-    <div class="sig-block-title">Firmas del que retira</div>
-    <div class="sig-row">
-      <div class="sig-col">
-        <div class="sig-line">&nbsp;</div>
-        <div class="sig-label">Firma</div>
-      </div>
-      <div class="sig-col">
-        <div class="sig-line">&nbsp;</div>
-        <div class="sig-label">Aclaracion</div>
-      </div>
-      <div class="sig-col">
-        <div class="sig-line">&nbsp;</div>
-        <div class="sig-label">DNI</div>
-      </div>
-    </div>
+  <div class="sig-col">
+    <div class="sig-line">&nbsp;</div>
+    <div class="sig-label">Firma quien retira</div>
   </div>
-  <div class="sig-block">
-    <div class="sig-block-title">Para uso del local</div>
-    <div class="sig-row">
-      <div class="sig-col">
-        <div class="sig-line">&nbsp;</div>
-        <div class="sig-label">Firma</div>
-      </div>
-      <div class="sig-col">
-        <div class="sig-line">&nbsp;</div>
-        <div class="sig-label">Sello</div>
-      </div>
-      <div class="sig-col">
-        <div class="sig-line">&nbsp;</div>
-        <div class="sig-label">Fecha</div>
-        <div class="sig-hint">dd/mm/aaaa</div>
-      </div>
-    </div>
+  <div class="sig-col">
+    <div class="sig-line">&nbsp;</div>
+    <div class="sig-label">Aclaracion</div>
+  </div>
+  <div class="sig-col">
+    <div class="sig-line">&nbsp;</div>
+    <div class="sig-label">DNI</div>
   </div>
 </div>
 
