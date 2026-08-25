@@ -181,53 +181,70 @@ export default function Orders() {
 
       {/* Filtros */}
       <Card className="p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={qInput}
-              onChange={(e) => { setQInput(e.target.value); setPage(1) }}
-              placeholder="N.º, cliente o equipo..."
-              className={`${inputCls} pl-9`}
-            />
+        <div className="flex flex-col gap-3">
+          {/* Fila 1: búsqueda + selects */}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={qInput}
+                onChange={(e) => { setQInput(e.target.value); setPage(1) }}
+                placeholder="Buscar por N.º, cliente o equipo..."
+                className={`${inputCls} pl-9`}
+              />
+            </div>
+            <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }} className={`${inputCls} sm:w-48`}>
+              <option value="all">Todos los estados</option>
+              {Object.entries(ORDER_STATUS_LABEL).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+            <select value={brand} onChange={(e) => { setBrand(e.target.value); setPage(1) }} className={`${inputCls} sm:w-40`}>
+              <option value="all">Todas las marcas</option>
+              {brands.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
           </div>
-          <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }} className={inputCls}>
-            <option value="all">Todos los estados</option>
-            {Object.entries(ORDER_STATUS_LABEL).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-          <select value={brand} onChange={(e) => { setBrand(e.target.value); setPage(1) }} className={inputCls}>
-            <option value="all">Todas las marcas</option>
-            {brands.map((b) => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
-          <div className="grid grid-cols-2 gap-2">
-            <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1) }} className={inputCls} title="Desde" />
-            <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1) }} className={inputCls} title="Hasta" />
+          {/* Fila 2: fechas + filtros rápidos + limpiar */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex gap-2">
+              <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1) }} className={`${inputCls} !w-auto`} title="Desde" />
+              <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1) }} className={`${inputCls} !w-auto`} title="Hasta" />
+            </div>
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              <button
+                onClick={() => { setOnlyNotNotified((v) => !v); setPage(1) }}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  onlyNotNotified
+                    ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
+                    : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800/50'
+                }`}
+              >
+                Sin avisar
+              </button>
+              <button
+                onClick={() => { setOnlyNotConfirmed((v) => !v); setPage(1) }}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  onlyNotConfirmed
+                    ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-400'
+                    : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800/50'
+                }`}
+              >
+                Sin confirmar
+              </button>
+            </div>
+            {hasFilters && (
+              <button
+                onClick={clearFilters}
+                className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+              >
+                <X size={13} />
+                Limpiar
+              </button>
+            )}
           </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-4">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <input type="checkbox" checked={onlyNotNotified} onChange={(e) => { setOnlyNotNotified(e.target.checked); setPage(1) }} className={checkboxCls} />
-            Sin avisar
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <input type="checkbox" checked={onlyNotConfirmed} onChange={(e) => { setOnlyNotConfirmed(e.target.checked); setPage(1) }} className={checkboxCls} />
-            Sin confirmar
-          </label>
-          {hasFilters && (
-            <button
-              onClick={clearFilters}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-50 dark:hover:bg-red-500/10"
-            >
-              <X size={14} />
-              Limpiar filtros
-            </button>
-          )}
         </div>
       </Card>
 

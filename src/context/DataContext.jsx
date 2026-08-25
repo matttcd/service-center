@@ -153,6 +153,7 @@ export function DataProvider({ children }) {
       return page
     } catch (err) {
       if (err.status === 401) logout()
+      return { orders: [], total: 0 }
     } finally {
       setOrdersLoading(false)
     }

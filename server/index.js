@@ -14,6 +14,7 @@ import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase
 import { printZplLabel } from './printer.js'
 import { ORDER_STATUSES, allowedTransitions } from '../shared/fsm.js'
 import { buildOrderHtml } from './pdf/orderTemplate.js'
+import { buildPickupHtml } from './pdf/pickupTemplate.js'
 import { htmlToPdf } from './pdf/puppeteerPdf.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -645,6 +646,50 @@ app.get('/api/orders/:id/pdf', auth, async (req, res) => {
   } catch (err) {
     console.error('Error generando PDF:', err)
     res.status(500).json({ error: 'No se pudo generar el PDF.' })
+  }
+})
+
+app.post('/api/orders/:id/pickup', auth, (req, res) => {
+  const db = getDB()
+  const order = db.orders.find((o) => o.id === req.params.id)
+  if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
+  const { pickupBy, pickupName, pickupDni } = req.body || {}
+  if (!['client', 'third'].includes(pickupBy)) {
+    return res.status(400).json({ error: 'pickupBy inválido.' })
+  }
+  if (pickupBy === 'third') {
+    if (!pickupName || !pickupName.trim()) {
+      return res.status(400).json({ error: 'El nombre de quien retira es obligatorio.' })
+    }
+    if (!pickupDni || !pickupDni.trim()) {
+      return res.status(400).json({ error: 'El DNI de quien retira es obligatorio.' })
+    }
+  }
+  mutate((d) => {
+    const o = d.orders.find((x) => x.id === req.params.id)
+    o.pickupBy = pickupBy
+    o.pickupName = pickupBy === 'third' ? pickupName.trim() : ''
+    o.pickupDni = pickupBy === 'third' ? pickupDni.trim() : ''
+  }).then(() => {
+    res.json({ ok: true })
+  })
+})
+
+app.get('/api/orders/:id/pickup-pdf', auth, async (req, res) => {
+  try {
+    const db = getDB()
+    const order = db.orders.find((o) => o.id === req.params.id)
+    if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
+    const customer = db.customers.find((c) => c.id === order.customerId)
+    const pickup = { pickupBy: order.pickupBy, pickupName: order.pickupName, pickupDni: order.pickupDni }
+    const html = buildPickupHtml(order, customer, pickup)
+    const pdfBuffer = await htmlToPdf(html)
+    res.type('application/pdf')
+    res.set('Content-Disposition', `inline; filename="retiro-${order.orderNumber}.pdf"`)
+    res.send(pdfBuffer)
+  } catch (err) {
+    console.error('Error generando PDF de retiro:', err)
+    res.status(500).json({ error: 'No se pudo generar el PDF de retiro.' })
   }
 })
 

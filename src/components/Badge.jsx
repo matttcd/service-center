@@ -3,13 +3,13 @@
 // ============================================
 
 const tones = {
-  green: 'bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-300/70 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-500/40',
-  red: 'bg-red-100 text-red-800 ring-1 ring-inset ring-red-300/70 dark:bg-red-500/20 dark:text-red-300 dark:ring-red-500/40',
-  darkred: 'bg-red-900 text-red-50 ring-1 ring-inset ring-red-700 dark:bg-red-950 dark:text-red-200 dark:ring-red-800',
-  yellow: 'bg-accent-100 text-accent-800 ring-1 ring-inset ring-accent-300/70 dark:bg-accent-500/20 dark:text-accent-300 dark:ring-accent-500/40',
-  orange: 'bg-orange-100 text-orange-800 ring-1 ring-inset ring-orange-300/70 dark:bg-orange-500/20 dark:text-orange-300 dark:ring-orange-500/40',
-  primary: 'bg-primary-100 text-primary-800 ring-1 ring-inset ring-primary-300/70 dark:bg-primary-500/20 dark:text-primary-300 dark:ring-primary-500/40',
-  slate: 'bg-slate-200 text-slate-700 ring-1 ring-inset ring-slate-400/50 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-500/40',
+  green: 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/25 dark:text-emerald-300 dark:border-emerald-500/50',
+  red: 'bg-red-100 text-red-800 border border-red-300 dark:bg-red-500/25 dark:text-red-300 dark:border-red-500/50',
+  darkred: 'bg-red-900 text-red-50 border border-red-700 dark:bg-red-950 dark:text-red-200 dark:border-red-800',
+  yellow: 'bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/25 dark:text-amber-300 dark:border-amber-500/50',
+  orange: 'bg-orange-100 text-orange-800 border border-orange-300 dark:bg-orange-500/25 dark:text-orange-300 dark:border-orange-500/50',
+  primary: 'bg-primary-100 text-primary-800 border border-primary-300 dark:bg-primary-500/25 dark:text-primary-300 dark:border-primary-500/50',
+  slate: 'bg-slate-200 text-slate-700 border border-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600',
 }
 
 export default function Badge({ tone = 'slate', children, className = '' }) {

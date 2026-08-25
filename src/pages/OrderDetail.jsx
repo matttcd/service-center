@@ -17,6 +17,7 @@ import Badge from '../components/Badge.jsx'
 import TechnicianSelect from '../components/TechnicianSelect.jsx'
 import OrderPrint from '../components/OrderPrint.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
+import PickupModal from '../components/PickupModal.jsx'
 import Modal from '../components/Modal.jsx'
 import PatternPad, { PatternPreview } from '../components/PatternPad.jsx'
 import {
@@ -61,6 +62,7 @@ export default function OrderDetail() {
   const noticeTimer = useRef(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirm, setConfirm] = useState(null)
+  const [pickupModal, setPickupModal] = useState(null)
 
   // Edición de equipo
   const [editingEquip, setEditingEquip] = useState(false)
@@ -272,11 +274,11 @@ export default function OrderDetail() {
   const btnGhost =
     'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
   const chipReadonly =
-    'inline-flex items-center rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300'
+    'inline-flex items-center rounded-full border border-slate-400 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
   const chipSelected =
     'inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700'
   const chipIdle =
-    'inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+    'inline-flex items-center gap-1 rounded-full border border-slate-400 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
   const inputCls =
     'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
   const labelCls = 'mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400'
@@ -290,7 +292,7 @@ export default function OrderDetail() {
 
   const menuItems = []
   if (isCounter && status !== 'entregado') {
-    menuItems.push({ key: 'retiro', label: 'Cliente retiró el equipo', Icon: PackageCheck, onClick: () => { setMenuOpen(false); setConfirm({ title: 'Retirar equipo', message: '¿Confirmás que el cliente retiró el equipo?', onConfirm: handleRetiro }) } })
+    menuItems.push({ key: 'retiro', label: 'Retirar equipo', Icon: PackageCheck, onClick: () => { setMenuOpen(false); setPickupModal({ onConfirm: handleRetiro }) } })
   }
   if (isAdmin) {
     menuItems.push({ key: 'delete', label: 'Eliminar', Icon: Trash2, danger: true, onClick: () => { setMenuOpen(false); setConfirm({ title: 'Eliminar orden', message: `¿Eliminar la orden ${order.orderNumber}? Esta acción no se puede deshacer.`, onConfirm: handleDelete, danger: true }) } })
@@ -577,7 +579,7 @@ export default function OrderDetail() {
                           <button key={f} type="button" onClick={() => toggleFix(f)} className={fixList.includes(f) ? chipSelected : chipIdle}>{f}</button>
                         ))}
                         {fixList.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
-                          <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
+                          <span key={f} className={chipReadonly}>
                             {f}
                             <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500"><X size={12} /></button>
                           </span>
@@ -684,7 +686,7 @@ export default function OrderDetail() {
                           <CheckCircle2 size={14} />
                           Aceptó
                         </button>
-                        <button onClick={() => setConfirm({ title: 'Rechazó el arreglo', message: '¿Rechazó el presupuesto? Se entregarà el equipo sin reparar.', onConfirm: () => doStatus('entregado'), danger: true })} disabled={busy === 'entregado' || !order.notified} className={btnGhost}>
+                        <button onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado' || !order.notified} className={btnGhost}>
                           Rechazó
                         </button>
                       </div>
@@ -707,7 +709,7 @@ export default function OrderDetail() {
                     )
                   }
                   return (
-                    <button key="entregar" onClick={() => setConfirm({ title: 'Entregar equipo', message: '¿Confirmás que el cliente retira el equipo?', onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={`${btnPrimary} !text-emerald-600`}>
+                    <button key="entregar" onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={`${btnPrimary} !text-emerald-600`}>
                       <PackageCheck size={14} />
                       Entregar al cliente
                     </button>
@@ -839,6 +841,12 @@ export default function OrderDetail() {
         title={confirm?.title}
         message={confirm?.message}
         danger={confirm?.danger}
+      />
+      <PickupModal
+        open={!!pickupModal}
+        onClose={() => setPickupModal(null)}
+        onConfirm={pickupModal?.onConfirm}
+        order={order}
       />
 
       {/* Modal de notas del técnico */}
