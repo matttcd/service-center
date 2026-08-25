@@ -76,11 +76,11 @@ export function buildOrderHtml(order, customer) {
   const advanceStr = order?.advance > 0 ? formatMoney(order.advance) : ''
 
   const contractBullets = [
-    'El cliente declara conocer y prestar conformidad para que El Gringo Celulares realice las reparaciones del equipo detallado en la presente orden. Se avisa por telefono cuando el arreglo esta listo para retirar.',
-    'El Gringo Celulares, bajo ningun punto de vista, se hace responsable por las perdidas de datos y/o informacion que pudieran existir en el equipo, sean fotos, contactos, agendas o cualquier otra clase de informacion almacenada en el mismo.',
-    'El titular reconoce y acepta expresamente que el equipo es de su propiedad. Transcurridos treinta (30) dias desde la fecha de ingreso, el mismo debe ser retirado por el propietario. Transcurrido dicho plazo, la casa se reserva el uso y disposicion sin que por ello el cliente tenga derecho a reclamo alguno.',
-    'El Gringo Celulares se hara responsable unicamente de la reparacion efectuada o del repuesto cambiado. El precio no incluye IVA (21.1%). Los pagos son unicamente en efectivo.',
-    'Aceptacion del cliente: Declaro haber leido y acepto las condiciones precedentemente descriptas.',
+    'Para la entrega del equipo, el cliente o un tercero asignado deberán presentar la orden. Si es un tercero, deberá contar con una autorización explícita del titular. Si el cliente no presenta la orden física, se podrá entregar el equipo con una constancia de retiro firmada (únicamente el cliente titular). Sin la orden original no se reconocerá garantía alguna.',
+    'La garantía tiene una duración de treinta (30) días corridos desde el retiro y cubre exclusivamente las reparaciones detalladas en la presente orden.',
+    'Transcurridos treinta (30) días desde la notificación de que el equipo está listo sin que haya sido retirado, El Gringo Celulares se reserva el derecho de modificar el presupuesto debido a variaciones en los costos de repuestos.',
+    'Los pagos son exclusivamente en efectivo. El precio no incluye IVA (10,5%).',
+    'Declaro haber leído y acepto las condiciones precedentemente descriptas.',
   ]
 
   return `<!DOCTYPE html>
@@ -91,14 +91,14 @@ export function buildOrderHtml(order, customer) {
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #111; }
-  .page { width: 190mm; padding: 14mm 14mm 28mm 14mm; }
+  .page { width: 210mm; padding: 14mm 14mm 28mm 14mm; }
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3mm; }
   .header-left h1 { font-size: 14pt; font-weight: 700; letter-spacing: -0.3px; }
   .header-left p { font-size: 9pt; color: #555; margin-top: 1px; }
   .header-right { text-align: right; }
-  .header-right .doc-title { font-size: 9pt; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 1.5px; }
-  .header-right .order-num { font-size: 16pt; font-weight: 700; margin-top: 1px; }
+  .header-right .doc-title { font-size: 7pt; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 1.5px; }
+  .header-right .order-num { font-size: 12pt; font-weight: 700; margin-top: 1px; }
   .header-right .order-date { font-size: 9pt; color: #555; margin-top: 2px; }
 
   hr.simple { border: none; border-top: 1px solid #333; margin-bottom: 3mm; }
@@ -139,7 +139,6 @@ export function buildOrderHtml(order, customer) {
       <div class="order-date">${formatDateTime(order?.createdAt)}</div>
     </div>
   </div>
-  <hr class="simple">
 
   <h2>1. Datos del cliente</h2>
   <div class="grid2">
@@ -147,7 +146,6 @@ export function buildOrderHtml(order, customer) {
     ${field('DNI', esc(dni))}
     ${field('Telefono', esc(phones))}
     ${field('Domicilio', esc(address))}
-    ${field('Recibido por', esc(receivedByName))}
   </div>
 
   <h2>2. Equipo recibido</h2>
@@ -159,6 +157,7 @@ export function buildOrderHtml(order, customer) {
       ${field('Chequeos / notas generales', esc(issue) || '<span style="color:#999">&mdash;</span>')}
     </div>
     <div class="equip-col">
+      ${field('Recibido por', esc(receivedByName))}
       ${field('PIN / contrasena', esc(pin))}
       <div class="field">
         <div class="lbl">Patron de desbloqueo</div>
@@ -174,7 +173,7 @@ export function buildOrderHtml(order, customer) {
     ${order?.advance > 0 ? field('Sena recibida', `<span class="val-price">${esc(advanceStr)}</span>`) : ''}
   </div>
 
-  <h2>4. Condiciones</h2>
+  <h2>4. Términos y condiciones</h2>
   <ol class="legal-list">
     ${contractBullets.map((b) => `<li>${esc(b)}</li>`).join('\n    ')}
   </ol>

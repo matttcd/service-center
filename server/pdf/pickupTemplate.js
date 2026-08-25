@@ -49,7 +49,7 @@ export function buildPickupHtml(order, customer, pickup) {
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #111; }
-  .page { width: 190mm; padding: 14mm 14mm 28mm 14mm; }
+  .page { width: 210mm; padding: 14mm 14mm 28mm 14mm; }
 
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3mm; }
   .header-left h1 { font-size: 14pt; font-weight: 700; letter-spacing: -0.3px; }

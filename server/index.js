@@ -638,7 +638,12 @@ app.get('/api/orders/:id/pdf', auth, async (req, res) => {
     const order = db.orders.find((o) => o.id === req.params.id)
     if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
     const customer = db.customers.find((c) => c.id === order.customerId)
-    const html = buildOrderHtml(order, customer)
+    const names = new Map(db.users.map((u) => [u.id, u.name]))
+    const enriched = {
+      ...order,
+      receivedByName: order.receivedBy ? names.get(order.receivedBy) || '—' : '—',
+    }
+    const html = buildOrderHtml(enriched, customer)
     const pdfBuffer = await htmlToPdf(html)
     res.type('application/pdf')
     res.set('Content-Disposition', `inline; filename="orden-${order.orderNumber}.pdf"`)

@@ -1,5 +1,5 @@
 @echo off
 title El Gringo Celulares - API de desarrollo (:4000)
-cd /d "%~dp0"
+cd /d "%~dp0server"
 set "PORT=4000"
-node server\index.js
+npx nodemon index.js
