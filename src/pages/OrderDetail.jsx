@@ -680,12 +680,12 @@ export default function OrderDetail() {
                   if (!order.confirmed) {
                     return (
                       <div key="confirm" className="flex flex-wrap items-center gap-2">
-                        <button onClick={handleConfirm} disabled={busy === 'confirm'} className={btnPrimary}>
+                        <button onClick={() => setConfirm({ title: 'Confirmar', message: '¿El cliente aprobó el presupuesto?', onConfirm: handleConfirm })} disabled={busy === 'confirm'} className={btnPrimary}>
                           <CheckCircle2 size={14} />
-                          Confirmar arreglo
+                          Aceptó
                         </button>
-                        <button onClick={() => doStatus('entregado')} disabled={busy === 'entregado' || !order.notified} className={btnGhost}>
-                          No aprobó → entregar
+                        <button onClick={() => setConfirm({ title: 'Rechazó el arreglo', message: '¿Rechazó el presupuesto? Se entregarà el equipo sin reparar.', onConfirm: () => doStatus('entregado'), danger: true })} disabled={busy === 'entregado' || !order.notified} className={btnGhost}>
+                          Rechazó
                         </button>
                       </div>
                     )
@@ -707,7 +707,7 @@ export default function OrderDetail() {
                     )
                   }
                   return (
-                    <button key="entregar" onClick={() => doStatus('entregado')} disabled={busy === 'entregado'} className={`${btnPrimary} !text-emerald-600`}>
+                    <button key="entregar" onClick={() => setConfirm({ title: 'Entregar equipo', message: '¿Confirmás que el cliente retira el equipo?', onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={`${btnPrimary} !text-emerald-600`}>
                       <PackageCheck size={14} />
                       Entregar al cliente
                     </button>

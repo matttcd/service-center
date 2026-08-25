@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 // Destino de /api en desarrollo. Por defecto el backend de desarrollo (:3001)
 // para NO tocar producción. Si alguna vez querés apuntar a otro lado:
 //   VITE_API_TARGET=http://localhost:8080 npm run dev
-const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:8080'
+const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:4000'
 
 // https://vite.dev/config/
 export default defineConfig({
