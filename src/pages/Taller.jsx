@@ -67,11 +67,18 @@ export default function Taller() {
         const last = (o) => o.history?.[o.history.length - 1]?.at || o.createdAt
         return toTime(last(b)) - toTime(last(a))
       })
-    return COLUMNS.map((c, i) => ({
-      ...c,
-      orders: byLastActivity(orders.filter((o) => c.statuses.includes(o.status))),
-      defaultOpen: i === 0,
-    }))
+    return COLUMNS.map((c, i) => {
+      let sorted = byLastActivity(orders.filter((o) => c.statuses.includes(o.status)))
+      if (c.key === 'presupuesto') {
+        sorted = [...sorted].sort((a, b) => {
+          if (a.confirmed && !b.confirmed) return -1
+          if (!a.confirmed && b.confirmed) return 1
+          const last = (o) => o.history?.[o.history.length - 1]?.at || o.createdAt
+          return toTime(last(b)) - toTime(last(a))
+        })
+      }
+      return { ...c, orders: sorted, defaultOpen: i === 0 }
+    })
   }, [orders])
 
   return (

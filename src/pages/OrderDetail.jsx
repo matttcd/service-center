@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Printer, Trash2, Play, Search, Check, CheckCircle2,
+  ArrowLeft, Printer, Trash2, Play, Search, Check, CheckCircle2, FileText,
   PackageCheck, PackageX, RotateCcw, Sticker, Save, Phone, BellRing,
   Lock, Smartphone, User, X, Pencil, MoreVertical, Eye,
 } from 'lucide-react'
@@ -421,8 +421,8 @@ export default function OrderDetail() {
         {/* Detalles del equipo */}
         <section>
           <div className="px-6 pb-2 pt-5">
-            <div className="flex items-center justify-between">
-              <p className={sectionHead}>Detalles del equipo</p>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 dark:border-slate-700">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Detalles del equipo</p>
               {isCounter && status !== 'entregado' && !editingEquip && (
                 <button onClick={startEditEquip} className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10">
                   <Pencil size={12} /> Editar
@@ -534,8 +534,8 @@ export default function OrderDetail() {
         {/* Reparación */}
         <section>
           <div className="px-6 pb-2 pt-5">
-            <div className="flex items-center justify-between">
-              <p className={sectionHead}>Reparación</p>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 dark:border-slate-700">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Reparación</p>
               {isCounter && status !== 'entregado' && !editingRepair && (
                 <button onClick={startEditRepair} className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10">
                   <Pencil size={12} /> Editar
@@ -550,8 +550,10 @@ export default function OrderDetail() {
                   <label className={labelCls}>Técnico encargado</label>
                   {editingRepair ? (
                     <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <TechnicianSelect order={order} onChanged={() => showNotice('Técnico asignado.')} />
-                      {order.assignedTo && <p className="text-xs text-slate-400">{order.assignedToName || '—'}</p>}
+                      {isAdmin && <TechnicianSelect order={order} onChanged={() => showNotice('Técnico asignado.')} />}
+                      <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {order.assignedToName || '—'}
+                      </p>
                     </div>
                   ) : (
                     <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
@@ -646,6 +648,13 @@ export default function OrderDetail() {
               </div>
             </div>
 
+              {editingRepair && (
+                <div className="mt-4 flex items-center gap-2">
+                  <button onClick={saveEditRepair} disabled={busy === 'repair'} className={btnPrimary}><Save size={14} /> Guardar</button>
+                  <button onClick={cancelEditRepair} className={btnGhost}>Cancelar</button>
+                </div>
+              )}
+
               {/* Acciones según el estado */}
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
 
@@ -653,6 +662,14 @@ export default function OrderDetail() {
               {isCounter && (() => {
                 if (status === 'presupuesto') {
                   if (!order.notified) {
+                    if (!order.price) {
+                      return (
+                        <p key="no-price" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
+                          <FileText size={14} className="text-amber-500" />
+                          Cargá el presupuesto antes de avisar al cliente.
+                        </p>
+                      )
+                    }
                     return (
                       <button key="avisar" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
                         <BellRing size={14} />

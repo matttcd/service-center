@@ -2,7 +2,7 @@
 // ProfileSwitchModal: pide la contraseña para
 // cambiar de perfil desde el sidebar
 // ============================================
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, Loader2, LogIn, ShieldCheck, Shield, Wrench } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -21,6 +21,11 @@ export default function ProfileSwitchModal({ profile, onClose }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    setPassword('')
+    setError('')
+  }, [profile?.id])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

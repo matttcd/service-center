@@ -945,9 +945,7 @@ app.post('/api/users', auth, adminOnly, (req, res) => {
   if (!['admin', 'tecnico', 'mostrador'].includes(role)) {
     return res.status(400).json({ error: 'Rol inválido.' })
   }
-  if (email && db.users.some((u) => u.email.toLowerCase() === String(email).trim().toLowerCase())) {
-    return res.status(400).json({ error: 'Ya existe un usuario con ese email.' })
-  }
+
   const id = uid()
   mutate((d) => {
     d.users.push({

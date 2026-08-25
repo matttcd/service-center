@@ -3,11 +3,9 @@
 // Muestra modelo + cliente + badge + tiempo. Toda acción va al modal.
 // ============================================
 import Badge from './Badge.jsx'
-import { timeAgo } from '../utils/helpers.js'
+import { timeSinceStatus } from '../utils/helpers.js'
 
 export default function OrderCard({ order, onOpen }) {
-  const lastActivity = order.history?.[order.history.length - 1]?.at || order.createdAt
-
   return (
     <div
       role="button"
@@ -26,13 +24,19 @@ export default function OrderCard({ order, onOpen }) {
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
-          {order.diagnosisType === 'revision' ? (
+          {order.status === 'presupuesto' ? (
+            order.confirmed ? (
+              <Badge tone="green">Confirmado</Badge>
+            ) : (
+              <Badge tone="yellow">Sin confirmar</Badge>
+            )
+          ) : order.diagnosisType === 'revision' ? (
             <Badge tone="primary">Revisión</Badge>
           ) : (
             <Badge tone="slate">Reparación</Badge>
           )}
           <span className="text-[11px] text-slate-400 dark:text-slate-500">
-            {timeAgo(lastActivity)}
+            {timeSinceStatus(order, order.status)}
           </span>
         </div>
       </div>

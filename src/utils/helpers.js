@@ -89,6 +89,11 @@ export function timeAgo(iso) {
   return `hace ${months}m`
 }
 
+export function timeSinceStatus(order, targetStatus) {
+  const entry = [...(order.history || [])].reverse().find((h) => h.status === targetStatus)
+  return timeAgo(entry?.at || order.createdAt)
+}
+
 export function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }

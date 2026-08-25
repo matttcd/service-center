@@ -295,14 +295,20 @@ export function DataProvider({ children }) {
     return {
       readyOrders: byLastActivity(byStatus('terminado')),
       pendingBudgetOrders: byLastActivity(
-        byStatus('presupuesto').filter((o) => !o.confirmed),
+        byStatus('presupuesto').filter((o) => o.price && !o.confirmed),
       ),
       porAvisarOrders: byLastActivity(
         data.orders.filter(
-          (o) => ['presupuesto', 'terminado'].includes(o.status) && !o.notified,
+          (o) => !o.notified && (
+            (o.status === 'presupuesto' && o.price) ||
+            o.status === 'terminado'
+          ),
         ),
       ),
       faltaRepuestosOrders: byLastActivity(byStatus('falta_repuestos')),
+      presupuestoSinPrecioOrders: byLastActivity(
+        byStatus('presupuesto').filter((o) => !o.price),
+      ),
       ingresaronHoyOrders: data.orders.filter(
         (o) => o.createdAt && o.createdAt.slice(0, 10) === today,
       ),

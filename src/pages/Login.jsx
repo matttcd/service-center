@@ -64,6 +64,7 @@ export default function Login() {
     setSelectedIndex(i)
     setMenuOpen(false)
     setError('')
+    setPassword('')
   }
 
   const selected = useMemo(
