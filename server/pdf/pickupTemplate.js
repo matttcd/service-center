@@ -1,3 +1,5 @@
+import { LOGO_DATA_URL } from './logo.js'
+
 // ============================================
 // pickupTemplate.js: HTML template for pickup receipt PDF via Puppeteer
 // ============================================
@@ -15,7 +17,7 @@ function formatDateTime(iso) {
 
 function titleCase(str) {
   if (!str) return ''
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
+  return str.replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 function esc(str) {
@@ -51,9 +53,12 @@ export function buildPickupHtml(order, customer, pickup) {
   body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #111; }
   .page { width: 210mm; padding: 14mm 14mm 28mm 14mm; }
 
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3mm; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3mm; }
   .header-left h1 { font-size: 14pt; font-weight: 700; letter-spacing: -0.3px; }
   .header-left p { font-size: 9pt; color: #555; margin-top: 1px; }
+  .header-left .header-contact { font-size: 8pt; color: #555; margin-top: 2px; line-height: 1.4; }
+  .header-center { display: flex; align-items: center; justify-content: center; }
+  .header-logo { width: 18mm; height: 18mm; border-radius: 50%; object-fit: contain; }
   .header-right { text-align: right; }
   .header-right .doc-title { font-size: 9pt; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 1.5px; }
   .header-right .order-num { font-size: 16pt; font-weight: 700; margin-top: 1px; }
@@ -83,7 +88,13 @@ export function buildPickupHtml(order, customer, pickup) {
   <div class="header">
     <div class="header-left">
       <h1>El Gringo Celulares</h1>
-      <p>Servicio Tecnico</p>
+      <div class="header-contact">
+        Belgrano 698, Esquina España<br>
+         WhatsApp: 3704-583266 | 3704-676320
+      </div>
+    </div>
+    <div class="header-center">
+      <img src="${LOGO_DATA_URL}" class="header-logo" />
     </div>
     <div class="header-right">
       <div class="doc-title">Orden de Retiro</div>
@@ -138,7 +149,7 @@ export function buildPickupHtml(order, customer, pickup) {
 <div class="signatures">
   <div class="sig-col">
     <div class="sig-line">&nbsp;</div>
-    <div class="sig-label">Firma quien retira</div>
+    <div class="sig-label">Firma</div>
   </div>
   <div class="sig-col">
     <div class="sig-line">&nbsp;</div>
