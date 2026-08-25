@@ -818,8 +818,17 @@ app.put('/api/orders/:id', auth, (req, res) => {
     if (conditions !== undefined) o.conditions = normalizeList(String(conditions))
     // Reparación
     if (fix !== undefined) o.fix = normalizeList(String(fix))
+    const prevPrice = o.price
     if (price !== undefined) o.price = Math.max(0, Number(price) || 0)
     if (issue !== undefined) o.issue = sentenceCase(String(issue))
+    // Historial para cambios relevantes
+    o.history = o.history || []
+    if (price !== undefined && Number(o.price) !== Number(prevPrice || 0)) {
+      o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: `Presupuesto: $${Number(price) || 0}` })
+    }
+    if (fix !== undefined) {
+      o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: `Arreglo: ${normalizeList(String(fix)) || 'sin definir'}` })
+    }
     // Notas del técnico (legacy)
     if (technicianNotes !== undefined) o.technicianNotes = sentenceCase(String(technicianNotes))
     // Notas vía note (append a notesLog)
@@ -860,6 +869,9 @@ app.post('/api/orders/:id/assign', auth, (req, res) => {
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
     o.assignedTo = userId
+    const techName = userId ? (db.users.find((u) => u.id === userId)?.name || '—') : 'sin técnico'
+    o.history = o.history || []
+    o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: `Asignado a ${techName}` })
     audit(d, 'assign', 'orders', o.id, req.user.id, `${o.orderNumber} · asignado a ${userId || 'sin técnico'}`)
   }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
 })
@@ -879,6 +891,8 @@ app.post('/api/orders/:id/notified', auth, (req, res) => {
     o.notified = notified
     o.notifiedAt = notified ? new Date().toISOString() : null
     o.notifiedBy = notified ? req.user.id : null
+    o.history = o.history || []
+    o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: notified ? 'Avisado al cliente' : 'Desmarcado aviso al cliente' })
     audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · cliente ${notified ? 'marcado como avisado' : 'desmarcado como avisado'}`)
   }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
 })
@@ -901,6 +915,8 @@ app.post('/api/orders/:id/confirm', auth, (req, res) => {
     o.confirmed = confirmed
     o.confirmedAt = confirmed ? new Date().toISOString() : null
     o.confirmedBy = confirmed ? req.user.id : null
+    o.history = o.history || []
+    o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: confirmed ? 'Confirmado por el cliente' : 'Desconfirmado' })
     audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · arreglo ${confirmed ? 'confirmado por el cliente' : 'desmarcado como confirmado'}`)
   }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
 })
