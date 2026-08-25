@@ -14,8 +14,8 @@ if not exist "server\node_modules" (
 )
 
 echo.
-echo Levantando backend de desarrollo en :3001 (usa server\data\db.json)
-start "Cuotas API dev :3001" cmd /k "%~dp0dev-api.bat"
+echo Levantando backend de desarrollo en :4000 (usa server\data\db.json)
+start "Service Center API dev :4000" cmd /k "%~dp0dev-api.bat"
 echo Levantando frontend de desarrollo en http://localhost:5173
 start "Cuotas Front dev :5173" cmd /k "%~dp0dev-front.bat"
 echo.
