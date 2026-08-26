@@ -72,7 +72,7 @@ export default function OrderModal({ order, onClose }) {
   const [showHistory, setShowHistory] = useState(false)
   const canBudget = ['mostrador', 'admin'].includes(currentUser?.role)
   const canEditWork = ['tecnico', 'admin'].includes(currentUser?.role)
-  // Para órdenes a revisión, el tipo de arreglo no se puede definir hasta que
+  // Para órdenes a revisión, el tipo de reparación no se puede definir hasta que
   // haya un técnico asignado y la orden esté en "en_revision".
   const fixLocked =
     order?.diagnosisType === 'revision' &&
@@ -403,7 +403,7 @@ export default function OrderModal({ order, onClose }) {
               {editingWork ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <span className={labelCls}>Tipo de arreglo</span>
+                    <span className={labelCls}>Tipo de reparación</span>
                     <button type="button" onClick={cancelEdit} disabled={busy} className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-500/10">
                       <X size={13} /> Cancelar
                     </button>
@@ -460,7 +460,7 @@ export default function OrderModal({ order, onClose }) {
                 </div>
               ) : (
                 <div>
-                  <span className={labelCls}>Tipo de arreglo</span>
+                  <span className={labelCls}>Tipo de reparación</span>
                   <div className="flex flex-wrap items-center gap-3 mt-1">
                     {displayedFixes.length > 0 ? (
                       displayedFixes.map((f) => (

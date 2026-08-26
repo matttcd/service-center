@@ -79,7 +79,7 @@ export function buildOrderHtml(order, customer) {
     'La garantía tiene una duración de <strong>treinta (30) días</strong> corridos desde el retiro y cubre exclusivamente las reparaciones detalladas en la presente orden.',
     'Transcurridos <strong>treinta (30) días</strong> desde la notificación de que el equipo está listo sin que haya sido retirado, El Gringo Celulares se reserva el derecho de modificar el presupuesto debido a variaciones en los costos de repuestos.',
     'Los pagos son exclusivamente <strong>en efectivo</strong>. El precio no incluye <strong>IVA (10,5%)</strong>.',
-    'Para cualquier duda o consulta comunicarse al <strong>3704-583266</strong> o al <strong>3704-676320</strong>.',
+    'Para cualquier duda o consulta sobre el estado de su dispositivo comunicarse al <strong>3704-583266</strong> o al <strong>3704-676320</strong>.',
     'Declaro haber leído y acepto las condiciones precedentemente descriptas.',
   ]
 
@@ -151,7 +151,7 @@ export function buildOrderHtml(order, customer) {
       <img src="${LOGO_DATA_URL}" class="header-logo" />
     </div>
     <div class="header-right">
-      <div class="doc-title">${isRevision ? 'Orden de Revision' : 'Orden de Servicio'}</div>
+      <div class="doc-title">Orden de Servicio</div>
       <div class="order-num">${esc(order?.orderNumber || '')}</div>
       <div class="order-date">${formatDateTime(order?.createdAt)}</div>
     </div>
@@ -183,14 +183,12 @@ export function buildOrderHtml(order, customer) {
     </div>
   </div>
 
-  <h2>${isRevision ? 'Diagnostico' : 'Reparacion'}${isRevision ? `<span class="h2-date">Fecha: <span class="h2-date-line">&nbsp;</span></span>` : ''}</h2>
-  ${isRevision ? field('Motivo de revision', esc(issue) || '<span style="color:#999">Sin datos</span>', { full: true }) : field('Tipo de arreglo', plainList(fixList), { full: true })}
-  ${hasFixData || !isRevision ? `
+  <h2>Reparacion</h2>
+  ${field('Tipo de reparación', isRevision ? 'Revisión' : plainList(fixList), { full: true })}
   <div class="grid2">
     ${field('Presupuesto', `<span class="val-price">${esc(priceStr) || '&mdash;'}</span>`)}
     ${order?.advance > 0 ? field('Sena recibida', `<span class="val-price">${esc(advanceStr)}</span>`) : ''}
   </div>
-  ` : `<p style="font-size:10pt;color:#999;margin-top:2mm;">Pendiente de diagnostico</p>`}
 
   <h2>Terminos y condiciones</h2>
   <ol class="legal-list">
@@ -218,7 +216,7 @@ export function buildOrderHtml(order, customer) {
   </div>
   <div class="sig-sep"></div>
   <div class="sig-block">
-    <div class="sig-block-title">Retiro</div>
+    <div class="sig-block-title">Se retira en la fecha: ___/___/______</div>
     <div class="sig-sello"><span class="sig-sello-text">Sello</span></div>
     <div class="sig-row">
       <div class="sig-col">
@@ -234,6 +232,7 @@ export function buildOrderHtml(order, customer) {
         <div class="sig-label">DNI</div>
       </div>
     </div>
+  </div>
   </div>
 </div>
 

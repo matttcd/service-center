@@ -830,7 +830,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
 
   // Permisos por campo
   if (fix !== undefined && !isAssignedTech) {
-    return res.status(403).json({ error: 'Solo el técnico encargado puede modificar el tipo de arreglo.' })
+    return res.status(403).json({ error: 'Solo el técnico encargado puede modificar el tipo de reparación.' })
   }
   if (price !== undefined && !isEmpOrAdmin) {
     return res.status(403).json({ error: 'Solo empleados o administradores pueden cargar el presupuesto.' })
@@ -847,7 +847,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
     return res.status(403).json({ error: 'Solo empleados o administradores pueden editar los detalles del equipo.' })
   }
 
-  // Para órdenes a revisión, el tipo de arreglo no se puede definir hasta que
+  // Para órdenes a revisión, el tipo de reparación no se puede definir hasta que
   // haya un técnico asignado y la orden esté en "en_revision".
   if (fix !== undefined && order.diagnosisType === 'revision' && !(order.fix || '').trim() && (!order.assignedTo || order.status !== 'en_revision')) {
     return res.status(400).json({ error: 'Asigná un técnico y pasá la orden a revisión antes de definir el arreglo.' })

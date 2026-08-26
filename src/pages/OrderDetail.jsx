@@ -256,7 +256,7 @@ export default function OrderDetail() {
     const fix = [...fixList, fixCustom.trim()].filter(Boolean).map((f) => titleCase(f)).join(', ')
     setBusy('fix')
     const res = await updateOrder(order.id, { fix })
-    if (!res.error) { setEditingFix(false); showNotice('Tipo de arreglo actualizado.') } else showNotice(res.error)
+    if (!res.error) { setEditingFix(false); showNotice('Tipo de reparación actualizado.') } else showNotice(res.error)
     setBusy(null)
   }
 
@@ -565,7 +565,7 @@ export default function OrderDetail() {
                 </div>
                 <div>
                   <div className="flex items-center justify-between gap-2">
-                    <label className={labelCls}>Tipo de arreglo</label>
+                    <label className={labelCls}>Tipo de reparación</label>
                     {isAssignedTech && !editingFix && ['en_revision', 'presupuesto'].includes(status) && (
                       <button onClick={startEditFix} className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10">
                         <Pencil size={12} /> Editar arreglo
