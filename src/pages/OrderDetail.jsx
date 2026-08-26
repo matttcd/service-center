@@ -274,9 +274,9 @@ export default function OrderDetail() {
   }
 
   const btnPrimary =
-    'inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50'
+    'inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50'
   const btnGhost =
-    'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+    'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
   const chipReadonly =
     'inline-flex items-center rounded-full border border-slate-400 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
   const chipSelected =
@@ -673,7 +673,7 @@ export default function OrderDetail() {
                     }
                     return (
                       <button key="avisar" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
-                        <BellRing size={14} />
+                        <BellRing size={16} />
                         Avisar al cliente
                       </button>
                     )
@@ -682,7 +682,7 @@ export default function OrderDetail() {
                     return (
                       <div key="confirm" className="flex flex-wrap items-center gap-2">
                         <button onClick={() => setConfirm({ title: 'Confirmar', message: '¿El cliente aprobó el presupuesto?', onConfirm: handleConfirm })} disabled={busy === 'confirm'} className={btnPrimary}>
-                          <CheckCircle2 size={14} />
+                          <CheckCircle2 size={16} />
                           Aceptó
                         </button>
                         <button onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado' || !order.notified} className={btnGhost}>
@@ -702,14 +702,14 @@ export default function OrderDetail() {
                   if (!order.notified) {
                     return (
                       <button key="avisar2" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
-                        <BellRing size={14} />
+                        <BellRing size={16} />
                         Avisar al cliente
                       </button>
                     )
                   }
                   return (
-                    <button key="entregar" onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={`${btnPrimary} !text-emerald-600`}>
-                      <PackageCheck size={14} />
+                    <button key="entregar" onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={btnPrimary}>
+                      <PackageCheck size={16} />
                       Entregar al cliente
                     </button>
                   )
@@ -725,7 +725,7 @@ export default function OrderDetail() {
                   title={!order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
                   className={`${btnPrimary} ${!order.assignedTo ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
                 >
-                  <Play size={14} />
+                  <Play size={16} />
                   Iniciar reparación
                 </button>
               )}
@@ -736,7 +736,7 @@ export default function OrderDetail() {
                   title={!order.assignedTo ? 'Asigná un técnico antes de iniciar la revisión' : ''}
                   className={`${btnPrimary} ${!order.assignedTo ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
                 >
-                  <Search size={14} />
+                  <Search size={16} />
                   Iniciar revisión
                 </button>
               )}
@@ -747,7 +747,7 @@ export default function OrderDetail() {
                   title={!(order.fix || '').trim() ? 'Registrá al menos una reparación antes de pasar a presupuesto' : ''}
                   className={`${btnPrimary} ${!(order.fix || '').trim() ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
                 >
-                  <Play size={14} />
+                  <Play size={16} />
                   Cargar presupuesto
                 </button>
               )}
@@ -758,37 +758,37 @@ export default function OrderDetail() {
                   title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : !order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
                   className={`${btnPrimary} ${(!order.confirmed || !order.assignedTo) ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
                 >
-                  <Play size={14} />
+                  <Play size={16} />
                   Aceptó → reparar
                 </button>
               )}
               {status === 'en_reparacion' && isTech && (
                 <>
                   <button onClick={() => doStatus('terminado')} disabled={busy === 'terminado'} className={btnPrimary}>
-                    <CheckCircle2 size={14} />
+                    <CheckCircle2 size={16} />
                     Marcar terminado (listo)
                   </button>
                   <button onClick={() => doStatus('falta_repuestos')} disabled={busy === 'falta_repuestos'} className={btnGhost}>
-                    <PackageX size={14} />
+                    <PackageX size={16} />
                     Falta de repuestos
                   </button>
                 </>
               )}
               {status === 'falta_repuestos' && isTech && (
                 <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnPrimary}>
-                  <Play size={14} />
+                  <Play size={16} />
                   Repuestos llegaron
                 </button>
               )}
               {status === 'terminado' && isTech && (
                 <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnGhost}>
-                  <RotateCcw size={14} />
+                  <RotateCcw size={16} />
                   Volver a reparación
                 </button>
               )}
               {status === 'entregado' && isCounter && (
                 <button onClick={() => setConfirm({ title: 'Garantía', message: '¿Reingresar el equipo por garantía? Aparecerá en Entrantes.', onConfirm: handleGarantia })} disabled={busy === 'recibido'} className={btnGhost}>
-                  <RotateCcw size={14} />
+                  <RotateCcw size={16} />
                   Reingresar por garantía
                 </button>
               )}
