@@ -356,12 +356,12 @@ export default function OrderDetail() {
                   const res = await printLabel(order.id)
                   showNotice(res.error ? res.error : 'Etiqueta enviada a la impresora.')
                 }}
-                className={btnGhost}
+                className={`${btnGhost} !px-3 !py-1.5 !text-xs`}
               >
                 <Sticker size={14} />
                 Imprimir etiqueta
               </button>
-              <button onClick={() => setPrinting(true)} className={btnPrimary}>
+              <button onClick={() => setPrinting(true)} className={`${btnPrimary} !px-3 !py-1.5 !text-xs`}>
                 <Printer size={14} />
                 Imprimir orden
               </button>
