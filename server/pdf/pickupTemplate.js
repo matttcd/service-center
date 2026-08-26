@@ -59,10 +59,10 @@ export function buildPickupHtml(order, customer, pickup) {
   const date = formatDateTime(new Date().toISOString())
 
   const pickupBullets = [
-    'Para hacer valer la garantía, el cliente deberá presentar la <strong>orden original</strong> dentro de los <strong>treinta (30) días</strong> corridos desde la fecha de retiro.',
+    'Para hacer valer la garantía, el cliente deberá presentar la <strong>orden original</strong> dentro de las <strong>cuarenta y ocho (48) horas</strong> desde la fecha de retiro.',
     'Sin la <strong>orden original</strong> no se reconocerá garantía alguna sobre las reparaciones realizadas.',
     'La garantía tiene una duración de <strong>treinta (30) días</strong> corridos desde el retiro y cubre exclusivamente las reparaciones detalladas en la presente constancia.',
-    'Los pagos son exclusivamente <strong>en efectivo</strong>. El precio no incluye <strong>IVA (10,5%)</strong>.',
+    'Los pagos son exclusivamente <strong>en efectivo</strong>.',
     'Para cualquier duda o consulta comunicarse al <strong>3704-583266</strong> o al <strong>3704-676320</strong>.',
     'Declaro haber leído y acepto las condiciones precedentemente descriptas.',
   ]

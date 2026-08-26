@@ -765,6 +765,9 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   if (status === 'entregado' && !isCounter) {
     return res.status(403).json({ error: 'Solo recepción (o el admin) puede entregar un equipo.' })
   }
+  if (status === 'recibido' && from === 'entregado' && !isCounter) {
+    return res.status(403).json({ error: 'Solo recepción (o el admin) puede recibir un reingreso por garantía.' })
+  }
 
   mutate((d) => {
     const o = d.orders.find((x) => x.id === req.params.id)
@@ -780,7 +783,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
           ? 'Cliente retiró el equipo'
           : status === 'entregado' && previous === 'presupuesto' && !retiro
             ? 'Cliente rechazó el presupuesto'
-            : status === 'en_reparacion' && previous === 'entregado'
+            : status === 'recibido' && previous === 'entregado'
               ? 'Reingreso por garantía'
               : status === 'falta_repuestos'
                 ? 'Esperando repuestos'
@@ -788,6 +791,8 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
                   ? 'Repuestos recibidos'
                   : undefined,
     })
+    if (status === 'recibido' && previous === 'entregado') o.warrantyReturn = true
+    if (status === 'entregado') o.warrantyReturn = false
     if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status)) o.repairedBy = req.user.id
     if (['presupuesto', 'terminado'].includes(status)) {
       o.notified = false

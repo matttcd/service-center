@@ -24,7 +24,9 @@ export default function OrderCard({ order, onOpen }) {
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
-          {order.status === 'presupuesto' ? (
+          {order.warrantyReturn ? (
+            <Badge tone="orange">Garantía</Badge>
+          ) : order.status === 'presupuesto' ? (
             order.confirmed ? (
               <Badge tone="green">Confirmado</Badge>
             ) : (

@@ -45,7 +45,7 @@ export function allowedTransitions(order) {
     case 'terminado':
       return ['entregado', 'en_reparacion']
     case 'entregado':
-      return ['en_reparacion']
+      return ['recibido']
     default:
       return []
   }

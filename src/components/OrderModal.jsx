@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ChevronRight,
+  ChevronDown,
   Check,
   Bell,
   BellOff,
@@ -523,6 +524,7 @@ export default function OrderModal({ order, onClose }) {
             >
               <History size={13} />
               Historial
+              <ChevronDown size={13} className={`ml-1 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
               <span className="ml-auto text-slate-300 dark:text-slate-600">{order.history.length} eventos</span>
             </button>
             {showHistory && (

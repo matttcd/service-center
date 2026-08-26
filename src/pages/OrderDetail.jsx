@@ -7,7 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Trash2, Play, Search, Check, CheckCircle2, FileText,
   PackageCheck, PackageX, RotateCcw, Sticker, Save, Phone, BellRing,
-  Lock, Smartphone, User, X, Pencil, MoreVertical, StickyNote, History,
+  Lock, Smartphone, User, X, Pencil, MoreVertical, StickyNote, History, ChevronDown,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -52,6 +52,7 @@ export default function OrderDetail() {
   const [notice, setNotice] = useState('')
   const noticeTimer = useRef(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [pickupModal, setPickupModal] = useState(null)
 
@@ -181,9 +182,9 @@ export default function OrderDetail() {
   }
 
   const handleGarantia = async () => {
-    setBusy('en_reparacion')
-    const res = await setOrderStatus(order.id, 'en_reparacion')
-    showNotice(res.error ? res.error : 'Equipo en reparación por garantía.')
+    setBusy('recibido')
+    const res = await setOrderStatus(order.id, 'recibido')
+    showNotice(res.error ? res.error : 'Equipo reingresado por garantía.')
     setBusy(null)
   }
 
@@ -785,22 +786,34 @@ export default function OrderDetail() {
                   Volver a reparación
                 </button>
               )}
-              {status === 'entregado' && isTech && (
-                <button onClick={() => setConfirm({ title: 'Garantía', message: '¿Volver a reparar el equipo por garantía?', onConfirm: handleGarantia })} disabled={busy === 'en_reparacion'} className={btnGhost}>
+              {status === 'entregado' && isCounter && (
+                <button onClick={() => setConfirm({ title: 'Garantía', message: '¿Reingresar el equipo por garantía? Aparecerá en Entrantes.', onConfirm: handleGarantia })} disabled={busy === 'recibido'} className={btnGhost}>
                   <RotateCcw size={14} />
-                  Volver a reparación (garantía)
+                  Reingresar por garantía
                 </button>
               )}
             </div>
           </div>
         </section>
 
+        {/* Separador */}
+        <div className="mx-6 border-t border-slate-200 dark:border-slate-700" />
+
         {/* Historial */}
         {(order.history || []).length > 0 && (
-          <section>
+          <section className="mb-8">
             <div className="px-6 pb-2 pt-5">
-              <p className={sectionHead}>Historial</p>
+              <button
+                onClick={() => setShowHistory((s) => !s)}
+                className="flex w-full items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <History size={13} />
+                Historial
+                <ChevronDown size={13} className={`ml-1 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+                <span className="ml-auto text-slate-300 dark:text-slate-600">{order.history.length} eventos</span>
+              </button>
             </div>
+            {showHistory && (
             <div className="px-6 py-4">
               {(order.history || []).map((h, idx) => {
                 const isLast = idx === (order.history || []).length - 1
@@ -827,6 +840,7 @@ export default function OrderDetail() {
                 )
               })}
             </div>
+            )}
           </section>
         )}
       </Card>
