@@ -1,18 +1,25 @@
-"""Imprime etiquetas ZPL a una impresora termica Zebra/Godex por USB (Windows).
+"""Imprime etiquetas ZPL a una impresora termica Zebra/Godex.
+
+En Windows: envía directo a la impresora USB vía win32print.
+En Linux (Docker): envía vía TCP al print_bridge.py corriendo en Windows.
 
 Uso:
-    python zpl_printer.py --order OS-0001 \
+    python zpl_printer.py --order OS0001 \
         --model "Samsung A15" --customer "Fernando Fleitas" \
         --date 17/08/2026
 
 Salida (stdout): JSON {"ok": true} o {"ok": false, "error": "..."}.
-Reutiliza el formato de repair-shop (printer_utils.py), y translitera
-acentos para que la fuente de la impresora no falle.
 """
 import argparse
 import json
 import re
+import struct
 import sys
+import platform
+import socket
+
+PRINT_BRIDGE_HOST = 'host.docker.internal'
+PRINT_BRIDGE_PORT = 9200
 
 # Transliteracion: las fuentes estandar de las Zebra (CG Triumvirate) no
 # incluyen acentos ni eñe; los reemplazamos por caracteres ASCII simples.
@@ -64,6 +71,8 @@ def generate_zpl(order_number, phone_model, customer_name, date):
 
 
 def _get_printer_name():
+    if platform.system() != 'Windows':
+        return None
     try:
         import win32print
         printers = [p[2] for p in win32print.EnumPrinters(2)]
@@ -75,7 +84,46 @@ def _get_printer_name():
         return None
 
 
+def _send_via_tcp(zpl):
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(10)
+        sock.connect((PRINT_BRIDGE_HOST, PRINT_BRIDGE_PORT))
+        payload = json.dumps({'zpl': zpl}).encode('utf-8')
+        sock.sendall(struct.pack('>I', len(payload)))
+        sock.sendall(payload)
+        raw_len = sock.recv(4)
+        if len(raw_len) < 4:
+            return False, 'Respuesta incompleta del bridge.'
+        resp_len = struct.unpack('>I', raw_len)[0]
+        data = b''
+        while len(data) < resp_len:
+            chunk = sock.recv(resp_len - len(data))
+            if not chunk:
+                break
+            data += chunk
+        resp = json.loads(data.decode('utf-8'))
+        return resp.get('ok', False), resp.get('error')
+    except socket.timeout:
+        return False, 'Timeout al conectar con el print bridge.'
+    except ConnectionRefusedError:
+        return False, 'Print bridge no está corriendo en el host.'
+    except Exception as e:
+        return False, str(e)
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
+
+
 def print_label(zpl):
+    if platform.system() == 'Windows':
+        return _print_windows(zpl)
+    return _send_via_tcp(zpl)
+
+
+def _print_windows(zpl):
     try:
         import win32print
         printer_name = _get_printer_name()
