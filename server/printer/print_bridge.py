@@ -28,6 +28,10 @@ def get_default_printer():
     if not HAS_WIN32:
         return None
     try:
+        printers = [p[2] for p in win32print.EnumPrinters(2)]
+        for p in printers:
+            if 'zdesigner' in p.lower() or 'gt800' in p.lower():
+                return p
         return win32print.GetDefaultPrinter()
     except Exception:
         return None
