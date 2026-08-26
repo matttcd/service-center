@@ -540,7 +540,7 @@ app.post('/api/orders', auth, (req, res) => {
 
   let order = null
   mutate((d) => {
-    const orderNumber = `OS-${pad4((d.orderCounter || 0) + 1)}`
+    const orderNumber = `OS${pad4((d.orderCounter || 0) + 1)}`
     d.orderCounter = (d.orderCounter || 0) + 1
     order = {
       id: uid(),
