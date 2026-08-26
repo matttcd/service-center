@@ -57,7 +57,7 @@ export default function App() {
         <Route
           path="taller"
           element={
-            <RequireRole roles={['tecnico', 'admin']}>
+            <RequireRole roles={['tecnico', 'admin', 'recepcion']}>
               <Taller />
             </RequireRole>
           }

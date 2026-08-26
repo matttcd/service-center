@@ -58,7 +58,7 @@ export default function Orders() {
   const [formOpen, setFormOpen] = useState(false)
   const [printing, setPrinting] = useState(null)
   const [notice, setNotice] = useState(null)
-  const canCreate = ['mostrador', 'admin'].includes(currentUser?.role)
+  const canCreate = ['recepcion', 'admin'].includes(currentUser?.role)
 
   const brands = useMemo(
     () => [...new Set(pageData.orders.map((o) => o.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es-AR')),
@@ -262,6 +262,7 @@ export default function Orders() {
                   <Th col="orderNumber">Nº</Th>
                   <Th col="customerName">Cliente</Th>
                   <Th col="model">Equipo</Th>
+                  <Th col="diagnosisType">Tipo</Th>
                   <Th col="price" className="text-right">Precio</Th>
                   <Th col="status">Estado</Th>
                   <Th col="notified">Aviso</Th>
@@ -282,6 +283,11 @@ export default function Orders() {
                       {titleCase(o.customerName)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-slate-700 dark:text-slate-200">{titleCase(o.brand)} {titleCase(o.model)}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      <Badge tone={o.diagnosisType === 'revision' ? 'primary' : 'slate'}>
+                        {o.diagnosisType === 'revision' ? 'Revisión' : 'Reparación'}
+                      </Badge>
+                    </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold text-slate-900 dark:text-white">
                       {o.price ? formatMoney(o.price) : '—'}
                     </td>
@@ -289,10 +295,12 @@ export default function Orders() {
                       <Badge tone={orderStatusTone(o.status)}>{ORDER_STATUS_LABEL[o.status]}</Badge>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">
-                      {o.notified ? (
-                        <Badge tone="green">Avisado</Badge>
-                      ) : (
-                        <Badge tone="yellow">Sin avisar</Badge>
+                      {['presupuesto', 'terminado'].includes(o.status) && (
+                        o.notified ? (
+                          <Badge tone="green">Avisado</Badge>
+                        ) : (
+                          <Badge tone="yellow">Sin avisar</Badge>
+                        )
                       )}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-slate-500 dark:text-slate-400">{formatDate(o.createdAt)}</td>

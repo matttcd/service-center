@@ -517,8 +517,8 @@ app.delete('/api/customers/:id', auth, adminOnly, (req, res) => {
 
 // ---------- Órdenes ----------
 app.post('/api/orders', auth, (req, res) => {
-  if (!['mostrador', 'admin'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Solo empleados o administradores pueden crear órdenes.' })
+  if (!['recepcion', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Solo recepción o administradores pueden crear órdenes.' })
   }
   const body = req.body || {}
   const db = getDB()
@@ -686,8 +686,10 @@ app.get('/api/orders/:id/pickup-pdf', auth, async (req, res) => {
     const order = db.orders.find((o) => o.id === req.params.id)
     if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
     const customer = db.customers.find((c) => c.id === order.customerId)
+    const names = new Map(db.users.map((u) => [u.id, u.name]))
+    const orderWithName = { ...order, receivedByName: names.get(order.receivedBy) || '—' }
     const pickup = { pickupBy: order.pickupBy, pickupName: order.pickupName, pickupDni: order.pickupDni }
-    const html = buildPickupHtml(order, customer, pickup)
+    const html = buildPickupHtml(orderWithName, customer, pickup)
     const pdfBuffer = await htmlToPdf(html)
     res.type('application/pdf')
     res.set('Content-Disposition', `inline; filename="retiro-${order.orderNumber}.pdf"`)
@@ -724,7 +726,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   const from = order.status
   const role = req.user.role
   const isTech = ['tecnico', 'admin'].includes(role)
-  const isCounter = ['mostrador', 'admin'].includes(role)
+  const isCounter = ['recepcion', 'admin'].includes(role)
 
   // Transiciones permitidas (respetan el flujo real del taller).
   const allowed = allowedTransitions(order).includes(status)
@@ -757,11 +759,11 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) && !isTech) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
   }
-  if (status === 'presupuesto' && !['mostrador', 'admin', 'tecnico'].includes(role)) {
-    return res.status(403).json({ error: 'Solo empleados o administradores pueden cargar el presupuesto.' })
+  if (status === 'presupuesto' && !['recepcion', 'admin', 'tecnico'].includes(role)) {
+    return res.status(403).json({ error: 'Solo recepción o administradores pueden cargar el presupuesto.' })
   }
   if (status === 'entregado' && !isCounter) {
-    return res.status(403).json({ error: 'Solo el mostrador (o el admin) puede entregar un equipo.' })
+    return res.status(403).json({ error: 'Solo recepción (o el admin) puede entregar un equipo.' })
   }
 
   mutate((d) => {
@@ -822,18 +824,18 @@ app.put('/api/orders/:id', auth, (req, res) => {
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   const {
     brand, model, pin, pattern, accessories, conditions,
-    technicianNotes, fix, price, issue, note,
+    technicianNotes, fix, price, issue, note, editNote, deleteNote,
   } = req.body || {}
   const role = req.user.role
   const isAssignedTech = role === 'tecnico' && order.assignedTo === req.user.id
-  const isEmpOrAdmin = ['mostrador', 'admin'].includes(role)
+  const isEmpOrAdmin = ['recepcion', 'admin'].includes(role)
 
   // Permisos por campo
   if (fix !== undefined && !isAssignedTech) {
     return res.status(403).json({ error: 'Solo el técnico encargado puede modificar el tipo de reparación.' })
   }
   if (price !== undefined && !isEmpOrAdmin) {
-    return res.status(403).json({ error: 'Solo empleados o administradores pueden cargar el presupuesto.' })
+    return res.status(403).json({ error: 'Solo recepción o administradores pueden cargar el presupuesto.' })
   }
   if (technicianNotes !== undefined && !isAssignedTech) {
     return res.status(403).json({ error: 'Solo el técnico encargado puede editar las notas.' })
@@ -841,10 +843,26 @@ app.put('/api/orders/:id', auth, (req, res) => {
   if (note !== undefined && !isAssignedTech) {
     return res.status(403).json({ error: 'Solo el técnico encargado puede agregar notas.' })
   }
+  if (editNote !== undefined) {
+    const noteId = editNote?.id
+    const entry = (order.notesLog || []).find((n) => n.id === noteId)
+    if (!entry) return res.status(404).json({ error: 'Nota no encontrada.' })
+    if (entry.by !== req.user.id && role !== 'admin') {
+      return res.status(403).json({ error: 'Solo podés editar tus propias notas.' })
+    }
+  }
+  if (deleteNote !== undefined) {
+    const noteId = deleteNote?.id
+    const entry = (order.notesLog || []).find((n) => n.id === noteId)
+    if (!entry) return res.status(404).json({ error: 'Nota no encontrada.' })
+    if (entry.by !== req.user.id && role !== 'admin') {
+      return res.status(403).json({ error: 'Solo podés eliminar tus propias notas.' })
+    }
+  }
   const equipFields = [brand, model, pin, pattern, accessories, conditions]
   const touchesEquip = equipFields.some((v) => v !== undefined)
   if (touchesEquip && !isEmpOrAdmin) {
-    return res.status(403).json({ error: 'Solo empleados o administradores pueden editar los detalles del equipo.' })
+    return res.status(403).json({ error: 'Solo recepción o administradores pueden editar los detalles del equipo.' })
   }
 
   // Para órdenes a revisión, el tipo de reparación no se puede definir hasta que
@@ -888,6 +906,20 @@ app.put('/api/orders/:id', auth, (req, res) => {
       o.notesLog.push(entry)
       o.technicianNotes = entry.text
     }
+    // Editar nota existente
+    if (editNote !== undefined && editNote?.id && editNote?.text) {
+      o.notesLog = o.notesLog || []
+      const entry = o.notesLog.find((n) => n.id === editNote.id)
+      if (entry) {
+        entry.text = sentenceCase(String(editNote.text).trim())
+        entry.editedAt = new Date().toISOString()
+      }
+    }
+    // Eliminar nota existente
+    if (deleteNote !== undefined && deleteNote?.id) {
+      o.notesLog = (o.notesLog || []).filter((n) => n.id !== deleteNote.id)
+      o.technicianNotes = o.notesLog.length > 0 ? o.notesLog[o.notesLog.length - 1].text : ''
+    }
     if (budgetChanged && o.status === 'presupuesto' && o.confirmed) {
       o.confirmed = false
       o.confirmedAt = null
@@ -905,7 +937,7 @@ app.post('/api/orders/:id/assign', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
-  const canAssign = ['tecnico', 'admin', 'mostrador'].includes(req.user.role)
+  const canAssign = ['tecnico', 'admin', 'recepcion'].includes(req.user.role)
   if (!canAssign) {
     return res.status(403).json({ error: 'No tenés permiso para asignar un técnico.' })
   }
@@ -932,8 +964,8 @@ app.post('/api/orders/:id/notified', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
-  if (!['mostrador', 'admin'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Solo los empleados pueden marcar al cliente como avisado.' })
+  if (!['recepcion', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Solo recepción puede marcar al cliente como avisado.' })
   }
   const notified = !!req.body?.notified
   mutate((d) => {
@@ -953,8 +985,8 @@ app.post('/api/orders/:id/confirm', auth, (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
-  if (!['mostrador', 'admin'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Solo los empleados pueden confirmar el arreglo.' })
+  if (!['recepcion', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Solo recepción puede confirmar el arreglo.' })
   }
   const confirmed = !!req.body?.confirmed
   if (confirmed && (!order.notified || Number(order.price) <= 0)) {
@@ -1008,7 +1040,7 @@ app.post('/api/users', auth, adminOnly, (req, res) => {
   if (!password || password.length < 4) {
     return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres.' })
   }
-  if (!['admin', 'tecnico', 'mostrador'].includes(role)) {
+  if (!['admin', 'tecnico', 'recepcion'].includes(role)) {
     return res.status(400).json({ error: 'Rol inválido.' })
   }
 

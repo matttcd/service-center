@@ -15,7 +15,7 @@ import {
   History,
   Pencil,
   Phone,
-  Smartphone,
+  StickyNote,
   User,
   X,
 } from 'lucide-react'
@@ -24,6 +24,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import Badge from './Badge.jsx'
 import ConfirmModal from './ConfirmModal.jsx'
 import Modal from './Modal.jsx'
+import NotesModal from './NotesModal.jsx'
 import TechnicianSelect from './TechnicianSelect.jsx'
 import { PatternPreview } from './PatternPad.jsx'
 import { COMMON_FIXES } from '../utils/constants.js'
@@ -33,7 +34,6 @@ import {
   formatMoney,
   formatDateTime,
   titleCase,
-  sentenceCase,
 } from '../utils/helpers.js'
 import { nextStatus, nextStatusLabel } from '../../shared/fsm.js'
 
@@ -62,23 +62,24 @@ const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-
 export default function OrderModal({ order, onClose }) {
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { customers, setOrderStatus, toggleNotified, updateOrder, confirmOrder } = useData()
+  const { customers, setOrderStatus, toggleNotified, updateOrder, confirmOrder, editNote, deleteNote } = useData()
   const [fixList, setFixList] = useState(() => (order?.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
   const [customFix, setCustomFix] = useState('')
   const [priceText, setPriceText] = useState(order?.price ? String(order.price) : '')
-  const [techNotes, setTechNotes] = useState(order?.technicianNotes || '')
   const [busy, setBusy] = useState(false)
   const [alertModal, setAlertModal] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
-  const canBudget = ['mostrador', 'admin'].includes(currentUser?.role)
+  const [notesModalOpen, setNotesModalOpen] = useState(false)
+  const canBudget = ['recepcion', 'admin'].includes(currentUser?.role)
   const canEditWork = ['tecnico', 'admin'].includes(currentUser?.role)
+  const isReadOnly = !['tecnico'].includes(currentUser?.role)
   // Para órdenes a revisión, el tipo de reparación no se puede definir hasta que
   // haya un técnico asignado y la orden esté en "en_revision".
   const fixLocked =
     order?.diagnosisType === 'revision' &&
     !(order?.fix || '').trim() &&
     (!order?.assignedTo || order?.status !== 'en_revision')
-  const [editingWork, setEditingWork] = useState(() => canEditWork && !order?.fix && !fixLocked)
+  const [editingWork, setEditingWork] = useState(() => canEditWork && !isReadOnly && !order?.fix && !fixLocked)
 
   // Resincroniza el estado local cuando la orden cambia por fuera (SSE/otra
   // pestaña). No pisa ediciones en curso: solo re-sincroniza si no hay cambios.
@@ -91,15 +92,12 @@ export default function OrderModal({ order, onClose }) {
       setFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
       setCustomFix('')
       setPriceText(order.price ? String(order.price) : '')
-      setTechNotes(order.technicianNotes || '')
-      setEditingWork(canEditWork && !order.fix && !fixLocked)
+      setEditingWork(canEditWork && !isReadOnly && !order.fix && !fixLocked)
       return
     }
-    const notesClean = (techNotes.trim() || '') === (order.technicianNotes || '')
     const priceClean = Math.abs((Number(priceText) || 0) - (order.price || 0)) <= 0.001
     const fixClean = [...fixList, customFix.trim()].filter(Boolean).join(', ') === (order.fix || '')
-    if (notesClean && priceClean && fixClean) {
-      setTechNotes(order.technicianNotes || '')
+    if (priceClean && fixClean) {
       setPriceText(order.price ? String(order.price) : '')
       setFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
       setCustomFix('')
@@ -116,24 +114,23 @@ export default function OrderModal({ order, onClose }) {
   const lockedBudget = order.status === 'presupuesto' && !order.confirmed
   const missingTech = (next === 'en_reparacion' || next === 'en_revision') && !order.assignedTo
 
-  const notesDirty = (techNotes.trim() || '') !== (order.technicianNotes || '')
   const workDirty =
     fixValue !== (order.fix || '') ||
     Math.abs((Number(priceText) || 0) - (order.price || 0)) > 0.001
-  const dirty = notesDirty || (editingWork && workDirty)
+  const dirty = editingWork && workDirty
   const wantsPresupuesto = order.status === 'en_reparacion' && editingWork && workDirty
   const effectiveNext = wantsPresupuesto ? 'presupuesto' : next
   const effectiveLabel = wantsPresupuesto ? 'Presupuestar' : nextStatusLabel(order)
 
   const savePending = async () => {
-    const fields = { technicianNotes: sentenceCase(techNotes.trim()) }
+    const fields = {}
     let workChanged = false
     if (editingWork) {
       fields.fix = fixValue.split(',').map((s) => titleCase(s.trim())).filter(Boolean).join(', ')
       if (canBudget) fields.price = Number(priceText) || 0
       workChanged = workDirty
     }
-    if (!workChanged && !notesDirty) return { error: null }
+    if (!workChanged) return { error: null }
     const res = await updateOrder(order.id, fields)
     if (res.error) return res
     if (workChanged && order.confirmed) {
@@ -155,6 +152,11 @@ export default function OrderModal({ order, onClose }) {
     setBusy(true)
     const res = await confirmOrder(order.id, !order.confirmed)
     setBusy(false)
+    if (res.error) setAlertModal(res.error)
+  }
+
+  const saveNote = async (text) => {
+    const res = await updateOrder(order.id, { note: text })
     if (res.error) setAlertModal(res.error)
   }
 
@@ -218,6 +220,7 @@ export default function OrderModal({ order, onClose }) {
   const phones = [customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean)
   const accessories = (order.accessories || '').split(',').map((a) => a.trim()).filter(Boolean)
   const conditions = (order.conditions || '').split(',').map((c) => c.trim()).filter(Boolean)
+  const notesLog = order.notesLog || []
 
   // Para pasar de "En revisión" a "Presupuesto" hace falta al menos una reparación registrada.
   const hasRepair = (fixValue || order.fix || '').trim().length > 0
@@ -225,10 +228,13 @@ export default function OrderModal({ order, onClose }) {
 
   return (
     <>
-    <Modal open onClose={onClose} title={`${order.orderNumber} · ${order.brand} ${order.model}`} maxWidth="max-w-3xl">
-      <div className="space-y-6">
-        {/* Estado */}
-        <div className="flex flex-wrap items-center gap-2">
+    <Modal
+      open
+      onClose={onClose}
+      maxWidth="max-w-3xl"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <span>{order.orderNumber} · {order.brand} {order.model}</span>
           {order.diagnosisType === 'revision' ? (
             <Badge tone="primary">Revisión</Badge>
           ) : (
@@ -241,7 +247,10 @@ export default function OrderModal({ order, onClose }) {
             </Badge>
           )}
           {order.confirmed && <Badge tone="green">Confirmado</Badge>}
-        </div>
+        </span>
+      }
+    >
+      <div className="space-y-6">
 
         {/* Cliente (solo nombre + teléfono) */}
         <section>
@@ -272,12 +281,6 @@ export default function OrderModal({ order, onClose }) {
           <p className="mb-3 border-b border-slate-200 pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-700">
             Detalles del equipo
           </p>
-          <div className="flex items-center gap-2 pb-2 text-base">
-            <Smartphone size={15} className="shrink-0 text-slate-400" />
-            <span className="truncate font-semibold text-slate-900 dark:text-white">
-              {order.brand} {order.model}
-            </span>
-          </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div className="flex flex-col gap-4">
@@ -324,21 +327,6 @@ export default function OrderModal({ order, onClose }) {
                 )}
               </div>
             </div>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className={labelCls}>Seña recibida</span>
-              <p className="rounded-lg bg-slate-100 px-3 py-2 text-base font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                {formatMoney(order.advance)}
-              </p>
-            </label>
-            <label className="block">
-              <span className={labelCls}>Técnico encargado</span>
-              <p className="rounded-lg bg-slate-100 px-3 py-2 text-base font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                {order.assignedToName || '—'}
-              </p>
-            </label>
           </div>
 
           <div className="mt-3">
@@ -388,18 +376,33 @@ export default function OrderModal({ order, onClose }) {
             Reparación
           </p>
 
-          {/* Técnico y arreglo en la misma fila */}
+          {/* Técnico y arreglo */}
           <div className="flex flex-col gap-3 md:flex-row md:gap-4">
-            {/* Técnico */}
+            {!isReadOnly && (
             <div className="md:w-48 md:shrink-0">
               <span className={labelCls}>Técnico encargado</span>
               <div className="mt-1">
                 <TechnicianSelect order={order} />
               </div>
+              {['en_revision', 'en_reparacion'].includes(order.status) && (
+              <div className="mt-3">
+                <span className={labelCls}>Notas del técnico</span>
+                <div className="mt-1">
+                  <button
+                    onClick={() => setNotesModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+                  >
+                    <StickyNote size={15} />
+                    Agregar nota{notesLog.length > 0 ? ` (${notesLog.length})` : ''}
+                  </button>
+                </div>
+              </div>
+              )}
             </div>
+            )}
 
-            {/* Arreglo */}
-            <div className="flex-1 min-w-0">
+          {/* Arreglo */}
+          <div className="flex-1 min-w-0">
               {editingWork ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
@@ -408,7 +411,7 @@ export default function OrderModal({ order, onClose }) {
                       <X size={13} /> Cancelar
                     </button>
                   </div>
-                  {canEditWork && (
+                  {canEditWork && !isReadOnly && (
                   <div className="flex flex-wrap items-center gap-2">
                     {COMMON_FIXES.map((f) => (
                       <button
@@ -443,7 +446,7 @@ export default function OrderModal({ order, onClose }) {
                     </span>
                   </div>
                   )}
-                  {canBudget && (
+                  {canBudget && !isReadOnly && (
                   <div className="max-w-xs">
                     <label className={labelCls}>Presupuesto ($)</label>
                     <input
@@ -473,10 +476,7 @@ export default function OrderModal({ order, onClose }) {
                     ) : (
                       <span className={chipReadonly}>Sin definir</span>
                     )}
-                    {canBudget && (
-                      <span className="text-lg font-bold text-slate-900 dark:text-white">{formatMoney(order.price)}</span>
-                    )}
-                    {!fixLocked && (canEditWork || canBudget) && ['en_revision', 'en_reparacion'].includes(order.status) && (
+                    {!fixLocked && (canEditWork || canBudget) && !isReadOnly && ['en_revision', 'en_reparacion'].includes(order.status) && (
                     <button
                       type="button"
                       onClick={startEdit}
@@ -487,24 +487,30 @@ export default function OrderModal({ order, onClose }) {
                     </button>
                     )}
                   </div>
+                  {order.diagnosisType === 'visible' && (Number(order.price) > 0 || Number(order.advance) > 0) && (
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {Number(order.price) > 0 && (
+                        <label className="block">
+                          <span className={labelCls}>Presupuesto</span>
+                          <p className="rounded-lg bg-slate-100 px-3 py-2 text-base font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            {formatMoney(order.price)}
+                          </p>
+                        </label>
+                      )}
+                      {Number(order.advance) > 0 && (
+                        <label className="block">
+                          <span className={labelCls}>Seña</span>
+                          <p className="rounded-lg bg-slate-100 px-3 py-2 text-base font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            {formatMoney(order.advance)}
+                          </p>
+                        </label>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
-
-          {/* Notas del técnico */}
-          {['en_revision', 'en_reparacion'].includes(order.status) && (
-          <label className="mt-4 block">
-            <span className={labelCls}>Notas del técnico</span>
-            <textarea
-              value={techNotes}
-              onChange={(e) => setTechNotes(e.target.value)}
-              rows={3}
-              placeholder="Repuestos usados, diagnóstico, qué decirle al cliente..."
-              className={`${inputCls} resize-none`}
-            />
-          </label>
-          )}
 
           </section>
 
@@ -537,11 +543,13 @@ export default function OrderModal({ order, onClose }) {
 
         {/* Acciones */}
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-          <button onClick={saveOnly} disabled={busy || !dirty} className={`${btnPrimary} !px-4 !py-2.5 !text-sm`}>
-            <Check size={14} />
-            Guardar
-          </button>
-          {canBudget && ['presupuesto', 'terminado'].includes(order.status) && (
+          {!isReadOnly && (
+            <button onClick={saveOnly} disabled={busy || !dirty} className={`${btnPrimary} !px-4 !py-2.5 !text-sm`}>
+              <Check size={14} />
+              Guardar
+            </button>
+          )}
+          {canBudget && !isReadOnly && ['presupuesto', 'terminado'].includes(order.status) && (
             <button onClick={doNotify} disabled={busy} className={btnGhost}>
               {order.notified ? <BellOff size={14} /> : <Bell size={14} />}
               {order.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
@@ -554,7 +562,7 @@ export default function OrderModal({ order, onClose }) {
             Ver orden completa
             <ArrowRight size={16} />
           </button>
-          {effectiveNext && (
+          {effectiveNext && !isReadOnly && (
             <button
               onClick={finish}
               disabled={busy || lockedBudget || missingRepair || missingTech}
@@ -575,6 +583,16 @@ export default function OrderModal({ order, onClose }) {
       title="Aviso"
       message={alertModal}
       type="alert"
+    />
+    <NotesModal
+      open={notesModalOpen}
+      onClose={() => setNotesModalOpen(false)}
+      notesLog={notesLog}
+      isAssignedTech={!isReadOnly}
+      currentUser={currentUser}
+      onSave={saveNote}
+      onEdit={(noteId, text) => editNote(order.id, noteId, text)}
+      onDelete={(noteId) => deleteNote(order.id, noteId)}
     />
     </>
   )

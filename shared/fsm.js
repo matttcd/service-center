@@ -71,7 +71,7 @@ export function nextStatusLabel(order) {
 
 // Roles que pueden realizar cada tipo de transición (espejo de las reglas del backend).
 const TECH_ROLES = ['tecnico', 'admin']
-const COUNTER_ROLES = ['mostrador', 'admin']
+const COUNTER_ROLES = ['recepcion', 'admin']
 
 // Indica si un rol puede disparar la transición hacia `to`.
 export function canTransitionForRole(to, role) {

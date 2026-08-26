@@ -118,6 +118,7 @@ export default function Sidebar({ open, onClose }) {
       : [
           { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
           { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
+          { to: '/taller', label: 'Taller', icon: Wrench, end: false },
           { to: '/clientes', label: 'Clientes', icon: Users, end: false },
           { to: '/actividad', label: 'Actividad', icon: History, end: false },
         ]

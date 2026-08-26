@@ -221,6 +221,14 @@ export function DataProvider({ children }) {
   const updateOrder = (orderId, fields) =>
     run(api(`/orders/${orderId}`, { method: 'PUT', body: fields }))
 
+  // Editar una nota existente en notesLog.
+  const editNote = (orderId, noteId, text) =>
+    updateOrder(orderId, { editNote: { id: noteId, text } })
+
+  // Eliminar una nota existente de notesLog.
+  const deleteNote = (orderId, noteId) =>
+    updateOrder(orderId, { deleteNote: { id: noteId } })
+
   // Marca / desmarca "cliente avisado".
   const toggleNotified = async (orderId, notified) => {
     try {
@@ -347,6 +355,8 @@ export function DataProvider({ children }) {
     deleteOrder,
     setOrderStatus,
     updateOrder,
+    editNote,
+    deleteNote,
     toggleNotified,
     confirmOrder,
     assignTechnician,

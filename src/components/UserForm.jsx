@@ -7,7 +7,7 @@ import ConfirmDiscard from './ConfirmDiscard.jsx'
 import { titleCase } from '../utils/helpers.js'
 
 export default function UserForm({ open, onClose, onSubmit }) {
-  const [form, setForm] = useState({ name: '', password: '', role: 'mostrador' })
+  const [form, setForm] = useState({ name: '', password: '', role: 'recepcion' })
   const [snapshot, setSnapshot] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
@@ -15,7 +15,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
 
   useEffect(() => {
     if (!open) return
-    const base = { name: '', password: '', role: 'mostrador' }
+    const base = { name: '', password: '', role: 'recepcion' }
     setSnapshot(JSON.stringify(base))
     setForm(base)
     setError('')
@@ -91,7 +91,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
             Rol
           </label>
           <select value={form.role} onChange={set('role')} className={inputCls}>
-            <option value="mostrador">Empleado (recepción y entrega)</option>
+            <option value="recepcion">Recepción</option>
             <option value="tecnico">Técnico (reparación)</option>
             <option value="admin">Administrador</option>
           </select>

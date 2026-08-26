@@ -117,7 +117,7 @@ export default function Dashboard() {
             >
               <tab.Icon size={16} />
               <span className="hidden sm:inline">{tab.label}</span>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
                 {counts[tab.key]}
               </span>
             </button>

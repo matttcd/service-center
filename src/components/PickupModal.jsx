@@ -5,7 +5,7 @@ import { loadSession } from '../utils/storage.js'
 
 let stack = 0
 
-export default function PickupModal({ open, onClose, onConfirm, order }) {
+export default function PickupModal({ open, onClose, onConfirm, order, mode = 'normal' }) {
   const [pickupBy, setPickupBy] = useState('client')
   const [pickupName, setPickupName] = useState('')
   const [pickupDni, setPickupDni] = useState('')
@@ -164,14 +164,16 @@ export default function PickupModal({ open, onClose, onConfirm, order }) {
             </div>
 
             <div className="mt-5 flex justify-center gap-2">
-              <button
-                onClick={handlePrint}
-                disabled={printing}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
-                Imprimir orden de retiro
-              </button>
+              {mode === 'sin-orden' && (
+                <button
+                  onClick={handlePrint}
+                  disabled={printing}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+                  Imprimir constancia de retiro
+                </button>
+              )}
               <button onClick={handleFinish} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700">
                 Cerrar
               </button>

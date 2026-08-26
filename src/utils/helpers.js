@@ -116,5 +116,5 @@ export function orderStatusTone(status) {
 export const ROLE_LABEL = {
   admin: 'Administrador',
   tecnico: 'Técnico',
-  mostrador: 'Empleado',
+  recepcion: 'Recepción',
 }

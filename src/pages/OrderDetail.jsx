@@ -7,18 +7,19 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Trash2, Play, Search, Check, CheckCircle2, FileText,
   PackageCheck, PackageX, RotateCcw, Sticker, Save, Phone, BellRing,
-  Lock, Smartphone, User, X, Pencil, MoreVertical, Eye,
+  Lock, Smartphone, User, X, Pencil, MoreVertical, StickyNote, History,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../utils/api.js'
+import { loadSession } from '../utils/storage.js'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import TechnicianSelect from '../components/TechnicianSelect.jsx'
+import NotesModal from '../components/NotesModal.jsx'
 import OrderPrint from '../components/OrderPrint.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import PickupModal from '../components/PickupModal.jsx'
-import Modal from '../components/Modal.jsx'
 import PatternPad, { PatternPreview } from '../components/PatternPad.jsx'
 import {
   ORDER_STATUS_LABEL,
@@ -41,21 +42,11 @@ function initials(name) {
     .join('')
 }
 
-function groupNotesByDayAndTech(log) {
-  const groups = {}
-  for (const entry of log) {
-    const day = entry.at?.slice(0, 10) || '—'
-    if (!groups[day]) groups[day] = []
-    groups[day].push(entry)
-  }
-  return groups
-}
-
 export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder } = useData()
+  const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote } = useData()
   const [printing, setPrinting] = useState(false)
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
@@ -74,7 +65,7 @@ export default function OrderDetail() {
   const [equipConditions, setEquipConditions] = useState('')
   const [equipIssue, setEquipIssue] = useState('')
 
-  // Edición de reparación (empleado/admin: técnico + precio)
+  // Edición de reparación (recepción/admin: técnico + precio)
   const [editingRepair, setEditingRepair] = useState(false)
   const [repairPriceText, setRepairPriceText] = useState('')
 
@@ -84,7 +75,6 @@ export default function OrderDetail() {
   const [fixCustom, setFixCustom] = useState('')
 
   // Notas del técnico
-  const [noteText, setNoteText] = useState('')
   const [notesModalOpen, setNotesModalOpen] = useState(false)
 
   // Orden en modo "override" local: cuando el bootstrap deja de traer una orden
@@ -97,7 +87,7 @@ export default function OrderDetail() {
   const role = currentUser?.role
   const isAdmin = role === 'admin'
   const isTech = role === 'tecnico'
-  const isCounter = role === 'mostrador' || role === 'admin'
+  const isCounter = role === 'recepcion' || role === 'admin'
   const isAssignedTech = isTech && order?.assignedTo === currentUser?.id
 
   useEffect(() => {
@@ -115,7 +105,6 @@ export default function OrderDetail() {
 
   useEffect(() => {
     if (!order) return
-    setNoteText('')
     setEditingEquip(false)
     setEditingRepair(false)
     setEditingFix(false)
@@ -176,6 +165,21 @@ export default function OrderDetail() {
     setBusy(null)
   }
 
+  const handlePrintPickup = async () => {
+    try {
+      const session = loadSession()
+      const headers = {}
+      if (session?.token) headers.Authorization = `Bearer ${session.token}`
+      const res = await fetch(`/api/orders/${order.id}/pickup-pdf`, { headers })
+      if (!res.ok) throw new Error('No se pudo generar el PDF')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      window.open(url, '_blank')
+    } catch {
+      showNotice('No se pudo generar la constancia de retiro.')
+    }
+  }
+
   const handleGarantia = async () => {
     setBusy('en_reparacion')
     const res = await setOrderStatus(order.id, 'en_reparacion')
@@ -225,7 +229,7 @@ export default function OrderDetail() {
     setBusy(null)
   }
 
-  // ─── Reparación: abrir/cerrar edición (empleado/admin: técnico + precio) ───
+  // ─── Reparación: abrir/cerrar edición (recepción/admin: técnico + precio) ───
   const startEditRepair = () => {
     setRepairPriceText(order.price ? String(order.price) : '')
     setEditingRepair(true)
@@ -261,11 +265,10 @@ export default function OrderDetail() {
   }
 
   // ─── Notas del técnico: guardar (append) ───
-  const saveNote = async () => {
-    if (!noteText.trim()) return
+  const saveNote = async (text) => {
     setBusy('note')
-    const res = await updateOrder(order.id, { note: noteText.trim() })
-    if (!res.error) { setNoteText(''); showNotice('Nota guardada.') } else showNotice(res.error)
+    const res = await updateOrder(order.id, { note: text })
+    if (!res.error) showNotice('Nota guardada.'); else showNotice(res.error)
     setBusy(null)
   }
 
@@ -293,12 +296,14 @@ export default function OrderDetail() {
   const menuItems = []
   if (isCounter && status !== 'entregado') {
     menuItems.push({ key: 'retiro', label: 'Retirar equipo', Icon: PackageCheck, onClick: () => { setMenuOpen(false); setPickupModal({ onConfirm: handleRetiro }) } })
+    menuItems.push({ key: 'retiro-sin-orden', label: 'Retirar sin orden', Icon: PackageCheck, onClick: () => { setMenuOpen(false); setPickupModal({ onConfirm: handleRetiro, mode: 'sin-orden' }) } })
+  }
+  if (isCounter && status === 'entregado') {
+    menuItems.push({ key: 'reprint-pickup', label: 'Reimprimir constancia', Icon: Printer, onClick: () => { setMenuOpen(false); handlePrintPickup() } })
   }
   if (isAdmin) {
     menuItems.push({ key: 'delete', label: 'Eliminar', Icon: Trash2, danger: true, onClick: () => { setMenuOpen(false); setConfirm({ title: 'Eliminar orden', message: `¿Eliminar la orden ${order.orderNumber}? Esta acción no se puede deshacer.`, onConfirm: handleDelete, danger: true }) } })
   }
-
-  const groupedNotes = groupNotesByDayAndTech(notesLog)
 
   return (
     <div className="space-y-6">
@@ -626,27 +631,20 @@ export default function OrderDetail() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between gap-2">
-                  <label className={labelCls}>Notas del técnico</label>
-                  {notesLog.length > 0 && (
-                    <button onClick={() => setNotesModalOpen(true)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-0.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
-                      <Eye size={12} /> Ver notas
-                    </button>
-                  )}
+                <label className={labelCls}>Notas del técnico</label>
+                <div className="mt-1">
+                  <button
+                    onClick={() => setNotesModalOpen(true)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                      isAssignedTech
+                        ? 'bg-primary-600 text-white hover:bg-primary-700'
+                        : 'border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {!isAssignedTech ? <History size={15} /> : <StickyNote size={15} />}
+                    {!isAssignedTech ? `Ver notas${notesLog.length > 0 ? ` (${notesLog.length})` : ''}` : `Agregar nota${notesLog.length > 0 ? ` (${notesLog.length})` : ''}`}
+                  </button>
                 </div>
-                {isAssignedTech ? (
-                  <>
-                    <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} rows={4}
-                      placeholder="Diagnóstico, repuestos, qué decirle al cliente..." className={inputCls} />
-                    <button onClick={saveNote} disabled={busy === 'note' || !noteText.trim()} className={`${btnPrimary} mt-2`}>
-                      <Save size={14} /> Guardar nota
-                    </button>
-                  </>
-                ) : (
-                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    {order.technicianNotes || '—'}
-                  </p>
-                )}
               </div>
             </div>
 
@@ -660,7 +658,7 @@ export default function OrderDetail() {
               {/* Acciones según el estado */}
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
 
-              {/* === BOTÓN INTELIGENTE (empleado / mostrador) === */}
+              {/* === BOTÓN INTELIGENTE (recepción / admin) === */}
               {isCounter && (() => {
                 if (status === 'presupuesto') {
                   if (!order.notified) {
@@ -847,31 +845,20 @@ export default function OrderDetail() {
         onClose={() => setPickupModal(null)}
         onConfirm={pickupModal?.onConfirm}
         order={order}
+        mode={pickupModal?.mode || 'normal'}
       />
 
       {/* Modal de notas del técnico */}
-      <Modal open={notesModalOpen} onClose={() => setNotesModalOpen(false)} title="Notas del técnico">
-        {Object.keys(groupedNotes).length === 0 ? (
-          <p className="text-sm text-slate-400">Sin notas registradas.</p>
-        ) : (
-          <div className="space-y-4">
-            {Object.entries(groupedNotes).map(([day, entries]) => (
-              <div key={day}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{formatDate(day)}</p>
-                <div className="space-y-3">
-                  {entries.map((entry) => (
-                    <div key={entry.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{entry.byName}</p>
-                      <p className="text-xs text-slate-400">{formatDateTime(entry.at)}</p>
-                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{entry.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Modal>
+      <NotesModal
+        open={notesModalOpen}
+        onClose={() => setNotesModalOpen(false)}
+        notesLog={notesLog}
+        isAssignedTech={isAssignedTech}
+        currentUser={currentUser}
+        onSave={saveNote}
+        onEdit={(noteId, text) => editNote(order.id, noteId, text)}
+        onDelete={(noteId) => deleteNote(order.id, noteId)}
+      />
     </div>
   )
 }
