@@ -28,6 +28,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../utils/api.js'
 import ProfileSwitchModal from './ProfileSwitchModal.jsx'
 import { BRAND_NAME, BRAND_SUBTITLE } from '../utils/brand.js'
+import logoUrl from '../assets/gringologo-modified.png'
 import { ROLE_LABEL } from '../utils/helpers.js'
 
 function RoleIcon({ role }) {
@@ -149,9 +150,7 @@ export default function Sidebar({ open, onClose }) {
         {/* Marca */}
         <div className="flex items-center justify-between px-5 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-400 text-primary-600">
-              <span className="text-2xl font-black leading-none">G</span>
-            </div>
+            <img src={logoUrl} alt="Logo" className="h-9 w-9 rounded-full object-contain" />
             <div>
               <p className="text-sm font-bold text-slate-900 dark:text-white">{BRAND_NAME}</p>
               <p className="text-[11px] font-semibold text-accent-600 dark:text-accent-400">{BRAND_SUBTITLE}</p>

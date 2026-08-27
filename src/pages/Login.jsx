@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../utils/api.js'
 import { loadLastProfile, saveLastProfile } from '../utils/storage.js'
 import { BRAND_NAME, BRAND_SUBTITLE } from '../utils/brand.js'
+import logoUrl from '../assets/gringologo-modified.png'
 import { ROLE_LABEL } from '../utils/helpers.js'
 
 export default function Login() {
@@ -117,9 +118,7 @@ export default function Login() {
       <div className="w-full max-w-md">
         {/* Marca */}
         <div className="mb-6 flex flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-400 text-primary-600 shadow-lg shadow-accent-500/30">
-            <span className="text-4xl font-black leading-none">G</span>
-          </div>
+          <img src={logoUrl} alt="Logo" className="h-14 w-14 rounded-full object-contain shadow-lg shadow-blue-500/30" />
           <div className="text-center">
             <h1 className="text-xl font-bold text-slate-900 dark:text-white">{BRAND_NAME}</h1>
             <p className="text-sm font-semibold text-primary-600 dark:text-primary-400">{BRAND_SUBTITLE}</p>

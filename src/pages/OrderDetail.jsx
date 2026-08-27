@@ -309,11 +309,11 @@ export default function OrderDetail() {
   return (
     <div className="space-y-6">
       <button
-        onClick={() => navigate('/ordenes')}
+        onClick={() => navigate(-1)}
         className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
       >
         <ArrowLeft size={16} />
-        Volver a órdenes
+        Volver
       </button>
 
       {notice && (
