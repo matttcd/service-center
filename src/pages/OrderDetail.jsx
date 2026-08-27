@@ -277,6 +277,8 @@ export default function OrderDetail() {
     'inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50'
   const btnGhost =
     'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+  const btnDisabled =
+    'inline-flex items-center gap-1.5 rounded-lg bg-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400'
   const chipReadonly =
     'inline-flex items-center rounded-full border border-slate-400 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
   const chipSelected =
@@ -659,63 +661,54 @@ export default function OrderDetail() {
               {/* Acciones según el estado */}
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
 
-              {/* === BOTÓN INTELIGENTE (recepción / admin) === */}
-              {isCounter && (() => {
-                if (status === 'presupuesto') {
-                  if (!order.notified) {
-                    if (!order.price) {
-                      return (
-                        <p key="no-price" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-                          <FileText size={14} className="text-amber-500" />
-                          Cargá el presupuesto antes de avisar al cliente.
-                        </p>
-                      )
-                    }
-                    return (
-                      <button key="avisar" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
-                        <BellRing size={16} />
-                        Avisar al cliente
-                      </button>
-                    )
-                  }
-                  if (!order.confirmed) {
-                    return (
-                      <div key="confirm" className="flex flex-wrap items-center gap-2">
-                        <button onClick={() => setConfirm({ title: 'Confirmar', message: '¿El cliente aprobó el presupuesto?', onConfirm: handleConfirm })} disabled={busy === 'confirm'} className={btnPrimary}>
-                          <CheckCircle2 size={16} />
-                          Aceptó
-                        </button>
-                        <button onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado' || !order.notified} className={btnGhost}>
-                          Rechazó
-                        </button>
-                      </div>
-                    )
-                  }
-                  return (
-                    <p key="wait" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-                      <Lock size={14} className="text-amber-500" />
-                      Esperando reparación del técnico...
-                    </p>
-                  )
-                }
-                if (status === 'terminado') {
-                  if (!order.notified) {
-                    return (
-                      <button key="avisar2" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
-                        <BellRing size={16} />
-                        Avisar al cliente
-                      </button>
-                    )
-                  }
-                  return (
-                    <button key="entregar" onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={btnPrimary}>
-                      <PackageCheck size={16} />
-                      Entregar al cliente
-                    </button>
-                  )
-                }
-                return null
-              })()}
+              {/* === ACCIONES RECEPCIÓN / ADMIN === */}
+              {isCounter && status === 'presupuesto' && !order.notified && !order.price && (
+                <p key="no-price" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
+                  <FileText size={14} className="text-amber-500" />
+                  Cargá el presupuesto antes de avisar al cliente.
+                </p>
+              )}
+              {isCounter && status === 'presupuesto' && !order.notified && order.price && (
+                <button key="avisar" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
+                  <BellRing size={16} />
+                  Avisar al cliente
+                </button>
+              )}
+              {isCounter && status === 'presupuesto' && order.notified && !order.confirmed && (
+                <div key="confirm" className="flex flex-wrap items-center gap-2">
+                  <button onClick={() => setConfirm({ title: 'Confirmar', message: '¿El cliente aprobó el presupuesto?', onConfirm: handleConfirm })} disabled={busy === 'confirm'} className={btnPrimary}>
+                    <CheckCircle2 size={16} />
+                    Aceptó
+                  </button>
+                  <button onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={btnGhost}>
+                    Rechazó
+                  </button>
+                </div>
+              )}
+              {isCounter && status === 'presupuesto' && order.notified && order.confirmed && (
+                <p key="wait" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
+                  <Lock size={14} className="text-amber-500" />
+                  Esperando reparación del técnico...
+                </p>
+              )}
+              {isCounter && status === 'terminado' && !order.notified && (
+                <button key="avisar2" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
+                  <BellRing size={16} />
+                  Avisar al cliente
+                </button>
+              )}
+              {isCounter && status === 'terminado' && order.notified && (
+                <button key="entregar" onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={btnPrimary}>
+                  <PackageCheck size={16} />
+                  Entregar al cliente
+                </button>
+              )}
+              {isCounter && status === 'entregado' && (
+                <button onClick={() => setConfirm({ title: 'Garantía', message: '¿Reingresar el equipo por garantía? Aparecerá en Entrantes.', onConfirm: handleGarantia })} disabled={busy === 'recibido'} className={btnGhost}>
+                  <RotateCcw size={16} />
+                  Reingresar por garantía
+                </button>
+              )}
 
               {/* === ACCIONES DEL TÉCNICO === */}
               {status === 'recibido' && order.diagnosisType === 'visible' && isTech && (
@@ -723,7 +716,7 @@ export default function OrderDetail() {
                   onClick={() => doStatus('en_reparacion')}
                   disabled={busy === 'en_reparacion' || !order.assignedTo}
                   title={!order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
-                  className={`${btnPrimary} ${!order.assignedTo ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                  className={!order.assignedTo ? btnDisabled : btnPrimary}
                 >
                   <Play size={16} />
                   Iniciar reparación
@@ -734,7 +727,7 @@ export default function OrderDetail() {
                   onClick={() => doStatus('en_revision')}
                   disabled={busy === 'en_revision' || !order.assignedTo}
                   title={!order.assignedTo ? 'Asigná un técnico antes de iniciar la revisión' : ''}
-                  className={`${btnPrimary} ${!order.assignedTo ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                  className={!order.assignedTo ? btnDisabled : btnPrimary}
                 >
                   <Search size={16} />
                   Iniciar revisión
@@ -745,7 +738,7 @@ export default function OrderDetail() {
                   onClick={() => doStatus('presupuesto')}
                   disabled={busy === 'presupuesto' || !(order.fix || '').trim()}
                   title={!(order.fix || '').trim() ? 'Registrá al menos una reparación antes de pasar a presupuesto' : ''}
-                  className={`${btnPrimary} ${!(order.fix || '').trim() ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                  className={!(order.fix || '').trim() ? btnDisabled : btnPrimary}
                 >
                   <Play size={16} />
                   Cargar presupuesto
@@ -756,7 +749,7 @@ export default function OrderDetail() {
                   onClick={() => doStatus('en_reparacion')}
                   disabled={busy === 'en_reparacion' || !order.confirmed || !order.assignedTo}
                   title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : !order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
-                  className={`${btnPrimary} ${(!order.confirmed || !order.assignedTo) ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''}`}
+                  className={(!order.confirmed || !order.assignedTo) ? btnDisabled : btnPrimary}
                 >
                   <Play size={16} />
                   Aceptó → reparar
@@ -784,12 +777,6 @@ export default function OrderDetail() {
                 <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnGhost}>
                   <RotateCcw size={16} />
                   Volver a reparación
-                </button>
-              )}
-              {status === 'entregado' && isCounter && (
-                <button onClick={() => setConfirm({ title: 'Garantía', message: '¿Reingresar el equipo por garantía? Aparecerá en Entrantes.', onConfirm: handleGarantia })} disabled={busy === 'recibido'} className={btnGhost}>
-                  <RotateCcw size={16} />
-                  Reingresar por garantía
                 </button>
               )}
             </div>
