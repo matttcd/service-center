@@ -461,8 +461,20 @@ export default function OrderModal({ order, onClose }) {
                     />
                   </div>
                   )}
+                  <div className="mt-1">
+                    <button
+                      type="button"
+                      onClick={saveOnly}
+                      disabled={busy || !workDirty}
+                      className={btnPrimary}
+                    >
+                      <Check size={14} />
+                      Guardar
+                    </button>
+                  </div>
                 </div>
               ) : (
+                (order.status !== 'recibido' || order.assignedTo) && (
                 <div>
                   <span className={labelCls}>Tipo de reparación</span>
                   <div className="flex flex-wrap items-center gap-3 mt-1">
@@ -509,6 +521,7 @@ export default function OrderModal({ order, onClose }) {
                     </div>
                   )}
                 </div>
+                )
               )}
             </div>
           </div>
@@ -545,12 +558,6 @@ export default function OrderModal({ order, onClose }) {
 
         {/* Acciones */}
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-          {!isReadOnly && (
-            <button onClick={saveOnly} disabled={busy || !dirty} className={`${btnPrimary} !px-4 !py-2.5 !text-sm`}>
-              <Check size={14} />
-              Guardar
-            </button>
-          )}
           {canBudget && !isReadOnly && ['presupuesto', 'terminado'].includes(order.status) && (
             <button onClick={doNotify} disabled={busy} className={btnGhost}>
               {order.notified ? <BellOff size={14} /> : <Bell size={14} />}

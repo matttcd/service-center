@@ -24,11 +24,11 @@ function Column({ title, orders, onOpen, defaultOpen = false }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center justify-between rounded-xl bg-slate-100 px-4 py-3 transition hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 md:cursor-default md:hover:bg-slate-100 md:dark:hover:bg-slate-800"
+        className="flex items-center justify-between rounded-xl bg-slate-200 px-4 py-3 transition hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 md:cursor-default md:hover:bg-slate-200 md:dark:hover:bg-slate-800"
       >
         <div className="flex items-center gap-2">
           <h3 className="text-base font-bold text-slate-700 dark:text-slate-200">{title}</h3>
-          <span className="rounded-full bg-white px-2.5 py-0.5 text-sm font-bold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+          <span className="rounded-full bg-white px-2.5 py-0.5 text-sm font-bold text-slate-600 dark:bg-slate-900 dark:text-slate-400">
             {orders.length}
           </span>
         </div>
@@ -41,7 +41,7 @@ function Column({ title, orders, onOpen, defaultOpen = false }) {
       {/* Contenido */}
       <div className={`flex flex-col ${open ? '' : 'hidden md:flex'} mt-2 md:mt-2`}>
         {orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-slate-200 py-8 text-slate-300 dark:border-slate-800 dark:text-slate-600">
+          <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-slate-200 py-8 text-slate-400 dark:border-slate-800 dark:text-slate-600">
             <Inbox size={20} />
             <p className="text-xs">Vacío</p>
           </div>
@@ -86,7 +86,7 @@ export default function Taller() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Taller</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Equipos entrantes y en reparación · tocá una fila para ver la orden · los terminados están en la página Terminados
+          Equipos entrantes y en reparación
         </p>
       </div>
 

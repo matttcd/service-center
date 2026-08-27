@@ -9,6 +9,7 @@ import ChangePasswordModal from './ChangePasswordModal.jsx'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { BRAND_NAME } from '../utils/brand.js'
+import logoUrl from '../assets/gringologo-modified.png'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -29,9 +30,7 @@ export default function Layout() {
           <Menu size={20} />
         </button>
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-400 text-primary-600">
-            <span className="text-lg font-black leading-none">G</span>
-          </div>
+          <img src={logoUrl} alt="Logo" className="h-7 w-7 rounded-full object-contain" />
           <span className="text-sm font-bold text-slate-900 dark:text-white">{BRAND_NAME}</span>
         </div>
       </header>

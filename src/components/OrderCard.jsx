@@ -12,7 +12,7 @@ export default function OrderCard({ order, onOpen }) {
       tabIndex={0}
       onClick={() => onOpen(order)}
       onKeyDown={(e) => e.key === 'Enter' && onOpen(order)}
-      className="cursor-pointer rounded-xl border border-slate-200 bg-white p-3 transition hover:border-primary-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-primary-500/40"
+      className="cursor-pointer rounded-xl border border-slate-300 bg-white p-3 transition hover:border-primary-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-primary-500/40"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
