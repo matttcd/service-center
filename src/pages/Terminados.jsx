@@ -9,13 +9,13 @@ import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import { timeSinceStatus, formatMoney, titleCase } from '../utils/helpers.js'
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50]
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
 function timeSinceColor(order) {
   const text = timeSinceStatus(order, order.status)
   if (!text) return 'text-slate-500 dark:text-slate-400'
   if (text.includes('minuto') || text.includes('hora')) return 'text-slate-500 dark:text-slate-400'
-  if (text.includes('día') || text.includes('1 día')) return 'text-amber-600 dark:text-amber-400'
+  if (text.includes('día')) return 'text-amber-600 dark:text-amber-400'
   return 'text-red-600 dark:text-red-400'
 }
 
@@ -40,8 +40,8 @@ export default function Terminados() {
   useEffect(() => {
     const offset = (page - 1) * pageSize
     const filters = { status: 'terminado', q, limit: pageSize, offset }
-    if (notifiedFilter === 'notified') filters.onlyNotNotified = false
-    if (notifiedFilter === 'not_notified') filters.onlyNotNotified = true
+    if (notifiedFilter === 'not_notified') filters.onlyNotNotified = '1'
+    if (notifiedFilter === 'notified') filters.onlyNotified = '1'
     loadOrders(filters).then(setPageData)
   }, [loadOrders, q, notifiedFilter, page, pageSize, ordersRevision])
 

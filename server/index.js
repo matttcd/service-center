@@ -591,7 +591,7 @@ app.post('/api/orders', auth, (req, res) => {
 
 app.get('/api/orders', auth, (req, res) => {
   const db = getDB()
-  const { status, q, from, to, brand, onlyNotNotified, onlyNotConfirmed } = req.query
+  const { status, q, from, to, brand, onlyNotNotified, onlyNotified, onlyNotConfirmed } = req.query
   const query = String(q || '').trim().toLowerCase()
   const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 0))
   const offset = Math.max(0, Number(req.query.offset) || 0)
@@ -607,6 +607,9 @@ app.get('/api/orders', auth, (req, res) => {
   if (to) list = list.filter((o) => o.createdAt <= to)
   if (onlyNotNotified === '1') {
     list = list.filter((o) => !o.notified && ['presupuesto', 'terminado'].includes(o.status))
+  }
+  if (onlyNotified === '1') {
+    list = list.filter((o) => o.notified && ['presupuesto', 'terminado'].includes(o.status))
   }
   if (onlyNotConfirmed === '1') {
     list = list.filter((o) => !o.confirmed && o.status === 'presupuesto')
