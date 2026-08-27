@@ -7,7 +7,7 @@ import Layout from './components/Layout.jsx'
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Taller from './pages/Taller.jsx'
-import Listos from './pages/Listos.jsx'
+import Terminados from './pages/Terminados.jsx'
 import Orders from './pages/Orders.jsx'
 import OrderDetail from './pages/OrderDetail.jsx'
 import Clients from './pages/Clients.jsx'
@@ -63,10 +63,10 @@ export default function App() {
           }
         />
         <Route
-          path="listos"
+          path="terminados"
           element={
             <RequireRole roles={['tecnico', 'admin']}>
-              <Listos />
+              <Terminados />
             </RequireRole>
           }
         />

@@ -1,6 +1,6 @@
 // ============================================
 // OrderModal: orden completa con acciones rápidas del técnico.
-// Reutilizado por el Taller y la página de equipos listos.
+// Reutilizado por el Taller y la página de Terminados.
 // ============================================
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'

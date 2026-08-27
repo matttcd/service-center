@@ -101,7 +101,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
         { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
         { to: '/taller', label: 'Taller', icon: Wrench, end: false },
-        { to: '/listos', label: 'Listos', icon: PackageCheck, end: false },
+        { to: '/terminados', label: 'Terminados', icon: PackageCheck, end: false },
         { to: '/clientes', label: 'Clientes', icon: Users, end: false },
         { to: '/actividad', label: 'Actividad', icon: History, end: false },
         { to: '/metricas', label: 'Métricas', icon: BarChart3, end: false },
@@ -112,7 +112,7 @@ export default function Sidebar({ open, onClose }) {
     : isTech
       ? [
           { to: '/taller', label: 'Taller', icon: Wrench, end: false },
-          { to: '/listos', label: 'Listos', icon: PackageCheck, end: false },
+          { to: '/terminados', label: 'Terminados', icon: PackageCheck, end: false },
           { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
           { to: '/actividad', label: 'Actividad', icon: History, end: false },
         ]

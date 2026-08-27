@@ -1,6 +1,6 @@
 // ============================================
 // Taller: tablero del técnico (entrantes · en reparación).
-// Los equipos listos viven en la página "Listos".
+// Los equipos terminados viven en la página "Terminados".
 // ============================================
 import { useMemo, useState } from 'react'
 import { Inbox, ChevronDown } from 'lucide-react'
@@ -86,7 +86,7 @@ export default function Taller() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Taller</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Equipos entrantes y en reparación · tocá una fila para ver la orden · los listos están en la página Listos
+          Equipos entrantes y en reparación · tocá una fila para ver la orden · los terminados están en la página Terminados
         </p>
       </div>
 

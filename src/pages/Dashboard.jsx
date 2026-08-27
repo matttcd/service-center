@@ -13,7 +13,7 @@ const TABS = [
   { key: 'sin_presupuesto', label: 'Sin presupuesto', Icon: DollarSign, tone: 'text-amber-500', emptyText: 'No hay revisiones pendientes de presupuesto.' },
   { key: 'presupuestos', label: 'Pend. aprobación', Icon: FileText, tone: 'text-primary-500', emptyText: 'No hay presupuestos esperando confirmación del cliente.' },
   { key: 'falta_repuestos', label: 'Falta repuestos', Icon: PackageX, tone: 'text-orange-500', emptyText: 'No hay equipos esperando repuestos.' },
-  { key: 'listos', label: 'Listos para retirar', Icon: CheckCircle2, tone: 'text-emerald-500', emptyText: 'No hay equipos terminados esperando retiro.' },
+  { key: 'listos', label: 'Terminados', Icon: CheckCircle2, tone: 'text-emerald-500', emptyText: 'No hay equipos terminados esperando retiro.' },
 ]
 
 function KpiCard({ label, value, Icon, color }) {
