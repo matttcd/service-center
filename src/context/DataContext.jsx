@@ -142,6 +142,7 @@ export function DataProvider({ children }) {
     if (filters.to) params.set('to', filters.to)
     if (filters.brand && filters.brand !== 'all') params.set('brand', filters.brand)
     if (filters.onlyNotNotified) params.set('onlyNotNotified', '1')
+    if (filters.onlyNotified) params.set('onlyNotified', '1')
     if (filters.onlyNotConfirmed) params.set('onlyNotConfirmed', '1')
     if (filters.limit) params.set('limit', String(filters.limit))
     if (filters.offset != null) params.set('offset', String(filters.offset))

@@ -48,6 +48,7 @@ export default function OrderDetail() {
   const { currentUser } = useAuth()
   const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote } = useData()
   const [printing, setPrinting] = useState(false)
+  const [confirmPrint, setConfirmPrint] = useState(false)
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
   const noticeTimer = useRef(null)
@@ -146,8 +147,10 @@ export default function OrderDetail() {
         showNotice('Equipo entregado.')
         const fresh = await api(`/orders/${order.id}`)
         setLocalOrder(fresh.order)
-      } else if (next === 'terminado') showNotice('Equipo marcado como listo. Avisale al cliente.')
-      else showNotice('Estado actualizado.')
+      } else if (next === 'terminado') {
+        showNotice('Equipo marcado como listo. Avisale al cliente.')
+        setConfirmPrint(true)
+      } else showNotice('Estado actualizado.')
     } finally {
       setBusy(null)
     }
@@ -833,6 +836,14 @@ export default function OrderDetail() {
       </Card>
 
       <OrderPrint open={printing} order={order} customer={customer} onClose={() => setPrinting(false)} />
+      <ConfirmModal
+        open={confirmPrint}
+        onClose={() => setConfirmPrint(false)}
+        onConfirm={() => { setConfirmPrint(false); setPrinting(true) }}
+        title="Imprimir orden"
+        message="¿Descargar la orden de servicio en PDF?"
+        confirmLabel="Imprimir"
+      />
       <ConfirmModal
         open={!!confirm}
         onClose={() => setConfirm(null)}
