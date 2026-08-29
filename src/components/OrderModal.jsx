@@ -24,7 +24,7 @@ import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Badge from './Badge.jsx'
 import ConfirmModal from './ConfirmModal.jsx'
-import OrderPrint from './OrderPrint.jsx'
+import PrintOrderPanel from './PrintOrderPanel.jsx'
 import Modal from './Modal.jsx'
 import NotesModal from './NotesModal.jsx'
 import TechnicianSelect from './TechnicianSelect.jsx'
@@ -70,8 +70,7 @@ export default function OrderModal({ order, onClose }) {
   const [priceText, setPriceText] = useState(order?.price ? String(order.price) : '')
   const [busy, setBusy] = useState(false)
   const [alertModal, setAlertModal] = useState(null)
-  const [confirmPrint, setConfirmPrint] = useState(false)
-  const [printing, setPrinting] = useState(false)
+  const [printOpen, setPrintOpen] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const canBudget = ['recepcion', 'admin'].includes(currentUser?.role)
@@ -191,7 +190,7 @@ export default function OrderModal({ order, onClose }) {
     if (res.error) setAlertModal(res.error)
     else {
       if (effectiveNext === 'terminado') {
-        setConfirmPrint(true)
+        setPrintOpen(true)
       } else {
         onClose()
       }
@@ -612,15 +611,12 @@ export default function OrderModal({ order, onClose }) {
       onEdit={(noteId, text) => editNote(order.id, noteId, text)}
       onDelete={(noteId) => deleteNote(order.id, noteId)}
     />
-    <ConfirmModal
-      open={confirmPrint}
-      onClose={() => { setConfirmPrint(false); onClose() }}
-      onConfirm={() => { setConfirmPrint(false); setPrinting(true) }}
-      title="Imprimir orden"
-      message="¿Descargar la orden de servicio en PDF?"
-      confirmLabel="Imprimir"
+    <PrintOrderPanel
+      open={printOpen}
+      order={order}
+      customer={customer}
+      onClose={() => { setPrintOpen(false); onClose() }}
     />
-    <OrderPrint open={printing} order={order} customer={customer} onClose={() => { setPrinting(false); onClose() }} />
     </>
   )
 }

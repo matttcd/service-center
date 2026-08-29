@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import OrderForm from '../components/OrderForm.jsx'
-import OrderPrint from '../components/OrderPrint.jsx'
+import PrintOrderPanel from '../components/PrintOrderPanel.jsx'
 import { ORDER_STATUS_LABEL, orderStatusTone, formatDate, formatMoney, titleCase } from '../utils/helpers.js'
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
@@ -345,7 +345,7 @@ export default function Orders() {
       </Card>
 
       {canCreate && <OrderForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={onCreated} />}
-      <OrderPrint
+      <PrintOrderPanel
         open={!!printing}
         order={printing?.order}
         customer={printing?.customer}

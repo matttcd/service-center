@@ -17,7 +17,7 @@ import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import TechnicianSelect from '../components/TechnicianSelect.jsx'
 import NotesModal from '../components/NotesModal.jsx'
-import OrderPrint from '../components/OrderPrint.jsx'
+import PrintOrderPanel from '../components/PrintOrderPanel.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import PickupModal from '../components/PickupModal.jsx'
 import PatternPad, { PatternPreview } from '../components/PatternPad.jsx'
@@ -47,8 +47,7 @@ export default function OrderDetail() {
   const navigate = useNavigate()
   const { currentUser } = useAuth()
   const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote } = useData()
-  const [printing, setPrinting] = useState(false)
-  const [confirmPrint, setConfirmPrint] = useState(false)
+  const [printOpen, setPrintOpen] = useState(false)
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
   const noticeTimer = useRef(null)
@@ -366,7 +365,7 @@ export default function OrderDetail() {
                 <Sticker size={14} />
                 Imprimir etiqueta
               </button>
-              <button onClick={() => setPrinting(true)} className={`${btnPrimary} !px-3 !py-1.5 !text-xs`}>
+              <button onClick={() => setPrintOpen(true)} className={`${btnPrimary} !px-3 !py-1.5 !text-xs`}>
                 <Printer size={14} />
                 Imprimir orden
               </button>
@@ -835,14 +834,11 @@ export default function OrderDetail() {
         )}
       </Card>
 
-      <OrderPrint open={printing} order={order} customer={customer} onClose={() => setPrinting(false)} />
-      <ConfirmModal
-        open={confirmPrint}
-        onClose={() => setConfirmPrint(false)}
-        onConfirm={() => { setConfirmPrint(false); setPrinting(true) }}
-        title="Imprimir orden"
-        message="¿Descargar la orden de servicio en PDF?"
-        confirmLabel="Imprimir"
+      <PrintOrderPanel
+        open={printOpen}
+        order={order}
+        customer={customer}
+        onClose={() => setPrintOpen(false)}
       />
       <ConfirmModal
         open={!!confirm}

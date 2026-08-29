@@ -12,6 +12,7 @@ import { initDB, getDB, mutate, persist, createBackup, listBackups, restoreBacku
 import { buildSeed } from './seed.js'
 import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase, normalizeList } from './helpers.js'
 import { printZplLabel } from './printer.js'
+import { printPdfToBridge, listBridgePrinters } from './printer/pdf_bridge_client.js'
 import { ORDER_STATUSES, allowedTransitions } from '../shared/fsm.js'
 import { buildOrderHtml } from './pdf/orderTemplate.js'
 import { buildPickupHtml } from './pdf/pickupTemplate.js'
@@ -654,6 +655,42 @@ app.get('/api/orders/:id/pdf', auth, async (req, res) => {
   } catch (err) {
     console.error('Error generando PDF:', err)
     res.status(500).json({ error: 'No se pudo generar el PDF.' })
+  }
+})
+
+// Lista de impresoras disponibles en la PC Windows (vía print_bridge).
+app.get('/api/printers', auth, async (req, res) => {
+  try {
+    const result = await listBridgePrinters()
+    if (!result.ok) return res.status(502).json({ printers: [], error: result.error })
+    res.json({ printers: result.printers })
+  } catch (err) {
+    console.error('Error listando impresoras:', err)
+    res.status(500).json({ printers: [], error: 'No se pudo obtener la lista de impresoras.' })
+  }
+})
+
+// Imprime la orden directamente en la impresora de la PC local (silenciosa).
+app.post('/api/orders/:id/print', auth, async (req, res) => {
+  try {
+    const db = getDB()
+    const order = db.orders.find((o) => o.id === req.params.id)
+    if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
+    const customer = db.customers.find((c) => c.id === order.customerId)
+    const names = new Map(db.users.map((u) => [u.id, u.name]))
+    const enriched = {
+      ...order,
+      receivedByName: order.receivedBy ? names.get(order.receivedBy) || '—' : '—',
+    }
+    const html = buildOrderHtml(enriched, customer)
+    const pdfBuffer = await htmlToPdf(html)
+    const printer = (req.body && req.body.printer) || null
+    const result = await printPdfToBridge(pdfBuffer, printer)
+    if (!result.ok) return res.status(502).json({ error: result.error || 'Error de impresión.' })
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('Error imprimiendo orden:', err)
+    res.status(500).json({ error: 'No se pudo imprimir la orden.' })
   }
 })
 
