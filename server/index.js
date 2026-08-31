@@ -1,6 +1,7 @@
 // ============================================
 // Servidor de la API REST del servicio técnico
 // ============================================
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import jwt from 'jsonwebtoken'
