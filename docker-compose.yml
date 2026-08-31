@@ -9,18 +9,12 @@ services:
     environment:
       - PORT=3000
       - DATA_DIR=/app/data
-      # Host/IP donde corre print_bridge.py (PC Windows con la impresora USB).
-      # En Docker Desktop: host.docker.internal. En Docker Engine en WSL2, usá
-      # la IP de Windows (ej. 192.168.0.90) o agregá --add-host al contenedor.
-      - PRINT_BRIDGE_HOST=${PRINT_BRIDGE_HOST:-host.docker.internal}
+      # IP de Windows detectada por docker-start.bat (donde corre print_bridge.py).
+      - PRINT_BRIDGE_HOST=${PRINT_BRIDGE_HOST:-localhost}
       - PRINT_BRIDGE_PORT=9200
       - JWT_SECRET=${JWT_SECRET:?Definí JWT_SECRET antes de levantar el sistema}
     volumes:
       - service-center_data:/app/data
-    # Permite que el backend (en el contenedor) alcance la PC Windows que
-    # corre print_bridge.py, incluso con Docker Engine en WSL2.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     expose:
       - "3000"
 

@@ -7,9 +7,8 @@ echo Arrancando Docker en WSL2...
 wsl -u root service docker start >nul 2>&1
 timeout /t 2 /nobreak >nul
 
-REM Detecta la IP de Windows desde WSL
-for /f "tokens=*" %%i in ('wsl hostname -I') do set WIN_IP=%%i
-set WIN_IP=%WIN_IP: =%
+REM Detecta la IP de Windows desde WSL (solo la primera IP)
+for /f %%i in ('wsl hostname -I') do set "WIN_IP=%%i"
 echo IP de Windows detectada: %WIN_IP%
 
 REM Levanta Docker Compose con la IP de Windows como PRINT_BRIDGE_HOST
