@@ -35,7 +35,7 @@ except ImportError:
 # Ruta a SumatraPDF ( configurable por env SUMATRA_PDF ).
 SUMATRA_PDF = os.environ.get(
     'SUMATRA_PDF',
-    r'C:\Program Files\SumatraPDF\SumatraPDF.exe',
+    r'C:\Users\matt\AppData\Local\SumatraPDF\SumatraPDF.exe',
 )
 
 

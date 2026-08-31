@@ -13,7 +13,7 @@ setlocal
 
 set PORT=9200
 REM Ajustá esta ruta si SumatraPDF está instalado en otro lugar.
-if not defined SUMATRA_PDF set "SUMATRA_PDF=C:\Program Files\SumatraPDF\SumatraPDF.exe"
+if not defined SUMATRA_PDF set "SUMATRA_PDF=C:\Users\matt\AppData\Local\SumatraPDF\SumatraPDF.exe"
 
 if not exist "%SUMATRA_PDF%" (
   echo [ADVERTENCIA] SumatraPDF no se encontró en: %SUMATRA_PDF%
