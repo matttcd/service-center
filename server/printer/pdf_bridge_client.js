@@ -4,8 +4,8 @@
 // ============================================
 import net from 'node:net'
 
-const BRIDGE_HOST = process.env.PRINT_BRIDGE_HOST || 'host.docker.internal'
-const BRIDGE_PORT = Number(process.env.PRINT_BRIDGE_PORT || 9200)
+const getBridgeHost = () => process.env.PRINT_BRIDGE_HOST || 'localhost'
+const getBridgePort = () => Number(process.env.PRINT_BRIDGE_PORT || 9200)
 
 function sendPayload(payload) {
   return new Promise((resolve) => {
@@ -13,7 +13,7 @@ function sendPayload(payload) {
     try {
       socket = new net.Socket()
       socket.setTimeout(10000)
-      socket.connect(BRIDGE_PORT, BRIDGE_HOST, () => {
+      socket.connect(getBridgePort(), getBridgeHost(), () => {
         const data = Buffer.from(JSON.stringify(payload), 'utf-8')
         const lenBuf = Buffer.alloc(4)
         lenBuf.writeUInt32BE(data.length, 0)

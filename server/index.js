@@ -1,14 +1,18 @@
 // ============================================
 // Servidor de la API REST del servicio técnico
 // ============================================
-import 'dotenv/config'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import dotenv from 'dotenv'
+const __file = fileURLToPath(import.meta.url)
+const __serverDir = path.dirname(__file)
+const __rootDir = path.resolve(__serverDir, '..')
+dotenv.config({ path: path.join(__rootDir, '.env') })
 import express from 'express'
 import cors from 'cors'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { initDB, getDB, mutate, persist, createBackup, listBackups, restoreBackup, purgeTrash, onDataChange } from './store.js'
 import { buildSeed } from './seed.js'
 import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase, normalizeList } from './helpers.js'
