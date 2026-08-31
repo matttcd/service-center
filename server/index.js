@@ -425,6 +425,39 @@ app.post('/api/catalog/models', auth, (req, res) => {
   })
 })
 
+// Importación masiva de modelos al catálogo (admin only).
+app.post('/api/catalog/models/bulk', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo los administradores pueden importar modelos.' })
+  const items = req.body?.models
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Se esperaba un array "models" con al menos un elemento.' })
+  }
+  if (items.length > 5000) {
+    return res.status(400).json({ error: 'Máximo 5000 modelos por importación.' })
+  }
+  let created = 0
+  let skipped = 0
+  mutate((d) => {
+    d.catalog = d.catalog || { brands: [], models: [] }
+    for (const item of items) {
+      const brand = titleCase(String(item?.brand || '').trim())
+      const name = titleCase(String(item?.name || '').trim())
+      if (!brand || !name) { skipped++; continue }
+      if (!d.catalog.brands.find((x) => x.name.toLowerCase() === brand.toLowerCase())) {
+        d.catalog.brands.push({ id: uid(), name: brand, usage: 0 })
+      }
+      const exists = d.catalog.models.find(
+        (x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase(),
+      )
+      if (exists) { skipped++; continue }
+      d.catalog.models.push({ id: uid(), brand, name, usage: 0 })
+      created++
+    }
+  }).then(() => {
+    res.json({ ok: true, created, skipped, total: getDB().catalog.models.length })
+  })
+})
+
 // Cuenta una marca/modelo en el catálogo (y los crea si faltan).
 function bumpCatalog(d, brand, model) {
   d.catalog = d.catalog || { brands: [], models: [] }
