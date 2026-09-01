@@ -76,12 +76,6 @@ export default function PatternPad({ value = [], onChange }) {
     return String(num).split('').map((d) => parseInt(d, 10) - 1).filter((n) => n >= 0 && n < 9)
   }
 
-  // Convierte array 0-indexed a entero 1-indexed (para clear interno)
-  const arrayToInt = (arr) => {
-    if (!arr.length) return null
-    return parseInt(arr.map((n) => n + 1).join(''), 10)
-  }
-
   // Inicializar pattern-lock-js
   useEffect(() => {
     if (!svgRef.current) return
@@ -91,8 +85,6 @@ export default function PatternPad({ value = [], onChange }) {
         const arr = intToArray(pattern)
         setCurrentPattern(arr)
         onChange(arr)
-        // Devolver true/false para success/error visual del library
-        return arr.length >= 3
       },
       vibrate: true,
     })

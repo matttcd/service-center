@@ -1,43 +1,43 @@
+/* patternlock.css — Estilo visual alineado al diseño original de PatternPad */
+
+svg.patternlock {
+  border-radius: 1rem;
+  border: 1px solid var(--color-slate-300, #cbd5e1);
+}
 svg.patternlock g.lock-lines line {
-  stroke-width: 1.5;
-  stroke: black;
-  opacity: 0.5;
+  stroke: var(--color-primary-500, #3b82f6);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.85;
 }
-
 svg.patternlock g.lock-dots circle {
+  fill: var(--color-slate-300, #cbd5e1);
   stroke: transparent;
-  fill: black;
   stroke-width: 13.5;
+  pointer-events: all;
 }
-
 svg.patternlock g.lock-actives circle {
-  fill: black;
-  opacity: .2;
-  animation: lock-activate-dot .15s 0s ease 1;
+  fill: var(--color-primary-600, #1d4ed8);
+  opacity: 1;
   transform-origin: center;
 }
-
-svg.patternlock g.lock-lines line {
-  stroke-width: 1.5;
-  stroke-linecap: round;
-}
-
 svg.patternlock.success g.lock-actives circle {
-  fill: green;
+  fill: var(--color-primary-600, #1d4ed8);
 }
-
 svg.patternlock.error g.lock-actives circle {
-  fill: red;
+  fill: var(--color-primary-600, #1d4ed8);
 }
 
-@keyframes lock-activate-dot {
-  0% {
-    transform: scale(0);
-  }
-  75% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1.0);
-  }
+/* Dark mode */
+.dark svg.patternlock {
+  border-color: var(--color-slate-700, #334155);
+}
+.dark svg.patternlock g.lock-dots circle {
+  fill: var(--color-slate-700, #334155);
+}
+.dark svg.patternlock g.lock-lines line {
+  stroke: var(--color-primary-400, #60a5fa);
+}
+.dark svg.patternlock g.lock-actives circle {
+  fill: var(--color-primary-500, #3b82f6);
 }
