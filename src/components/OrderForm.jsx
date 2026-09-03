@@ -380,10 +380,10 @@ setIssue('')
               )}
             </div>
 
-            {deviceType && deviceType !== 'Otro' && (
-            <>
+            {/* Marca */}
             <div>
               <label className={labelCls}>Marca</label>
+              {deviceType && deviceType !== 'Otro' ? (
               <div className="flex flex-wrap items-center gap-2">
                 {topBrands.map((b) => (
                   <button key={b.id} type="button" onClick={() => { setBrand(b.name); setModel('') }}
@@ -405,10 +405,15 @@ setIssue('')
                   </span>
                 )}
               </div>
+              ) : (
+              <p className="text-sm text-slate-400">Elegí el tipo de dispositivo primero.</p>
+              )}
             </div>
 
+            {/* Modelo */}
             <div>
               <label className={labelCls}>Modelo</label>
+              {deviceType && deviceType !== 'Otro' ? (
               <div className="flex flex-wrap items-center gap-2">
                 {brand ? (
                   brandModels.length ? (
@@ -440,9 +445,10 @@ setIssue('')
                   </span>
                 )}
               </div>
+              ) : (
+              <p className="text-sm text-slate-400">Elegí el tipo de dispositivo primero.</p>
+              )}
             </div>
-            </>
-            )}
 
             <div>
               <label className={labelCls}>Estado en que entra el equipo</label>
