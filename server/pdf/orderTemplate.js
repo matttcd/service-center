@@ -29,8 +29,13 @@ function esc(str) {
   return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function plainList(items) {
+function plainList(items, maxItems = 999) {
   if (!items || items.length === 0) return '<span style="color:#999">Sin datos</span>'
+  if (items.length > maxItems) {
+    const shown = items.slice(0, maxItems)
+    const extra = items.length - maxItems
+    return `${shown.map(esc).join(', ')}, … y ${extra} más`
+  }
   return esc(items.join(', '))
 }
 
@@ -69,7 +74,8 @@ export function buildOrderHtml(order, customer, contractBulletsOverride) {
   const noPin = order?.noPin || false
   const accessoryList = (order?.accessories || '').split(',').map((s) => s.trim()).filter(Boolean)
   const conditionList = (order?.conditions || '').split(',').map((s) => s.trim()).filter(Boolean)
-  const issue = order?.issue || ''
+  const issue = (order?.issue || '').slice(0, 201).replace(/\n/g, ' ')
+  const truncatedIssue = (order?.issue || '').length > 200 ? `${issue.slice(0, 200)}…` : issue
   const fixList = (order?.fix || '').split(',').map((s) => s.trim()).filter(Boolean)
   const priceStr = order?.price > 0 ? formatMoney(order.price) : ''
   const advanceStr = order?.advance > 0 ? formatMoney(order.advance) : ''
@@ -171,8 +177,8 @@ export function buildOrderHtml(order, customer, contractBulletsOverride) {
   <div class="equip-grid">
     <div class="equip-col">
       ${field('Marca / Modelo', esc(devName))}
-      ${field('Accesorios', plainList(accessoryList))}
-      ${field('Estado', plainList(conditionList))}
+      ${field('Accesorios', plainList(accessoryList, 10))}
+      ${field('Estado', plainList(conditionList, 8))}
     </div>
     <div class="equip-col">
       ${field('PIN / contrasena', noPin ? '<em style="color:#999">El cliente no proporcionó contraseña</em>' : esc(pin) || '—')}
@@ -183,12 +189,12 @@ export function buildOrderHtml(order, customer, contractBulletsOverride) {
     </div>
     <div class="equip-col">
       ${field('Recibido por', esc(receivedByName))}
-      ${field('Chequeos / notas generales', esc(issue) || '<span style="color:#999">&mdash;</span>')}
+      ${field('Chequeos / notas generales', esc(truncatedIssue) || '<span style="color:#999">&mdash;</span>')}
     </div>
   </div>
 
   <h2>Reparacion</h2>
-  ${field('Tipo de reparación', isRevision ? 'Revisión' : plainList(fixList), { full: true })}
+  ${field('Tipo de reparación', isRevision ? 'Revisión' : plainList(fixList, 8), { full: true })}
   <div class="grid2">
     ${field('Presupuesto', `<span class="val-price">${esc(priceStr) || '&mdash;'}</span>`)}
     ${order?.advance > 0 ? field('Sena recibida', `<span class="val-price">${esc(advanceStr)}</span>`) : ''}

@@ -348,6 +348,7 @@ export function DataProvider({ children }) {
       accessories: data.catalog?.accessories || [],
       conditions: data.catalog?.conditions || [],
       fixes: data.catalog?.fixes || [],
+      terms: data.catalog?.terms || [],
     },
     actividad,
     actividadHasMore,

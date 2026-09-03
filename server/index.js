@@ -158,9 +158,20 @@ const DEFAULT_LISTS = {
   accessories: ['Funda', 'Cargador', 'Vidrio templado', 'SIM', 'SD', 'Auriculares'],
   conditions: ['Apagado', 'Mojado', 'Golpeado', 'Display Roto', 'No se pudo probar funciones básicas'],
   fixes: ['Cambio de pantalla', 'Cambio de módulo', 'Cambio de batería', 'Pin de carga', 'Micrófono', 'Parlante', 'Botón de encendido', 'Flex', 'Software', 'Limpieza'],
+  terms: [
+    'Para la entrega del equipo, el cliente o un tercero asignado deberán presentar la <strong>orden</strong>. Si es un tercero, deberá contar con una <strong>autorización explícita</strong> del titular. Si el cliente no presenta la orden física, se podrá entregar el equipo con una constancia de retiro firmada (únicamente el cliente titular). Sin la <strong>orden original</strong> no se reconocerá garantía alguna.',
+    'La garantía tiene una duración de <strong>treinta (30) días</strong> corridos desde el retiro y cubre exclusivamente las reparaciones detalladas en la presente orden.',
+    'Transcurridos <strong>treinta (30) días</strong> desde la notificación de que el equipo está listo sin que haya sido retirado, El Gringo Celulares se reserva el derecho de modificar el presupuesto debido a variaciones en los costos de repuestos.',
+    'Los pagos son exclusivamente <strong>en efectivo</strong>.',
+    'Para cualquier duda o consulta sobre el estado de su dispositivo comunicarse al <strong>3704-583266</strong> o al <strong>3704-676320</strong>.',
+    'Declaro haber leído y acepto las condiciones precedentemente descriptas.',
+  ],
 }
 
-// Crea db.catalog.accessories / conditions / fixes con defaults si no existen.
+// Límite máximo de caracteres totales para los términos (los términos reales usan ~993).
+const MAX_TERMS_CHARS = 1600
+
+// Crea db.catalog.accessories / conditions / fixes / terms con defaults si no existen.
 function migrateCatalogLists() {
   const db = getDB()
   if (db.meta?.catalogListsMigrated) return
@@ -523,7 +534,7 @@ app.post('/api/catalog/models/bulk', auth, (req, res) => {
   })
 })
 
-// Listas de accesorios, condiciones y arreglos (editables desde Configuración).
+// Listas de accesorios, condiciones, arreglos y términos (editables desde Configuración).
 app.get('/api/catalog/lists', auth, (req, res) => {
   const db = getDB()
   const catalog = db.catalog || {}
@@ -531,6 +542,7 @@ app.get('/api/catalog/lists', auth, (req, res) => {
     accessories: catalog.accessories || DEFAULT_LISTS.accessories,
     conditions: catalog.conditions || DEFAULT_LISTS.conditions,
     fixes: catalog.fixes || DEFAULT_LISTS.fixes,
+    terms: catalog.terms || DEFAULT_LISTS.terms,
   })
 })
 
@@ -541,17 +553,28 @@ app.put('/api/catalog/lists', auth, (req, res) => {
     Array.isArray(v)
       ? v.map((s) => titleCase(String(s).trim())).filter(Boolean)
       : undefined
+  // Los términos son frases largas: no se titleCasean, solo se recortan.
+  const normalizeTerms = (v) =>
+    Array.isArray(v)
+      ? v.map((s) => String(s).trim()).filter(Boolean)
+      : undefined
   const accessories = normalize(body.accessories)
   const conditions = normalize(body.conditions)
   const fixes = normalize(body.fixes)
-  if (accessories === undefined && conditions === undefined && fixes === undefined) {
+  const terms = normalizeTerms(body.terms)
+  if (accessories === undefined && conditions === undefined && fixes === undefined && terms === undefined) {
     return res.status(400).json({ error: 'No se envió ninguna lista para actualizar.' })
+  }
+  // Validar límite de caracteres para términos
+  if (terms !== undefined && terms.join('').length > MAX_TERMS_CHARS) {
+    return res.status(400).json({ error: `Los términos no pueden superar ${MAX_TERMS_CHARS} caracteres en total.` })
   }
   mutate((d) => {
     d.catalog = d.catalog || {}
     if (accessories !== undefined) d.catalog.accessories = accessories
     if (conditions !== undefined) d.catalog.conditions = conditions
     if (fixes !== undefined) d.catalog.fixes = fixes
+    if (terms !== undefined) d.catalog.terms = terms
   }).then(() => {
     res.json({ ok: true })
   }).catch(() => res.status(500).json({ error: 'No se pudo guardar las listas.' }))
@@ -788,7 +811,7 @@ app.get('/api/orders/:id/pdf', auth, async (req, res) => {
       ...order,
       receivedByName: order.receivedBy ? names.get(order.receivedBy) || '—' : '—',
     }
-    const html = buildOrderHtml(enriched, customer)
+    const html = buildOrderHtml(enriched, customer, db.catalog?.terms)
     const pdfBuffer = await htmlToPdf(html)
     res.type('application/pdf')
     res.set('Content-Disposition', `inline; filename="orden-${order.orderNumber}.pdf"`)
@@ -823,7 +846,7 @@ app.post('/api/orders/:id/print', auth, async (req, res) => {
       ...order,
       receivedByName: order.receivedBy ? names.get(order.receivedBy) || '—' : '—',
     }
-    const html = buildOrderHtml(enriched, customer)
+    const html = buildOrderHtml(enriched, customer, db.catalog?.terms)
     const pdfBuffer = await htmlToPdf(html)
     const printer = (req.body && req.body.printer) || null
     const result = await printPdfToBridge(pdfBuffer, printer)

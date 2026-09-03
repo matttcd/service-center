@@ -168,24 +168,30 @@ setIssue('')
   }
 
   const toggleAccessory = (name) =>
-    setAccessories((list) =>
-      list.includes(name) ? list.filter((a) => a !== name) : [...list, name],
-    )
+    setAccessories((list) => {
+      if (list.includes(name)) return list.filter((a) => a !== name)
+      if (list.length >= 10) return list
+      return [...list, name]
+    })
 
   const toggleFix = (name) =>
-    setFixes((list) => (list.includes(name) ? list.filter((f) => f !== name) : [...list, name]))
+    setFixes((list) => {
+      if (list.includes(name)) return list.filter((f) => f !== name)
+      if (list.length >= 8) return list
+      return [...list, name]
+    })
 
   const onAddCustomFix = () => {
     const v = customFix.trim()
     if (!v) return
-    setFixes((list) => (list.includes(v) ? list : [...list, v]))
+    setFixes((list) => (list.includes(v) || list.length >= 8 ? list : [...list, v]))
     setCustomFix('')
   }
 
   const addCustomAccessory = () => {
     const v = customAccessory.trim()
     if (!v) return
-    setAccessories((list) => (list.includes(v) ? list : [...list, v]))
+    setAccessories((list) => (list.includes(v) || list.length >= 10 ? list : [...list, v]))
     setCustomAccessory('')
   }
 
@@ -468,7 +474,7 @@ setIssue('')
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 {conditionOptions.map((c) => (
                   <button key={c} type="button"
-                    onClick={() => setConditions((list) => (list.includes(c) ? list.filter((x) => x !== c) : [...list, c]))}
+                    onClick={() => setConditions((list) => (list.includes(c) ? list.filter((x) => x !== c) : list.length >= 8 ? list : [...list, c]))}
                     className={conditions.includes(c) ? chipSelected : chipIdle}>
                     {c}
                   </button>
@@ -540,7 +546,8 @@ setIssue('')
 
             <div>
             <label className={labelCls}>Chequeos / notas generales</label>
-            <textarea value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="Chequeos y notas generales..." className={inputCls} rows={3} />
+            <textarea value={issue} onChange={(e) => setIssue(e.target.value)} maxLength={200} placeholder="Chequeos y notas generales..." className={inputCls} rows={3} />
+            <p className="mt-1 text-right text-xs text-slate-400">{issue.length} / 200</p>
           </div>
 
           {diagnosisType === 'visible' && (

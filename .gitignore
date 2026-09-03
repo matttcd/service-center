@@ -26,6 +26,9 @@ session-*.md
 session-*.json
 tools/
 
+# PDFs generados por los scripts de prueba de medición/solapamiento
+test-*.pdf
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

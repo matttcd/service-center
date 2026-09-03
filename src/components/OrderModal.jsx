@@ -214,12 +214,12 @@ export default function OrderModal({ order, onClose }) {
   }
 
   const toggleFix = (name) =>
-    setFixList((list) => (list.includes(name) ? list.filter((f) => f !== name) : [...list, name]))
+    setFixList((list) => (list.includes(name) ? list.filter((f) => f !== name) : list.length >= 8 ? list : [...list, name]))
 
   const onAddCustomFix = () => {
     const v = customFix.trim()
     if (!v) return
-    setFixList((list) => (list.includes(v) ? list : [...list, v]))
+    setFixList((list) => (list.includes(v) || list.length >= 8 ? list : [...list, v]))
     setCustomFix('')
   }
 

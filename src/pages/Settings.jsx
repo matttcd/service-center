@@ -2,7 +2,7 @@
 // Settings: configuración general (solo admin)
 // ============================================
 import { useEffect, useState } from 'react'
-import { Save, AlertCircle, CheckCircle2, Stethoscope, Upload, Plus, X, Package, MonitorSmartphone, Wrench } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle2, Stethoscope, Upload, Plus, X, Package, MonitorSmartphone, Wrench, FileText } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import { formatMoney } from '../utils/helpers.js'
@@ -125,6 +125,163 @@ function ListEditor({ title, icon, desc, items, onSave }) {
             type="button"
             onClick={handleSave}
             disabled={saving || !dirty}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
+          >
+            <Save size={16} />
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+const MAX_TERMS_CHARS = 1600
+
+function TermsEditor({ title, icon, desc, items, onSave }) {
+  const [list, setList] = useState(items || [])
+  const [draft, setDraft] = useState('')
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    if (!dirty) setList(items || [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items])
+
+  const totalChars = list.join('').length
+  const over = totalChars > MAX_TERMS_CHARS
+
+  const addItem = () => {
+    const v = draft.trim()
+    if (!v) return
+    setList((prev) => [...prev, v])
+    setDirty(true)
+    setDraft('')
+    setMsg(null)
+  }
+
+  const updateItem = (idx, val) => {
+    setList((prev) => prev.map((x, i) => (i === idx ? val : x)))
+    setDirty(true)
+    setMsg(null)
+  }
+
+  const removeItem = (idx) => {
+    setList((prev) => prev.filter((_, i) => i !== idx))
+    setDirty(true)
+    setMsg(null)
+  }
+
+  const handleSave = async () => {
+    if (saving) return
+    if (over) return
+    setSaving(true)
+    setMsg(null)
+    const cleaned = list.map((t) => t.trim()).filter(Boolean)
+    const res = await onSave(cleaned)
+    if (res.error) {
+      setMsg({ type: 'error', text: res.error })
+    } else {
+      setDirty(false)
+      setMsg({ type: 'ok', text: 'Términos guardados.' })
+    }
+    setSaving(false)
+  }
+
+  const inputCls =
+    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
+
+  return (
+    <Card>
+      <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+        <h2 className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
+          {icon}
+          {title}
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{desc}</p>
+      </div>
+
+      <div className="space-y-4 px-5 py-5">
+        {msg && (
+          <p className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+            msg.type === 'ok'
+              ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+              : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+          }`}>
+            {msg.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            {msg.text}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-500 dark:text-slate-400">Caracteres en total</span>
+          <span className={`font-semibold ${over ? 'text-red-500' : 'text-slate-600 dark:text-slate-300'}`}>
+            {totalChars} / {MAX_TERMS_CHARS}
+          </span>
+        </div>
+
+        {over && (
+          <p className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
+            <AlertCircle size={16} />
+            El límite es {MAX_TERMS_CHARS} caracteres en total. Reducí el texto antes de guardar.
+          </p>
+        )}
+
+        <ol className="space-y-3">
+          {list.map((term, idx) => (
+            <li key={idx} className="flex items-start gap-2">
+              <span className="mt-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-50 text-xs font-semibold text-primary-600 dark:bg-primary-500/10 dark:text-primary-300">
+                {idx + 1}
+              </span>
+              <textarea
+                value={term}
+                onChange={(e) => updateItem(idx, e.target.value)}
+                rows={2}
+                className={inputCls}
+              />
+              <button
+                type="button"
+                onClick={() => removeItem(idx)}
+                className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                title="Quitar término"
+              >
+                <X size={16} />
+              </button>
+            </li>
+          ))}
+        </ol>
+
+        {list.length === 0 && (
+          <p className="text-sm text-slate-400">Sin términos cargados.</p>
+        )}
+
+        <div className="flex items-center gap-2">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addItem() } }}
+            placeholder="Nuevo término..."
+            rows={2}
+            className={inputCls}
+          />
+          <button
+            type="button"
+            onClick={addItem}
+            disabled={!draft.trim()}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition hover:bg-slate-200 disabled:opacity-40 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            title="Agregar"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !dirty || over}
             className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
           >
             <Save size={16} />
@@ -334,6 +491,14 @@ export default function Settings() {
         desc="Reparaciones más comunes para cargar el diagnóstico."
         items={catalogLists.fixes}
         onSave={(list) => saveCatalogLists({ fixes: list })}
+      />
+
+      <TermsEditor
+        title="Plazos y condiciones"
+        icon={<FileText size={18} className="text-primary-500" />}
+        desc="Cláusulas que se imprimen al pie de cada orden. Máximo 1600 caracteres en total."
+        items={catalogLists.terms}
+        onSave={(list) => saveCatalogLists({ terms: list })}
       />
     </div>
   )

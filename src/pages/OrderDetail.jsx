@@ -270,11 +270,11 @@ export default function OrderDetail() {
     setEditingFix(true)
   }
   const cancelEditFix = () => setEditingFix(false)
-  const toggleFix = (name) => setFixList((l) => l.includes(name) ? l.filter((f) => f !== name) : [...l, name])
+  const toggleFix = (name) => setFixList((l) => l.includes(name) ? l.filter((f) => f !== name) : l.length >= 8 ? l : [...l, name])
   const addCustomFix = () => {
     const v = fixCustom.trim()
     if (!v) return
-    setFixList((l) => (l.includes(v) ? l : [...l, v]))
+    setFixList((l) => (l.includes(v) || l.length >= 8 ? l : [...l, v]))
     setFixCustom('')
   }
   const saveEditFix = async () => {
@@ -534,7 +534,8 @@ export default function OrderDetail() {
                 </div>
                 <div>
                   <label className={labelCls}>Chequeos / notas generales</label>
-                  <textarea value={equipIssue} onChange={(e) => setEquipIssue(e.target.value)} rows={3} className={inputCls} />
+                  <textarea value={equipIssue} onChange={(e) => setEquipIssue(e.target.value)} maxLength={200} rows={3} className={inputCls} />
+                  <p className="mt-1 text-right text-xs text-slate-400">{equipIssue.length} / 200</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={saveEditEquip} disabled={busy === 'equip'} className={btnPrimary}><Save size={14} /> Guardar</button>
