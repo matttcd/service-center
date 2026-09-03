@@ -4,8 +4,20 @@
 // ============================================
 import Badge from './Badge.jsx'
 import { timeSinceStatus } from '../utils/helpers.js'
+import { Smartphone, Tablet, Laptop, Monitor, Gamepad2, Printer, HelpCircle } from 'lucide-react'
+
+const DEVICE_TYPE_ICONS = {
+  'Celular': Smartphone,
+  'Tablet': Tablet,
+  'Notebook / PC': Laptop,
+  'Smart TV': Monitor,
+  'Consola': Gamepad2,
+  'Impresora': Printer,
+  'Otro': HelpCircle,
+}
 
 export default function OrderCard({ order, onOpen }) {
+  const DeviceIcon = DEVICE_TYPE_ICONS[order.deviceType] || Smartphone
   return (
     <div
       role="button"
@@ -16,7 +28,8 @@ export default function OrderCard({ order, onOpen }) {
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+          <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-slate-900 dark:text-white">
+            <DeviceIcon size={13} className="shrink-0 text-slate-400" />
             {order.brand} {order.model}
           </p>
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">

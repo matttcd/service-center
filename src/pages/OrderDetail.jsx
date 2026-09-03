@@ -8,6 +8,7 @@ import {
   ArrowLeft, Printer, Trash2, Play, Search, Check, CheckCircle2, FileText,
   PackageCheck, PackageX, RotateCcw, Sticker, Save, Phone, BellRing,
   Lock, Smartphone, User, X, Pencil, MoreVertical, StickyNote, History, ChevronDown,
+  Tablet, Laptop, Monitor, Gamepad2, HelpCircle,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -32,6 +33,17 @@ import {
   normalizeList,
 } from '../utils/helpers.js'
 import { COMMON_FIXES } from '../utils/constants.js'
+import { DEVICE_TYPES, DEVICE_TYPE_BRANDS } from '../../shared/fsm.js'
+
+const DEVICE_TYPE_ICONS = {
+  'Celular': Smartphone,
+  'Tablet': Tablet,
+  'Notebook / PC': Laptop,
+  'Smart TV': Monitor,
+  'Consola': Gamepad2,
+  'Impresora': Printer,
+  'Otro': HelpCircle,
+}
 
 function initials(name) {
   return String(name || '')
@@ -58,6 +70,8 @@ export default function OrderDetail() {
 
   // Edición de equipo
   const [editingEquip, setEditingEquip] = useState(false)
+  const [equipDeviceType, setEquipDeviceType] = useState('Celular')
+  const [equipCustomDeviceType, setEquipCustomDeviceType] = useState('')
   const [equipBrand, setEquipBrand] = useState('')
   const [equipModel, setEquipModel] = useState('')
   const [equipPin, setEquipPin] = useState('')
@@ -148,7 +162,7 @@ export default function OrderDetail() {
         setLocalOrder(fresh.order)
       } else if (next === 'terminado') {
         showNotice('Equipo marcado como listo. Avisale al cliente.')
-        setConfirmPrint(true)
+        setPrintOpen(true)
       } else showNotice('Estado actualizado.')
     } finally {
       setBusy(null)
@@ -212,6 +226,8 @@ export default function OrderDetail() {
 
   // ─── Equipo: abrir/cerrar edición ───
   const startEditEquip = () => {
+    setEquipDeviceType(order.deviceType || 'Celular')
+    setEquipCustomDeviceType(!['Celular','Tablet','Notebook / PC','Smart TV','Consola','Impresora','Otro'].includes(order.deviceType) ? order.deviceType : '')
     setEquipBrand(order.brand || '')
     setEquipModel(order.model || '')
     setEquipPin(order.pin || '')
@@ -225,7 +241,7 @@ export default function OrderDetail() {
   const saveEditEquip = async () => {
     setBusy('equip')
     const res = await updateOrder(order.id, {
-      brand: titleCase(equipBrand), model: titleCase(equipModel), pin: equipPin,
+      deviceType: equipDeviceType === 'Otro' ? titleCase(equipCustomDeviceType.trim()) || 'Otro' : equipDeviceType, brand: titleCase(equipBrand), model: titleCase(equipModel), pin: equipPin,
       pattern: equipPattern, accessories: equipAccessories, conditions: equipConditions, issue: equipIssue,
     })
     if (!res.error) { setEditingEquip(false); showNotice('Equipo actualizado.') } else showNotice(res.error)
@@ -445,6 +461,40 @@ export default function OrderDetail() {
           <div className="px-6 py-4">
             {editingEquip ? (
               <div className="space-y-4">
+                <div>
+                  <label className={labelCls}>Tipo de dispositivo</label>
+                  <div className="flex items-center gap-2 pt-1">
+                    {DEVICE_TYPES.map((t) => {
+                      const Icon = DEVICE_TYPE_ICONS[t]
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          title={t}
+                          onClick={() => setEquipDeviceType(t)}
+                          className={`inline-flex h-11 w-11 items-center justify-center rounded-lg border transition ${
+                            equipDeviceType === t
+                              ? 'border-primary-600 bg-primary-50 text-primary-600 dark:border-primary-400 dark:bg-primary-500/15 dark:text-primary-400'
+                              : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          <Icon size={20} />
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {equipDeviceType === 'Otro' && (
+                    <input
+                      type="text"
+                      value={equipCustomDeviceType}
+                      onChange={(e) => setEquipCustomDeviceType(e.target.value)}
+                      placeholder="Describí el tipo de dispositivo..."
+                      className={`${inputCls} mt-2`}
+                      autoFocus
+                    />
+                  )}
+                </div>
+                {equipDeviceType !== 'Otro' && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className={labelCls}>Marca</label>
@@ -455,6 +505,8 @@ export default function OrderDetail() {
                     <input value={equipModel} onChange={(e) => setEquipModel(e.target.value)} className={inputCls} />
                   </div>
                 </div>
+                )}
+                {equipDeviceType !== 'Otro' && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className={labelCls}>PIN / contraseña</label>
@@ -465,6 +517,7 @@ export default function OrderDetail() {
                     <PatternPad value={equipPattern} onChange={setEquipPattern} />
                   </div>
                 </div>
+                )}
                 <div>
                   <label className={labelCls}>Accesorios (separados por coma)</label>
                   <input value={equipAccessories} onChange={(e) => setEquipAccessories(e.target.value)} className={inputCls} placeholder="Funda, cargador..." />
@@ -485,7 +538,8 @@ export default function OrderDetail() {
             ) : (
               <div>
                 <div className="flex items-center gap-2 pb-2 text-base">
-                  <Smartphone size={15} className="shrink-0 text-slate-400" />
+                  {(() => { const Icon = DEVICE_TYPE_ICONS[order.deviceType] || Smartphone; return <Icon size={15} className="shrink-0 text-slate-400" /> })()}
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{order.deviceType || 'Celular'}</span>
                   <span className="truncate font-semibold text-slate-900 dark:text-white">
                     {titleCase(order.brand)} {titleCase(order.model)}
                   </span>

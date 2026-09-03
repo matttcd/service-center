@@ -69,6 +69,28 @@ export function nextStatusLabel(order) {
   return target ? labels[target] || '' : ''
 }
 
+// Tipos de dispositivo.
+export const DEVICE_TYPES = [
+  'Celular',
+  'Tablet',
+  'Notebook / PC',
+  'Smart TV',
+  'Consola',
+  'Impresora',
+  'Otro',
+]
+
+// Marcas asociadas a cada tipo (array vacío = no filtra, muestra todas).
+export const DEVICE_TYPE_BRANDS = {
+  'Celular': [],
+  'Tablet': [],
+  'Notebook / PC': ['Dell', 'HP', 'Acer', 'Lenovo', 'Asus', 'Microsoft', 'Samsung'],
+  'Smart TV': ['Samsung', 'LG', 'Noblex', 'TCL', 'Hisense', 'Bgh', 'Philips', 'Sony'],
+  'Consola': ['Sony Playstation', 'Microsoft XBOX', 'Nintendo'],
+  'Impresora': ['HP', 'Epson', 'Canon', 'Brother', 'Samsung', 'Lexmark', 'Kyocera', 'Xerox', 'Ricoh', 'OKI', 'Konica Minolta'],
+  'Otro': [],
+}
+
 // Roles que pueden realizar cada tipo de transición (espejo de las reglas del backend).
 const TECH_ROLES = ['tecnico', 'admin']
 const COUNTER_ROLES = ['recepcion', 'admin']

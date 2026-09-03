@@ -244,6 +244,7 @@ export default function OrderModal({ order, onClose }) {
       title={
         <span className="flex flex-wrap items-center gap-2">
           <span>{order.orderNumber} · {order.brand} {order.model}</span>
+          <span className="text-xs text-slate-400">{order.deviceType || 'Celular'}</span>
           {order.diagnosisType === 'revision' ? (
             <Badge tone="primary">Revisión</Badge>
           ) : (

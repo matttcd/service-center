@@ -63,7 +63,8 @@ export function buildOrderHtml(order, customer) {
   const phones = [customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' / ') || '—'
   const address = customer?.address || ''
   const receivedByName = order?.receivedByName || ''
-  const devName = `${titleCase(order?.brand || '')} ${titleCase(order?.model || '')}`.trim()
+  const deviceType = order?.deviceType || 'Celular'
+  const devName = `${deviceType} · ${titleCase(order?.brand || '')} ${titleCase(order?.model || '')}`.trim()
   const pin = order?.pin || ''
   const accessoryList = (order?.accessories || '').split(',').map((s) => s.trim()).filter(Boolean)
   const conditionList = (order?.conditions || '').split(',').map((s) => s.trim()).filter(Boolean)

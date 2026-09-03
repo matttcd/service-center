@@ -24,7 +24,7 @@ import { buildPickupHtml } from './pdf/pickupTemplate.js'
 import { htmlToPdf } from './pdf/puppeteerPdf.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
-const PORT = process.env.PORT || 8080
+const PORT = process.env.PORT || 4000
 
 // El secreto JWT no debe quedar hardcodeado en producción: se exige por env.
 const NODE_ENV = process.env.NODE_ENV || 'development'
@@ -116,6 +116,30 @@ function migrateNormalizedText() {
   }
 }
 migrateNormalizedText()
+
+// Migración: agregar deviceType a órdenes existentes.
+function migrateDeviceType() {
+  const db = getDB()
+  if (db.meta?.deviceTypeMigrated) return
+  let changed = 0
+  for (const o of db.orders || []) {
+    if (!o.deviceType) { o.deviceType = 'Celular'; changed++ }
+  }
+  mutate((d) => { d.meta = { ...(d.meta || {}), deviceTypeMigrated: true } })
+    .then(() => console.log(`Migración deviceType: ${changed} orden(es) actualizada(s).`))
+}
+// Agrega deviceType a modelos existentes del catálogo que no lo tengan.
+function migrateCatalogDeviceType() {
+  const db = getDB()
+  if (db.meta?.catalogDeviceTypeMigrated) return
+  let changed = 0
+  for (const m of db.catalog?.models || []) {
+    if (!m.deviceType) { m.deviceType = 'Celular'; changed++ }
+  }
+  mutate((d) => { d.meta = { ...(d.meta || {}), catalogDeviceTypeMigrated: true } })
+    .then(() => console.log(`Migración catalog deviceType: ${changed} modelo(s) actualizado(s).`))
+}
+migrateCatalogDeviceType()
 
 // ============================================
 // Tiempo real (Server-Sent Events)
@@ -405,6 +429,7 @@ app.post('/api/catalog/brands', auth, (req, res) => {
 app.post('/api/catalog/models', auth, (req, res) => {
   const brand = titleCase(String(req.body?.brand || '').trim())
   const name = titleCase(String(req.body?.name || '').trim())
+  const deviceType = String(req.body?.deviceType || 'Celular').trim()
   if (!brand || !name) return res.status(400).json({ error: 'La marca y el modelo son obligatorios.' })
   mutate((d) => {
     d.catalog = d.catalog || { brands: [], models: [] }
@@ -413,9 +438,9 @@ app.post('/api/catalog/models', auth, (req, res) => {
     }
     let m = d.catalog.models.find((x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase())
     if (!m) {
-      m = { id: uid(), brand, name, usage: 0 }
+      m = { id: uid(), brand, name, deviceType, usage: 0 }
       d.catalog.models.push(m)
-      audit(d, 'create', 'catalog', m.id, req.user.id, `Nuevo modelo en catálogo: ${brand} ${name}`)
+      audit(d, 'create', 'catalog', m.id, req.user.id, `Nuevo modelo en catálogo: ${brand} ${name} (${deviceType})`)
     }
   }).then(() => {
     const m = getDB().catalog.models.find(
@@ -442,6 +467,7 @@ app.post('/api/catalog/models/bulk', auth, (req, res) => {
     for (const item of items) {
       const brand = titleCase(String(item?.brand || '').trim())
       const name = titleCase(String(item?.name || '').trim())
+      const deviceType = String(item?.deviceType || 'Celular').trim()
       if (!brand || !name) { skipped++; continue }
       if (!d.catalog.brands.find((x) => x.name.toLowerCase() === brand.toLowerCase())) {
         d.catalog.brands.push({ id: uid(), name: brand, usage: 0 })
@@ -450,7 +476,7 @@ app.post('/api/catalog/models/bulk', auth, (req, res) => {
         (x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase(),
       )
       if (exists) { skipped++; continue }
-      d.catalog.models.push({ id: uid(), brand, name, usage: 0 })
+      d.catalog.models.push({ id: uid(), brand, name, deviceType, usage: 0 })
       created++
     }
   }).then(() => {
@@ -459,7 +485,7 @@ app.post('/api/catalog/models/bulk', auth, (req, res) => {
 })
 
 // Cuenta una marca/modelo en el catálogo (y los crea si faltan).
-function bumpCatalog(d, brand, model) {
+function bumpCatalog(d, brand, model, deviceType = 'Celular') {
   d.catalog = d.catalog || { brands: [], models: [] }
   let b = d.catalog.brands.find((x) => x.name.toLowerCase() === brand.toLowerCase())
   if (!b) {
@@ -469,7 +495,7 @@ function bumpCatalog(d, brand, model) {
   b.usage += 1
   let m = d.catalog.models.find((x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === model.toLowerCase())
   if (!m) {
-    m = { id: uid(), brand, name: model, usage: 0 }
+    m = { id: uid(), brand, name: model, deviceType, usage: 0 }
     d.catalog.models.push(m)
   }
   m.usage += 1
@@ -569,6 +595,7 @@ app.post('/api/orders', auth, (req, res) => {
   const model = titleCase(String(body.model || '').trim())
   if (!brand) return res.status(400).json({ error: 'Elegí la marca del dispositivo.' })
   if (!model) return res.status(400).json({ error: 'Elegí el modelo del dispositivo.' })
+  const deviceType = ['Celular', 'Tablet', 'Notebook / PC', 'Smart TV', 'Consola', 'Impresora', 'Otro'].includes(body.deviceType) ? body.deviceType : 'Celular'
   const diagnosisType = body.diagnosisType === 'revision' ? 'revision' : 'visible'
   const price = Math.max(0, Number(body.price) || 0)
   const advance = Math.max(0, Number(body.advance) || 0)
@@ -585,6 +612,7 @@ app.post('/api/orders', auth, (req, res) => {
       id: uid(),
       orderNumber,
       customerId: body.customerId,
+      deviceType,
       brand,
       model,
       accessories: normalizeList(String(body.accessories || '')),
@@ -614,7 +642,7 @@ app.post('/api/orders', auth, (req, res) => {
       deliveredBy: null,
     }
     d.orders.push(order)
-    bumpCatalog(d, brand, model)
+    bumpCatalog(d, brand, model, deviceType)
     audit(
       d,
       'create',
@@ -630,7 +658,7 @@ app.post('/api/orders', auth, (req, res) => {
 
 app.get('/api/orders', auth, (req, res) => {
   const db = getDB()
-  const { status, q, from, to, brand, onlyNotNotified, onlyNotified, onlyNotConfirmed } = req.query
+  const { status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotified, onlyNotConfirmed } = req.query
   const query = String(q || '').trim().toLowerCase()
   const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 0))
   const offset = Math.max(0, Number(req.query.offset) || 0)
@@ -642,6 +670,7 @@ app.get('/api/orders', auth, (req, res) => {
 
   if (status && status !== 'all') list = list.filter((o) => o.status === status)
   if (brand && brand !== 'all') list = list.filter((o) => o.brand === brand)
+  if (deviceType && deviceType !== 'all') list = list.filter((o) => o.deviceType === deviceType)
   if (from) list = list.filter((o) => o.createdAt >= from)
   if (to) list = list.filter((o) => o.createdAt <= to)
   if (onlyNotNotified === '1') {
@@ -906,7 +935,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   const {
-    brand, model, pin, pattern, accessories, conditions,
+    deviceType, brand, model, pin, pattern, accessories, conditions,
     technicianNotes, fix, price, issue, note, editNote, deleteNote,
   } = req.body || {}
   const role = req.user.role
@@ -942,7 +971,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
       return res.status(403).json({ error: 'Solo podés eliminar tus propias notas.' })
     }
   }
-  const equipFields = [brand, model, pin, pattern, accessories, conditions]
+  const equipFields = [deviceType, brand, model, pin, pattern, accessories, conditions]
   const touchesEquip = equipFields.some((v) => v !== undefined)
   if (touchesEquip && !isEmpOrAdmin) {
     return res.status(403).json({ error: 'Solo recepción o administradores pueden editar los detalles del equipo.' })
@@ -961,6 +990,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
       (fix !== undefined && normalizeList(String(fix)) !== normalizeList(String(o.fix || ''))) ||
       (price !== undefined && String(Math.max(0, Number(price) || 0)) !== String(o.price || 0))
     // Equipo
+    if (deviceType !== undefined) o.deviceType = String(deviceType)
     if (brand !== undefined) o.brand = String(brand)
     if (model !== undefined) o.model = String(model)
     if (pin !== undefined) o.pin = String(pin)

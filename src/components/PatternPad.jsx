@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Eraser } from 'lucide-react'
 import PatternLock from 'pattern-lock-js'
 
@@ -65,18 +65,32 @@ export function PatternPreview({ value, size = 120, className = '' }) {
 
 const LOCK_SIZE = 180
 
+const DOT_COORDS_100 = [
+  [20, 20], [50, 20], [80, 20],
+  [20, 50], [50, 50], [80, 50],
+  [20, 80], [50, 80], [80, 80],
+]
+
+function findDotIndex(cx, cy) {
+  const x = Number(cx)
+  const y = Number(cy)
+  for (let i = 0; i < DOT_COORDS_100.length; i++) {
+    if (DOT_COORDS_100[i][0] === x && DOT_COORDS_100[i][1] === y) return i
+  }
+  return -1
+}
+
 export default function PatternPad({ value = [], onChange }) {
   const svgRef = useRef(null)
   const lockRef = useRef(null)
   const [currentPattern, setCurrentPattern] = useState([])
+  const [activeSteps, setActiveSteps] = useState([])
 
-  // Convierte entero 1-indexed (pattern-lock-js) a array 0-indexed
-  const intToArray = (num) => {
+  const intToArray = useCallback((num) => {
     if (!num || isNaN(num)) return []
     return String(num).split('').map((d) => parseInt(d, 10) - 1).filter((n) => n >= 0 && n < 9)
-  }
+  }, [])
 
-  // Inicializar pattern-lock-js
   useEffect(() => {
     if (!svgRef.current) return
 
@@ -88,30 +102,61 @@ export default function PatternPad({ value = [], onChange }) {
       },
       vibrate: true,
     })
-
     lockRef.current = lock
 
+    const activesGroup = svgRef.current.querySelector('g.lock-actives')
+    let prevCount = 0
+
+    const observer = new MutationObserver((mutations) => {
+      let added = 0
+      let removed = 0
+      for (const m of mutations) {
+        for (const n of m.addedNodes) {
+          if (n.tagName === 'circle') added++
+        }
+        for (const n of m.removedNodes) {
+          if (n.tagName === 'circle') removed++
+        }
+      }
+      if (added > 0 && removed === 0) {
+        const circles = activesGroup.querySelectorAll('circle')
+        const last = circles[circles.length - 1]
+        if (last) {
+          const dotIdx = findDotIndex(last.getAttribute('cx'), last.getAttribute('cy'))
+          if (dotIdx >= 0) {
+            setActiveSteps((prev) => [...prev, { dotIdx, step: prev.length + 1 }])
+          }
+        }
+      }
+      if (removed > 0) {
+        setActiveSteps([])
+        prevCount = 0
+      }
+    })
+
+    observer.observe(activesGroup, { childList: true })
+
     return () => {
+      observer.disconnect()
       lockRef.current = null
     }
   }, [])
 
-  // Sincronizar cuando el padre resetea value a []
   useEffect(() => {
     if (!value.length && lockRef.current) {
       lockRef.current.clear()
       setCurrentPattern([])
+      setActiveSteps([])
     }
   }, [value])
 
-  // Limpiar manualmente
   const handleClear = () => {
     if (lockRef.current) lockRef.current.clear()
     setCurrentPattern([])
+    setActiveSteps([])
     onChange([])
   }
 
-  // Quitar último punto
   const handleUndo = () => {
     const next = currentPattern.slice(0, -1)
     setCurrentPattern(next)
@@ -120,26 +165,57 @@ export default function PatternPad({ value = [], onChange }) {
 
   return (
     <div className="flex flex-col gap-1">
-      <svg
-        ref={svgRef}
-        className="patternlock"
-        viewBox="0 0 100 100"
-        style={{ width: LOCK_SIZE, height: LOCK_SIZE, cursor: 'crosshair', touchAction: 'none' }}
-      >
-        <g className="lock-actives" />
-        <g className="lock-lines" />
-        <g className="lock-dots">
-          <circle cx="20" cy="20" r="2" />
-          <circle cx="50" cy="20" r="2" />
-          <circle cx="80" cy="20" r="2" />
-          <circle cx="20" cy="50" r="2" />
-          <circle cx="50" cy="50" r="2" />
-          <circle cx="80" cy="50" r="2" />
-          <circle cx="20" cy="80" r="2" />
-          <circle cx="50" cy="80" r="2" />
-          <circle cx="80" cy="80" r="2" />
-        </g>
-      </svg>
+      <div style={{ position: 'relative', width: LOCK_SIZE, height: LOCK_SIZE }}>
+        <svg
+          ref={svgRef}
+          className="patternlock"
+          viewBox="0 0 100 100"
+          style={{ width: LOCK_SIZE, height: LOCK_SIZE, cursor: 'crosshair', touchAction: 'none' }}
+        >
+          <g className="lock-actives" />
+          <g className="lock-lines" />
+          <g className="lock-dots">
+            <circle cx="20" cy="20" r="2" />
+            <circle cx="50" cy="20" r="2" />
+            <circle cx="80" cy="20" r="2" />
+            <circle cx="20" cy="50" r="2" />
+            <circle cx="50" cy="50" r="2" />
+            <circle cx="80" cy="50" r="2" />
+            <circle cx="20" cy="80" r="2" />
+            <circle cx="50" cy="80" r="2" />
+            <circle cx="80" cy="80" r="2" />
+          </g>
+        </svg>
+        {activeSteps.length > 0 && (
+          <svg
+            viewBox="0 0 100 100"
+            width={LOCK_SIZE}
+            height={LOCK_SIZE}
+            style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+          >
+            {activeSteps.map(({ dotIdx, step }) => {
+              const [cx, cy] = DOT_COORDS_100[dotIdx]
+              return (
+                <text
+                  key={step}
+                  x={cx}
+                  y={cy - 9}
+                  textAnchor="middle"
+                  fontSize="6.5"
+                  fontWeight="bold"
+                  fill="white"
+                  stroke="var(--color-primary-700, #1e40af)"
+                  strokeWidth="0.5"
+                  paintOrder="stroke"
+                  style={{ userSelect: 'none' }}
+                >
+                  {step}
+                </text>
+              )
+            })}
+          </svg>
+        )}
+      </div>
       <div className="flex items-center justify-start gap-1.5">
         <button
           type="button"

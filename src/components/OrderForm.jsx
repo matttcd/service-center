@@ -3,7 +3,7 @@
 // Marcas/modelos con badges del catálogo + "otro" (búsqueda y alta en BD).
 // ============================================
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search, ListPlus, X } from 'lucide-react'
+import { Plus, Search, ListPlus, X, Smartphone, Tablet, Laptop, Monitor, Gamepad2, Printer, HelpCircle } from 'lucide-react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
 import PatternPad from './PatternPad.jsx'
@@ -16,6 +16,17 @@ import {
   BRAND_BADGE_COUNT,
   MODEL_BADGE_COUNT,
 } from '../utils/constants.js'
+import { DEVICE_TYPES, DEVICE_TYPE_BRANDS } from '../../shared/fsm.js'
+
+const DEVICE_TYPE_ICONS = {
+  'Celular': Smartphone,
+  'Tablet': Tablet,
+  'Notebook / PC': Laptop,
+  'Smart TV': Monitor,
+  'Consola': Gamepad2,
+  'Impresora': Printer,
+  'Otro': HelpCircle,
+}
 
 const chipSelected =
   'inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700'
@@ -31,6 +42,8 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [newCustomer, setNewCustomer] = useState({ fullName: '', dni: '', phone: '', address: '' })
   const [brand, setBrand] = useState('')
   const [model, setModel] = useState('')
+  const [deviceType, setDeviceType] = useState('')
+  const [customDeviceType, setCustomDeviceType] = useState('')
   const [picker, setPicker] = useState(null) // null | 'brand' | 'model'
   const [pickerQuery, setPickerQuery] = useState('')
   const [pickerNew, setPickerNew] = useState('')
@@ -56,6 +69,8 @@ export default function OrderForm({ open, onClose, onCreated }) {
     setNewCustomer({ fullName: '', dni: '', phone: '', address: '' })
     setBrand('')
     setModel('')
+    setDeviceType('')
+    setCustomDeviceType('')
     setPicker(null)
     setPickerQuery('')
     setPickerNew('')
@@ -75,14 +90,20 @@ setIssue('')
   }, [open])
 
   // Badges de marcas y modelos según el catálogo (ordenado por uso).
-  const topBrands = useMemo(() => (catalog.brands || []).slice(0, BRAND_BADGE_COUNT), [catalog.brands])
+  const filteredBrands = useMemo(() => {
+    const all = catalog.brands || []
+    const allowed = DEVICE_TYPE_BRANDS[deviceType]
+    if (!allowed || allowed.length === 0) return all
+    return all.filter((b) => allowed.includes(b.name))
+  }, [catalog.brands, deviceType])
+  const topBrands = useMemo(() => filteredBrands.slice(0, BRAND_BADGE_COUNT), [filteredBrands])
   const brandModels = useMemo(
-    () => (catalog.models || []).filter((m) => m.brand === brand).slice(0, MODEL_BADGE_COUNT),
-    [catalog.models, brand],
+    () => (catalog.models || []).filter((m) => m.brand === brand && m.deviceType === deviceType).slice(0, MODEL_BADGE_COUNT),
+    [catalog.models, brand, deviceType],
   )
   const allBrandModels = useMemo(
-    () => (catalog.models || []).filter((m) => m.brand === brand),
-    [catalog.models, brand],
+    () => (catalog.models || []).filter((m) => m.brand === brand && m.deviceType === deviceType),
+    [catalog.models, brand, deviceType],
   )
 
   const pickerList = picker === 'brand' ? catalog.brands || [] : allBrandModels
@@ -117,6 +138,8 @@ setIssue('')
     !!newCustomer.address ||
     !!brand ||
     !!model ||
+    !!deviceType ||
+    !!customDeviceType ||
     !!issue ||
     !!price ||
     !!advance ||
@@ -215,6 +238,7 @@ setIssue('')
       const accList = [...accessories, customAccessory.trim()].filter(Boolean)
       const res = await addOrder({
         customerId: cid,
+        deviceType: deviceType === 'Otro' ? titleCase(customDeviceType.trim()) || 'Otro' : deviceType,
         brand,
         model,
         accessories: accList.map((a) => titleCase(a)).join(', '),
@@ -316,6 +340,49 @@ setIssue('')
           {/* Dispositivo */}
           <div className="space-y-4">
             <div>
+              <label className={labelCls}>Tipo de dispositivo</label>
+              <div className="flex items-center gap-2 pt-1">
+                {DEVICE_TYPES.map((t) => {
+                  const Icon = DEVICE_TYPE_ICONS[t]
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      title={t}
+                      onClick={() => {
+                        setDeviceType(t)
+                        const allowed = DEVICE_TYPE_BRANDS[t]
+                        if (allowed && allowed.length > 0 && brand && !allowed.includes(brand)) {
+                          setBrand('')
+                          setModel('')
+                        }
+                      }}
+                      className={`inline-flex h-11 w-11 items-center justify-center rounded-lg border transition ${
+                        deviceType === t
+                          ? 'border-primary-600 bg-primary-50 text-primary-600 dark:border-primary-400 dark:bg-primary-500/15 dark:text-primary-400'
+                          : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <Icon size={20} />
+                    </button>
+                  )
+                })}
+              </div>
+              {deviceType === 'Otro' && (
+                <input
+                  type="text"
+                  value={customDeviceType}
+                  onChange={(e) => setCustomDeviceType(e.target.value)}
+                  placeholder="Describí el tipo de dispositivo..."
+                  className={`${inputCls} mt-2`}
+                  autoFocus
+                />
+              )}
+            </div>
+
+            {deviceType && deviceType !== 'Otro' && (
+            <>
+            <div>
               <label className={labelCls}>Marca</label>
               <div className="flex flex-wrap items-center gap-2">
                 {topBrands.map((b) => (
@@ -374,6 +441,8 @@ setIssue('')
                 )}
               </div>
             </div>
+            </>
+            )}
 
             <div>
               <label className={labelCls}>Estado en que entra el equipo</label>
@@ -446,7 +515,7 @@ setIssue('')
             </div>
           </div>
 
-          <div>
+            <div>
             <label className={labelCls}>Chequeos / notas generales</label>
             <textarea value={issue} onChange={(e) => setIssue(e.target.value)} placeholder="Chequeos y notas generales..." className={inputCls} rows={3} />
           </div>

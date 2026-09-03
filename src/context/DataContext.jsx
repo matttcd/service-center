@@ -141,6 +141,7 @@ export function DataProvider({ children }) {
     if (filters.from) params.set('from', filters.from)
     if (filters.to) params.set('to', filters.to)
     if (filters.brand && filters.brand !== 'all') params.set('brand', filters.brand)
+    if (filters.deviceType && filters.deviceType !== 'all') params.set('deviceType', filters.deviceType)
     if (filters.onlyNotNotified) params.set('onlyNotNotified', '1')
     if (filters.onlyNotified) params.set('onlyNotified', '1')
     if (filters.onlyNotConfirmed) params.set('onlyNotConfirmed', '1')

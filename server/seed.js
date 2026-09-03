@@ -8,9 +8,9 @@ import { uid } from './helpers.js'
 
 // ---------- Catálogo completo de dispositivos ----------
 
-const CATALOG = [
+export const CATALOG = [
   // ── Samsung ──
-  { brand: 'Samsung', models: [
+  { brand: 'Samsung', deviceType: 'Celular', models: [
     'Galaxy S25', 'Galaxy S25+', 'Galaxy S25 Ultra', 'Galaxy S25 FE', 'Galaxy S25 Edge',
     'Galaxy S24', 'Galaxy S24+', 'Galaxy S24 Ultra', 'Galaxy S24 FE',
     'Galaxy S23', 'Galaxy S23+', 'Galaxy S23 Ultra', 'Galaxy S23 FE',
@@ -49,7 +49,7 @@ const CATALOG = [
   ]},
 
   // ── Apple ──
-  { brand: 'Apple', models: [
+  { brand: 'Apple', deviceType: 'Celular', models: [
     'iPhone 16', 'iPhone 16 Plus', 'iPhone 16 Pro', 'iPhone 16 Pro Max', 'iPhone 16e',
     'iPhone 15', 'iPhone 15 Plus', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
     'iPhone 14', 'iPhone 14 Plus', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
@@ -78,7 +78,7 @@ const CATALOG = [
   ]},
 
   // ── Xiaomi ──
-  { brand: 'Xiaomi', models: [
+  { brand: 'Xiaomi', deviceType: 'Celular', models: [
     'Xiaomi 15', 'Xiaomi 15 Pro', 'Xiaomi 15 Ultra', 'Xiaomi 14', 'Xiaomi 14 Pro', 'Xiaomi 14 Ultra',
     'Xiaomi 13', 'Xiaomi 13 Pro', 'Xiaomi 13 Lite', 'Xiaomi 13T', 'Xiaomi 13T Pro',
     'Xiaomi 12', 'Xiaomi 12 Pro', 'Xiaomi 12T', 'Xiaomi 12T Pro', 'Xiaomi 12 Lite',
@@ -109,7 +109,7 @@ const CATALOG = [
   ]},
 
   // ── Motorola ──
-  { brand: 'Motorola', models: [
+  { brand: 'Motorola', deviceType: 'Celular', models: [
     'Edge 60', 'Edge 60 Fusion', 'Edge 60 Neo', 'Edge 60 Pro',
     'Edge 50', 'Edge 50 Pro', 'Edge 50 Ultra', 'Edge 50 Fusion', 'Edge 50 Neo',
     'Edge 40', 'Edge 40 Pro', 'Edge 40 Neo', 'Edge 30', 'Edge 30 Pro', 'Edge 30 Ultra', 'Edge 30 Neo',
@@ -131,7 +131,7 @@ const CATALOG = [
   ]},
 
   // ── LG ──
-  { brand: 'LG', models: [
+  { brand: 'LG', deviceType: 'Celular', models: [
     'Wing', 'Velvet', 'V60 ThinQ', 'V50 ThinQ', 'V40 ThinQ', 'V30+', 'V30', 'V20', 'V10',
     'G8 ThinQ', 'G7 ThinQ', 'G6', 'G5', 'G4', 'G3', 'G2',
     'K71', 'K62', 'K61', 'K52', 'K51', 'K50', 'K42', 'K41', 'K40', 'K32', 'K31', 'K30', 'K22', 'K20', 'K12+', 'K11', 'K10', 'K9',
@@ -143,7 +143,7 @@ const CATALOG = [
   ]},
 
   // ── Nokia ──
-  { brand: 'Nokia', models: [
+  { brand: 'Nokia', deviceType: 'Celular', models: [
     'Nokia 8.3', 'Nokia 8.1', 'Nokia 8 Sirocco', 'Nokia 8',
     'Nokia 7.2', 'Nokia 7.1', 'Nokia 7 Plus', 'Nokia 7',
     'Nokia 6.2', 'Nokia 6.1', 'Nokia 6.1 Plus', 'Nokia 6',
@@ -166,7 +166,7 @@ const CATALOG = [
   ]},
 
   // ── Huawei ──
-  { brand: 'Huawei', models: [
+  { brand: 'Huawei', deviceType: 'Celular', models: [
     'Pura 70', 'Pura 70 Pro', 'Pura 70 Ultra', 'Pura 70 Pro+',
     'P60', 'P60 Pro', 'P60 Art', 'P50', 'P50 Pro', 'P50 Pocket',
     'P40', 'P40 Pro', 'P40 Pro+', 'P40 Lite', 'P40 Lite E', 'P40 Lite 5G',
@@ -194,7 +194,7 @@ const CATALOG = [
   ]},
 
   // ── Google ──
-  { brand: 'Google', models: [
+  { brand: 'Google', deviceType: 'Celular', models: [
     'Pixel 9a', 'Pixel 9', 'Pixel 9 Pro', 'Pixel 9 Pro Fold', 'Pixel 9 Pro XL',
     'Pixel 8', 'Pixel 8 Pro', 'Pixel 8a',
     'Pixel 7', 'Pixel 7 Pro', 'Pixel 7a',
@@ -211,7 +211,7 @@ const CATALOG = [
   ]},
 
   // ── Sony ──
-  { brand: 'Sony', models: [
+  { brand: 'Sony', deviceType: 'Celular', models: [
     'Xperia 1 VI', 'Xperia 1 V', 'Xperia 1 IV', 'Xperia 1 III', 'Xperia 1 II', 'Xperia 1',
     'Xperia 5 V', 'Xperia 5 IV', 'Xperia 5 III', 'Xperia 5 II', 'Xperia 5',
     'Xperia 10 VI', 'Xperia 10 V', 'Xperia 10 IV', 'Xperia 10 III', 'Xperia 10 II', 'Xperia 10',
@@ -224,7 +224,7 @@ const CATALOG = [
   ]},
 
   // ── OnePlus ──
-  { brand: 'OnePlus', models: [
+  { brand: 'OnePlus', deviceType: 'Celular', models: [
     'OnePlus 13', 'OnePlus 13R', 'OnePlus 12', 'OnePlus 12R',
     'OnePlus 11', 'OnePlus 11R', 'OnePlus 10 Pro', 'OnePlus 10T', 'OnePlus 10R',
     'OnePlus 9', 'OnePlus 9 Pro', 'OnePlus 9R', 'OnePlus 9RT',
@@ -238,7 +238,7 @@ const CATALOG = [
   ]},
 
   // ── Realme ──
-  { brand: 'Realme', models: [
+  { brand: 'Realme', deviceType: 'Celular', models: [
     'GT 6', 'GT 6T', 'GT 5 Pro', 'GT 5', 'GT 3', 'GT 2 Pro', 'GT 2', 'GT Master Edition',
     '13 Pro+', '13 Pro', '13', '12 Pro+', '12 Pro', '12', '11 Pro+', '11 Pro', '11',
     '10 Pro+', '10 Pro', '10', '9 Pro+', '9 Pro', '9', '8 Pro', '8', '8i', '8s',
@@ -249,7 +249,7 @@ const CATALOG = [
   ]},
 
   // ── Oppo ──
-  { brand: 'Oppo', models: [
+  { brand: 'Oppo', deviceType: 'Celular', models: [
     'Find X7', 'Find X7 Ultra', 'Find X6', 'Find X6 Pro', 'Find X5', 'Find X5 Pro',
     'Find N3', 'Find N3 Flip', 'Find N2', 'Find N2 Flip', 'Find N',
     'Reno 12', 'Reno 12 Pro', 'Reno 11', 'Reno 11 Pro', 'Reno 11F',
@@ -262,7 +262,7 @@ const CATALOG = [
   ]},
 
   // ── Vivo ──
-  { brand: 'Vivo', models: [
+  { brand: 'Vivo', deviceType: 'Celular', models: [
     'X100', 'X100 Pro', 'X90', 'X90 Pro', 'X80', 'X80 Pro', 'X70', 'X70 Pro',
     'V30', 'V30 Lite', 'V30 Pro', 'V29', 'V29 Lite', 'V29 Pro', 'V27', 'V27 Lite', 'V27 Pro',
     'V25', 'V25 Pro', 'V25e', 'V23', 'V23 Pro', 'V21', 'V21 5G', 'V20',
@@ -273,7 +273,7 @@ const CATALOG = [
   ]},
 
   // ── Honor ──
-  { brand: 'Honor', models: [
+  { brand: 'Honor', deviceType: 'Celular', models: [
     'Magic6 Pro', 'Magic6', 'Magic5 Pro', 'Magic5', 'Magic4 Pro', 'Magic4', 'Magic V2', 'Magic Vs',
     '200', '200 Pro', '100', '100 Pro', '90', '90 Pro', '80', '80 Pro', '80 GT',
     '70', '70 Pro', '70 Lite', '60', '60 Pro', '50', '50 Pro', '50 Lite',
@@ -285,7 +285,7 @@ const CATALOG = [
   ]},
 
   // ── Alcatel ──
-  { brand: 'Alcatel', models: [
+  { brand: 'Alcatel', deviceType: 'Celular', models: [
     '1S', '1V', '1', '3L', '3', '3X', '3V',
     '5', '5V', '5X',
     '1T 10', '1T 7', '3T 10', '3T 8',
@@ -294,14 +294,14 @@ const CATALOG = [
   ]},
 
   // ── ZTE ──
-  { brand: 'ZTE', models: [
+  { brand: 'ZTE', deviceType: 'Celular', models: [
     'Axon 40 Ultra', 'Axon 30', 'Axon 20', 'Blade V40', 'Blade V30', 'Blade 20',
     'Blade A72', 'Blade A52', 'Blade A31', 'Blade A21', 'Blade A11', 'Blade L8',
     'ZTE Blade', 'ZTE Maven', 'ZTE Prestige',
   ]},
 
   // ── TECNO ──
-  { brand: 'TECNO', models: [
+  { brand: 'TECNO', deviceType: 'Celular', models: [
     'Phantom V Fold', 'Phantom V Flip', 'Phantom X2', 'Phantom 9',
     'Camon 30', 'Camon 30 Pro', 'Camon 20', 'Camon 20 Pro', 'Camon 19', 'Camon 19 Pro', 'Camon 18', 'Camon 17',
     'Spark 20', 'Spark 20 Pro', 'Spark 10', 'Spark 10 Pro', 'Spark 9', 'Spark 8', 'Spark 7',
@@ -310,7 +310,7 @@ const CATALOG = [
   ]},
 
   // ── Infinix ──
-  { brand: 'Infinix', models: [
+  { brand: 'Infinix', deviceType: 'Celular', models: [
     'Note 40', 'Note 40 Pro', 'Note 30', 'Note 30 Pro', 'Note 12', 'Note 12 Pro',
     'Hot 40', 'Hot 40 Pro', 'Hot 30', 'Hot 30i', 'Hot 20', 'Hot 20S', 'Hot 12', 'Hot 11', 'Hot 10',
     'Smart 8', 'Smart 7', 'Smart 6', 'Smart 5',
@@ -319,31 +319,28 @@ const CATALOG = [
   ]},
 
   // ── Meizu ──
-  { brand: 'Meizu', models: [
+  { brand: 'Meizu', deviceType: 'Celular', models: [
     '21 Pro', '20 Pro', '20', '18 Pro', '18', '17 Pro', '17',
     'Note 21', 'Note 20', 'Note 12', 'Note 11', 'Note 9', 'Note 8',
     '16T', '16s', '16X', '15', 'PRO 7',
   ]},
 
   // ── Nothing ──
-  { brand: 'Nothing', models: [
+  { brand: 'Nothing', deviceType: 'Celular', models: [
     'Phone (2a)', 'Phone (2)', 'Phone (1)',
     'Ear (2)', 'Ear (a)', 'Ear (1)',
   ]},
 
   // ── Asus ──
-  { brand: 'Asus', models: [
+  { brand: 'Asus', deviceType: 'Celular', models: [
     'ROG Phone 8', 'ROG Phone 8 Pro', 'ROG Phone 7', 'ROG Phone 7 Ultimate', 'ROG Phone 6', 'ROG Phone 5', 'ROG Phone 3',
     'Zenfone 11', 'Zenfone 10', 'Zenfone 9', 'Zenfone 8', 'Zenfone 8 Flip',
     'Zenfone 7', 'Zenfone 7 Pro', 'Zenfone 6', 'Zenfone 5Z', 'Zenfone 5',
-    'ROG Zephyrus', 'ROG Strix', 'ROG Flow',
-    'VivoBook 14', 'VivoBook 15', 'VivoBook S14', 'VivoBook S15',
-    'ZenBook 14', 'ZenBook 13', 'ZenBook Duo',
-    'Transformer Pad', 'ZenPad',
+    'ZenPad',
   ]},
 
   // ── Lenovo ──
-  { brand: 'Lenovo', models: [
+  { brand: 'Lenovo', deviceType: 'Notebook / PC', models: [
     'Legion 9i', 'Legion 7i', 'Legion 5i', 'Legion Pro 7i', 'Legion Pro 5i',
     'Legion 5', 'Legion 7', 'Legion Slim 5', 'Legion Slim 7',
     'IdeaPad 3', 'IdeaPad 5', 'IdeaPad Slim 3', 'IdeaPad Slim 5',
@@ -356,7 +353,7 @@ const CATALOG = [
   ]},
 
   // ── Dell ──
-  { brand: 'Dell', models: [
+  { brand: 'Dell', deviceType: 'Notebook / PC', models: [
     'XPS 15', 'XPS 14', 'XPS 13', 'XPS 13 Plus', 'XPS 17',
     'Inspiron 15', 'Inspiron 14', 'Inspiron 16', 'Inspiron 13', 'Inspiron 3000', 'Inspiron 5000', 'Inspiron 7000',
     'Latitude 5540', 'Latitude 5440', 'Latitude 7440', 'Latitude 7490', 'Latitude 5400', 'Latitude 5490',
@@ -367,7 +364,7 @@ const CATALOG = [
   ]},
 
   // ── HP ──
-  { brand: 'HP', models: [
+  { brand: 'HP', deviceType: 'Notebook / PC', models: [
     'Spectre x360 16', 'Spectre x360 14', 'Spectre x360 13', 'Spectre 14', 'Spectre 13',
     'Envy x360 15', 'Envy x360 13', 'Envy 16', 'Envy 14', 'Envy 13',
     'Pavilion 15', 'Pavilion 14', 'Pavilion 16', 'Pavilion x360',
@@ -380,7 +377,7 @@ const CATALOG = [
   ]},
 
   // ── Acer ──
-  { brand: 'Acer', models: [
+  { brand: 'Acer', deviceType: 'Notebook / PC', models: [
     'Predator Helios 18', 'Predator Helios 16', 'Predator Helios Neo',
     'Predator Triton', 'Predator 17', 'Predator 15',
     'Nitro V 16', 'Nitro V 15', 'Nitro 5', 'Nitro 7', 'Nitro 3',
@@ -393,7 +390,7 @@ const CATALOG = [
   // ── Huawei notebooks ── (continuación de arriba si se necesitaba)
 
   // ── Microsoft ──
-  { brand: 'Microsoft', models: [
+  { brand: 'Microsoft', deviceType: 'Notebook / PC', models: [
     'Surface Pro 11', 'Surface Pro 10', 'Surface Pro 9', 'Surface Pro 8', 'Surface Pro 7', 'Surface Pro X',
     'Surface Laptop 7', 'Surface Laptop 6', 'Surface Laptop 5', 'Surface Laptop 4', 'Surface Laptop 3',
     'Surface Laptop Go 3', 'Surface Laptop Go 2', 'Surface Laptop Go',
@@ -404,47 +401,18 @@ const CATALOG = [
 
   // ── Samsung notebooks ── (continuación de arriba)
 
-  // ── Consolas ──
-  { brand: 'Nintendo', models: [
-    'Switch OLED', 'Switch', 'Switch Lite',
-    'Switch 2',
-    '3DS XL', '3DS', '2DS XL', '2DS',
-    'DSi XL', 'DSi', 'DS Lite', 'DS',
-    'Wii U', 'Wii',
-    'Game Boy Advance SP', 'Game Boy Advance', 'Game Boy Color', 'Game Boy',
-  ]},
-
-  { brand: 'Sony PlayStation', models: [
-    'PS5', 'PS5 Slim', 'PS5 Pro',
-    'PS4', 'PS4 Slim', 'PS4 Pro',
-    'PS3', 'PS3 Slim', 'PS3 Super Slim',
-    'PS2', 'PS2 Slim',
-    'PS1', 'PS1 Slim',
-    'PSP', 'PSP Slim', 'PSP Go',
-    'PS Vita', 'PS Vita Slim',
-    'PlayStation Portal',
-  ]},
-
-  { brand: 'Microsoft Xbox', models: [
-    'Xbox Series X', 'Xbox Series S',
-    'Xbox One X', 'Xbox One S', 'Xbox One',
-    'Xbox 360 E', 'Xbox 360 S', 'Xbox 360',
-    'Xbox', 'Xbox 360 Arcade',
-    'Xbox Elite Controller',
-  ]},
-
   // ── Otros / Genéricos ──
-  { brand: 'Blu', models: [
+  { brand: 'Blu', deviceType: 'Celular', models: [
     'Blu G91', 'Blu G90', 'Blu G80', 'Blu G50', 'Blu G30',
     'Blu Vivo X6', 'Blu Vivo X5', 'Blu Vivo XII', 'Blu Vivo XI',
     'Blu Studio X10', 'Blu Studio 8', 'Blu Bold N2', 'Blu Bold Play',
   ]},
 
-  { brand: 'Cricket', models: [
+  { brand: 'Cricket', deviceType: 'Celular', models: [
     'Cricket Spark', 'Cricket Innovate', 'Cricket Ollie', 'Cricket Icon 5',
   ]},
 
-  { brand: 'TCL', models: [
+  { brand: 'TCL', deviceType: 'Celular', models: [
     'TCL 50 XL', 'TCL 50 XE', 'TCL 40 SE', 'TCL 40 NxtPaper', 'TCL 40 R',
     'TCL 30 SE', 'TCL 30 XE', 'TCL 30 V', 'TCL 30+', 'TCL 30',
     'TCL 20 SE', 'TCL 20L', 'TCL 20 Pro', 'TCL 20S',
@@ -452,111 +420,111 @@ const CATALOG = [
     'TCL Tab 10 Gen2', 'TCL Tab 8', 'TCL Tab 11',
   ]},
 
-  { brand: 'Cat', models: [
+  { brand: 'Cat', deviceType: 'Celular', models: [
     'Cat S75', 'Cat S62 Pro', 'Cat S42', 'Cat S41', 'Cat S60',
     'Cat B40', 'Cat B26', 'Cat B15',
     'Cat Tablet T10', 'Cat Tablet T20',
   ]},
 
-  { brand: 'Kyocera', models: [
+  { brand: 'Kyocera', deviceType: 'Celular', models: [
     'Kyocera DuraForce Ultra', 'Kyocera DuraForce Pro 3', 'Kyocera DuraForce Pro 2',
     'Kyocera Brigadier', 'Kyocera Cadence LTE',
   ]},
 
-  { brand: 'Fairphone', models: [
+  { brand: 'Fairphone', deviceType: 'Celular', models: [
     'Fairphone 5', 'Fairphone 4', 'Fairphone 3+', 'Fairphone 3',
   ]},
 
-  { brand: 'Oukitel', models: [
+  { brand: 'Oukitel', deviceType: 'Celular', models: [
     'Oukitel WP30 Pro', 'Oukitel WP27', 'Oukitel WP21', 'Oukitel WP19', 'Oukitel WP15',
     'Oukitel K15 Pro', 'Oukitel K12', 'Oukitel K10',
   ]},
 
-  { brand: 'Doogee', models: [
+  { brand: 'Doogee', deviceType: 'Celular', models: [
     'Doogee S200', 'Doogee S96 Pro', 'Doogee S89 Pro', 'Doogee S88 Pro',
     'Doogee V20', 'Doogee V10', 'Doogee N40 Pro', 'Doogee N30',
   ]},
 
-  { brand: 'Ulefone', models: [
+  { brand: 'Ulefone', deviceType: 'Celular', models: [
     'Ulefone Armor 27 Pro', 'Ulefone Armor 25 Pro', 'Ulefone Armor 23 Pro',
     'Ulefone Armor X12 Pro', 'Ulefone Armor X11 Pro', 'Ulefone Armor X10 Pro',
   ]},
 
-  { brand: 'Blackview', models: [
+  { brand: 'Blackview', deviceType: 'Celular', models: [
     'Blackview BL8800', 'Blackview BL7200', 'Blackview BL6000', 'Blackview BL5000',
     'Blackview BV8800', 'Blackview BV8200', 'Blackview BV6600',
     'Blackview Tab 16', 'Blackview Tab 15', 'Blackview Tab 12',
   ]},
 
-  { brand: 'Noblex', models: [
+  { brand: 'Noblex', deviceType: 'Celular', models: [
     'Noblex N50', 'Noblex N45', 'Noblex N40', 'Noblex N35', 'Noblex N30',
     'Noblex TV', 'Noblex Smart TV',
   ]},
 
-  { brand: 'Claro', models: [
+  { brand: 'Claro', deviceType: 'Celular', models: [
     'Claro X5', 'Claro T5', 'Claro S5', 'Claro R5',
   ]},
 
-  { brand: 'Tigo', models: [
+  { brand: 'Tigo', deviceType: 'Celular', models: [
     'Tigo X1', 'Tigo Z1', 'Tigo Y1',
   ]},
 
-  { brand: 'Multilaser', models: [
+  { brand: 'Multilaser', deviceType: 'Celular', models: [
     'Multilaser M11', 'Multilaser M10', 'Multilaser M9',
     'Multilaser E Pro', 'Multilaser E', 'Multilaser D Pro',
     'Multilaser Air Pro', 'Multilaser Air',
     'Multilaser G', 'Multilaser F',
   ]},
 
-  { brand: 'Miphone', models: [
+  { brand: 'Miphone', deviceType: 'Celular', models: [
     'Miphone M1', 'Miphone M2', 'Miphone M3', 'Miphone C1',
   ]},
 
-  { brand: 'Tantan', models: [
+  { brand: 'Tantan', deviceType: 'Celular', models: [
     'Tantan T1', 'Tantan T2', 'Tantan V1',
   ]},
 
-  { brand: 'Africell', models: [
+  { brand: 'Africell', deviceType: 'Celular', models: [
     'Africell X1',
   ]},
 
-  { brand: 'Bgh', models: [
+  { brand: 'Bgh', deviceType: 'Celular', models: [
     'BGH Joy', 'BGH Smart', 'BGH Tab',
   ]},
 
-  { brand: 'Bytech', models: [
+  { brand: 'Bytech', deviceType: 'Celular', models: [
     'Bytech B-Touch', 'Bytech Smart',
   ]},
 
-  { brand: 'Smart-tech', models: [
+  { brand: 'Smart-tech', deviceType: 'Celular', models: [
     'Smart-Tech Pro', 'Smart-Tech Plus',
   ]},
 
-  { brand: 'Qiale', models: [
+  { brand: 'Qiale', deviceType: 'Celular', models: [
     'Qiale X1', 'Qiale C1',
   ]},
 
-  { brand: 'Noa', models: [
+  { brand: 'Noa', deviceType: 'Celular', models: [
     'Noa H45', 'Noa H40', 'Noa H35', 'Noa H30',
     'Noa N10', 'Noa N20',
   ]},
 
-  { brand: 'Wiko', models: [
+  { brand: 'Wiko', deviceType: 'Celular', models: [
     'Wiko Y82', 'Wiko Y81', 'Wiko Y60', 'Wiko Y50', 'Wiko Y30', 'Wiko Y10',
     'Wiko T10', 'Wiko T50', 'Wiko View5', 'Wiko View4',
     'Wiko Hi Enjoy 60', 'Wiko Hi Enjoy 50',
   ]},
 
-  { brand: 'Micronet', models: [
+  { brand: 'Micronet', deviceType: 'Celular', models: [
     'Micronet SP405', 'Micronet SP350', 'Micronet SP300',
   ]},
 
-  { brand: 'Noblex', models: [] }, // ya listo arriba
+  { brand: 'Noblex', deviceType: 'Celular', models: [] }, // ya listo arriba
 
-  { brand: 'Samsung', models: [] }, // Continuación si se necesita
+  { brand: 'Samsung', deviceType: 'Celular', models: [] }, // Continuación si se necesita
 
   // ── Wearables (relojes, trackers) ──
-  { brand: 'Samsung', models: [
+  { brand: 'Samsung', deviceType: 'Celular', models: [
     'Galaxy Watch Ultra', 'Galaxy Watch 7', 'Galaxy Watch 6', 'Galaxy Watch 6 Classic',
     'Galaxy Watch 5', 'Galaxy Watch 5 Pro', 'Galaxy Watch FE', 'Galaxy Watch 4', 'Galaxy Watch 4 Classic',
     'Galaxy Watch 3', 'Galaxy Watch Active 2', 'Galaxy Watch Active', 'Galaxy Watch',
@@ -567,7 +535,7 @@ const CATALOG = [
   ]},
 
   // ── Audífonos / otros ──
-  { brand: 'JBL', models: [
+  { brand: 'JBL', deviceType: 'Celular', models: [
     'JBL Tune 770NC', 'JBL Tune 720BT', 'JBL Tune 670NC', 'JBL Tune 520BT',
     'JBL Live 770NC', 'JBL Live 670NC',
     'JBL Flip 6', 'JBL Flip 5', 'JBL Flip 4',
@@ -577,18 +545,206 @@ const CATALOG = [
     'JBL Wave Beam', 'JBL Wave Flex', 'JBL Wave 200TWS',
   ]},
 
-  { brand: 'Jabra', models: [
+  { brand: 'Jabra', deviceType: 'Celular', models: [
     'Jabra Elite 10', 'Jabra Elite 85t', 'Jabra Elite 75t', 'Jabra Elite 7 Pro',
     'Jabra Elite 4', 'Jabra Elite 3',
     'Jabra Evolve2', 'Jabra Talk',
   ]},
 
-  { brand: 'Anker', models: [
+  { brand: 'Anker', deviceType: 'Celular', models: [
     'Anker Soundcore Liberty 4', 'Anker Soundcore Liberty 3 Pro',
     'Anker Soundcore Life P3', 'Anker Soundcore Life P2',
     'Anker Soundcore Spirit', 'Anker Soundcore Trance',
     'Anker Soundcore Motion+', 'Anker Soundcore Flare',
   ]},
+
+  // ── Smart TVs ──
+  { brand: 'Samsung', deviceType: 'Smart TV', models: [
+    'LED 43AU7700', 'LED 50AU7700', 'LED 55AU7700', 'LED 65AU7700', 'LED 75AU7700',
+    'QLED 55QN85C', 'QLED 65QN85C', 'QLED 75QN85C', 'QLED 55QN900C',
+    'OLED 55S95D', 'OLED 65S95D', 'OLED 77S95D',
+    'The Frame 55"', 'The Frame 65"', 'The Frame 75"',
+    'Crystal UHD 43"', 'Crystal UHD 50"', 'Crystal UHD 55"', 'Crystal UHD 65"',
+  ]},
+
+  { brand: 'LG', deviceType: 'Smart TV', models: [
+    'LED 43UR7300', 'LED 50UR7300', 'LED 55UR7300', 'LED 65UR7300',
+    'QNED 55"', 'QNED 65"', 'QNED 75"',
+    'NanoCell 55NANO77', 'NanoCell 65NANO77',
+    'OLED 55C4', 'OLED 65C4', 'OLED 77C4',
+    'OLED 55B4', 'OLED 65B4',
+    'OLED 55G4', 'OLED 65G4', 'OLED 77G4',
+  ]},
+
+  { brand: 'Noblex', deviceType: 'Smart TV', models: [
+    'LED 43N5000', 'LED 50N5000', 'LED 55N5000', 'LED 65N5000',
+    'Smart TV 43"', 'Smart TV 50"', 'Smart TV 55"', 'Smart TV 65"',
+    'UHD 50"', 'UHD 55"', 'UHD 65"',
+  ]},
+
+  { brand: 'TCL', deviceType: 'Smart TV', models: [
+    'LED 43P635', 'LED 50P635', 'LED 55P635', 'LED 65P635',
+    'QLED 55C645', 'QLED 65C645', 'QLED 75C645',
+    'Mini LED 55QM8', 'Mini LED 65QM8', 'Mini LED 75QM8',
+    '4K UHD 50"', '4K UHD 55"', '4K UHD 65"',
+  ]},
+
+  { brand: 'Hisense', deviceType: 'Smart TV', models: [
+    'LED 43A6500', 'LED 50A6500', 'LED 55A6500', 'LED 65A6500',
+    'QLED 55U7H', 'QLED 65U7H', 'QLED 75U7H',
+    'ULED 55U8H', 'ULED 65U8H',
+    'Laser TV 100L5H', 'Laser TV 120L5H',
+  ]},
+
+  { brand: 'Bgh', deviceType: 'Smart TV', models: [
+    'LED 43J5000', 'LED 50J5000', 'LED 55J5000',
+    'Smart TV 43"', 'Smart TV 50"', 'Smart TV 55"',
+    'UHD 50"', 'UHD 55"',
+  ]},
+
+  { brand: 'Philips', deviceType: 'Smart TV', models: [
+    'LED 43PUS8000', 'LED 50PUS8000', 'LED 55PUS8000', 'LED 65PUS8000',
+    'OLED 55OLED807', 'OLED 65OLED807',
+    'Ambilight 55"', 'Ambilight 65"',
+  ]},
+
+  { brand: 'Sony', deviceType: 'Smart TV', models: [
+    'LED 43X77L', 'LED 50X77L', 'LED 55X77L', 'LED 65X77L', 'LED 75X77L',
+    'OLED 55A80L', 'OLED 65A80L', 'OLED 77A80L',
+    'OLED 55BRAVIA 7', 'OLED 65BRAVIA 7', 'OLED 75BRAVIA 7',
+    'QLED 55X90L', 'QLED 65X90L',
+  ]},
+
+  // ── Notebooks / PCs ──
+  { brand: 'Dell', deviceType: 'Notebook / PC', models: [
+    'Inspiron 15 3000', 'Inspiron 14 5000', 'Inspiron 16 5000', 'Inspiron 13 7000',
+    'XPS 13', 'XPS 15', 'XPS 17', 'XPS 13 Plus',
+    'Latitude 5540', 'Latitude 5440', 'Latitude 7440', 'Latitude 7490',
+    'Vostro 3510', 'Vostro 3400',
+    'G15', 'G16',
+    'Alienware m16', 'Alienware m18', 'Alienware x16',
+    'Precision 5680', 'Precision 7780',
+  ]},
+
+  { brand: 'HP', deviceType: 'Notebook / PC', models: [
+    'Pavilion 15', 'Pavilion 14', 'Pavilion 16', 'Pavilion x360',
+    'Spectre x360 14', 'Spectre x360 16', 'Spectre 13',
+    'Envy x360 15', 'Envy x360 13', 'Envy 16',
+    'ProBook 450 G10', 'ProBook 440 G10', 'ProBook 650 G9',
+    'EliteBook 840 G10', 'EliteBook 850 G10', 'EliteBook x360',
+    'Victus 16', 'Victus 15',
+    'Omen 16', 'Omen 17',
+    'ZBook Studio', 'ZBook Fury',
+  ]},
+
+  { brand: 'Acer', deviceType: 'Notebook / PC', models: [
+    'Aspire 5', 'Aspire 3', 'Aspire 7', 'Aspire V15',
+    'Nitro 5', 'Nitro V 15', 'Nitro V 16',
+    'Swift 3', 'Swift 5', 'Swift Go 14', 'Swift Go 16',
+    'Predator Helios 16', 'Predator Helios 18', 'Predator Helios Neo',
+    'Predator Triton',
+    'Chromebook 314', 'Chromebook 315',
+    'TravelMate P4', 'TravelMate X3',
+  ]},
+
+  { brand: 'Lenovo', deviceType: 'Notebook / PC', models: [
+    'IdeaPad 3 15', 'IdeaPad 5 14', 'IdeaPad Slim 3', 'IdeaPad Slim 5',
+    'IdeaPad Gaming 3', 'IdeaPad Flex 5',
+    'ThinkPad X1 Carbon Gen 11', 'ThinkPad X1 Yoga Gen 8', 'ThinkPad X13 Gen 4',
+    'ThinkPad T14 Gen 4', 'ThinkPad T15 Gen 3', 'ThinkPad E14 Gen 5', 'ThinkPad E15 Gen 4',
+    'ThinkPad L14 Gen 4', 'ThinkPad L15 Gen 3',
+    'Legion 5', 'Legion 7', 'Legion Slim 5', 'Legion Slim 7',
+    'Legion Pro 5i', 'Legion Pro 7i', 'Legion 9i',
+  ]},
+
+  { brand: 'Asus', deviceType: 'Notebook / PC', models: [
+    'VivoBook 14', 'VivoBook 15', 'VivoBook S14', 'VivoBook S15',
+    'ZenBook 14', 'ZenBook 13', 'ZenBook Duo',
+    'ROG Strix G16', 'ROG Strix G18', 'ROG Strix SCAR 16',
+    'ROG Zephyrus G14', 'ROG Zephyrus G16', 'ROG Zephyrus M16',
+    'ROG Flow X13', 'ROG Flow X16',
+    'Transformer Pad',
+  ]},
+
+  { brand: 'Microsoft', deviceType: 'Notebook / PC', models: [
+    'Surface Pro 11', 'Surface Pro 10', 'Surface Pro 9', 'Surface Pro 8',
+    'Surface Laptop 7', 'Surface Laptop 6', 'Surface Laptop 5', 'Surface Laptop 4',
+    'Surface Laptop Go 3', 'Surface Laptop Go 2',
+    'Surface Go 4', 'Surface Go 3',
+    'Surface Book 3', 'Surface Book 2',
+    'Surface Studio 2',
+  ]},
+
+  // ── Consolas ──
+  { brand: 'Sony PlayStation', deviceType: 'Consola', models: [
+    'PS5', 'PS5 Slim', 'PS5 Pro',
+    'PS4', 'PS4 Slim', 'PS4 Pro',
+    'PS3', 'PS3 Slim', 'PS3 Super Slim',
+    'PS2', 'PS2 Slim',
+    'PS1', 'PS1 Slim',
+    'PSP', 'PSP Slim', 'PSP Go',
+    'PS Vita', 'PS Vita Slim',
+    'PlayStation Portal',
+  ]},
+
+  { brand: 'Microsoft Xbox', deviceType: 'Consola', models: [
+    'Xbox Series X', 'Xbox Series S',
+    'Xbox One X', 'Xbox One S', 'Xbox One',
+    'Xbox 360 E', 'Xbox 360 S', 'Xbox 360',
+    'Xbox', 'Xbox 360 Arcade',
+    'Xbox Elite Controller',
+  ]},
+
+  { brand: 'Nintendo', deviceType: 'Consola', models: [
+    'Switch OLED', 'Switch', 'Switch Lite',
+    'Switch 2',
+    '3DS XL', '3DS', '2DS XL', '2DS',
+    'DSi XL', 'DSi', 'DS Lite', 'DS',
+    'Wii U', 'Wii',
+    'Game Boy Advance SP', 'Game Boy Advance', 'Game Boy Color', 'Game Boy',
+  ]},
+
+  // ── Impresoras ──
+  { brand: 'HP', deviceType: 'Impresora', models: [
+    'LaserJet Pro M404', 'LaserJet Pro M428', 'LaserJet Pro MFP M428',
+    'LaserJet Pro MFP M232dwc', 'LaserJet Pro MFP M15w',
+    'LaserJet 107a', 'LaserJet 108a',
+    'Color LaserJet Pro MFP M283fdw', 'Color LaserJet Pro M255dw',
+    'DeskJet 2710', 'DeskJet 2720', 'DeskJet 2755', 'DeskJet 3755',
+    'DeskJet Ink Advantage 4155', 'DeskJet Ink Advantage 4175',
+    'OfficeJet 8015', 'OfficeJet Pro 9015', 'OfficeJet Pro 9018',
+    'Smart Tank 515', 'Smart Tank 525', 'Smart Tank 580', 'Smart Tank 585',
+    'Envoy 4155', 'Envoy 4158',
+  ]},
+
+  { brand: 'Epson', deviceType: 'Impresora', models: [
+    'L3150', 'L3110', 'L3100', 'L3250', 'L3253', 'L3260',
+    'L5290', 'L6270', 'L6290',
+    'WF-2830', 'WF-2850', 'WF-2960', 'WF-3820', 'WF-4830',
+    'Expression Home XP-2100', 'Expression Home XP-2200', 'Expression Home XP-3100',
+    'EcoTank L3150', 'EcoTank L3250', 'EcoTank L5290',
+    'WorkForce Pro WF-4830', 'WorkForce Pro WF-3820',
+  ]},
+
+  { brand: 'Canon', deviceType: 'Impresora', models: [
+    'PIXMA G3110', 'PIXMA G3111', 'PIXMA G3410', 'PIXMA G3411', 'PIXMA G3420',
+    'PIXMA G4110', 'PIXMA G4210',
+    'PIXMA TS3310', 'PIXMA TS3315', 'PIXMA TS3320', 'PIXMA TS3322',
+    'PIXMA TS3410', 'PIXMA TS3420', 'PIXMA TS3510', 'PIXMA TS3520',
+    'PIXMA TR4510', 'PIXMA TR4520', 'PIXMA TR4720',
+    'PIXMA E4570', 'PIXMA E4770',
+    'SELPHY CP1500',
+  ]},
+
+  { brand: 'Brother', deviceType: 'Impresora', models: [
+    'HL-L2350DW', 'HL-L2370DW', 'HL-L2375DW', 'HL-L2310D',
+    'DCP-L2530DW', 'DCP-L2540DW', 'DCP-L2550DW', 'DCP-L2510D',
+    'MFC-L2710DW', 'MFC-L2730DW', 'MFC-L2750DW', 'MFC-L2752DW',
+    'DCP-T420W', 'DCP-T425W', 'DCP-T426W', 'DCP-T427W',
+    'DCP-T520W', 'DCP-T525W', 'DCP-T720DW', 'DCP-T725DW',
+    'MFC-J1205W', 'MFC-J1215W', 'MFC-J4335DW', 'MFC-J4345DW',
+  ]},
+
 ]
 
 export function buildSeed() {
@@ -616,14 +772,14 @@ export function buildSeed() {
   db.users.push(admin)
 
   // Carga el catálogo completo de marcas y modelos
-  for (const { brand, models } of CATALOG) {
-    if (!db.catalog.brands.find((x) => x.name.toLowerCase() === brand.toLowerCase())) {
-      db.catalog.brands.push({ id: uid(), name: brand, usage: 0 })
+  for (const entry of CATALOG) {
+    if (!db.catalog.brands.find((x) => x.name.toLowerCase() === entry.brand.toLowerCase())) {
+      db.catalog.brands.push({ id: uid(), name: entry.brand, usage: 0 })
     }
-    for (const name of models) {
+    for (const name of entry.models) {
       if (!name) continue
-      if (!db.catalog.models.find((x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase())) {
-        db.catalog.models.push({ id: uid(), brand, name, usage: 0 })
+      if (!db.catalog.models.find((x) => x.brand.toLowerCase() === entry.brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase())) {
+        db.catalog.models.push({ id: uid(), brand: entry.brand, name, usage: 0, deviceType: entry.deviceType || 'Sin categorizar' })
       }
     }
   }

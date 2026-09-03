@@ -46,6 +46,7 @@ function sendPayload(payload) {
       socket.destroy()
     })
     socket.on('error', (e) => {
+      socket.destroy()
       resolve({ ok: false, error: `Print bridge no disponible (${e.message}).` })
     })
     socket.on('close', () => {

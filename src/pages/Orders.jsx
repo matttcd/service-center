@@ -12,6 +12,7 @@ import Badge from '../components/Badge.jsx'
 import OrderForm from '../components/OrderForm.jsx'
 import PrintOrderPanel from '../components/PrintOrderPanel.jsx'
 import { ORDER_STATUS_LABEL, orderStatusTone, formatDate, formatMoney, titleCase } from '../utils/helpers.js'
+import { DEVICE_TYPES } from '../../shared/fsm.js'
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
@@ -30,6 +31,7 @@ export default function Orders() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [brand, setBrand] = useState('all')
+  const [deviceType, setDeviceType] = useState('all')
   const [onlyNotNotified, setOnlyNotNotified] = useState(false)
   const [onlyNotConfirmed, setOnlyNotConfirmed] = useState(false)
 
@@ -50,10 +52,10 @@ export default function Orders() {
   // Carga paginada desde el servidor (no todo el histórico en memoria).
   useEffect(() => {
     const offset = (page - 1) * pageSize
-    loadOrders({ status, q, from, to, brand, onlyNotNotified, onlyNotConfirmed, limit: pageSize, offset })
+    loadOrders({ status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotConfirmed, limit: pageSize, offset })
       .then(setPageData)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadOrders, status, q, from, to, brand, onlyNotNotified, onlyNotConfirmed, page, pageSize, ordersRevision])
+  }, [loadOrders, status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotConfirmed, page, pageSize, ordersRevision])
 
   const [formOpen, setFormOpen] = useState(false)
   const [printing, setPrinting] = useState(null)
@@ -93,13 +95,14 @@ export default function Orders() {
   const safePage = Math.max(1, Math.min(page, totalPages))
   const paged = sorted
 
-  const hasFilters = q.trim() || status !== 'all' || brand !== 'all' || from || to || onlyNotNotified || onlyNotConfirmed
+  const hasFilters = q.trim() || status !== 'all' || brand !== 'all' || deviceType !== 'all' || from || to || onlyNotNotified || onlyNotConfirmed
 
   const clearFilters = () => {
     setQ('')
     setQInput('')
     setStatus('all')
     setBrand('all')
+    setDeviceType('all')
     setFrom('')
     setTo('')
     setOnlyNotNotified(false)
@@ -198,6 +201,12 @@ export default function Orders() {
               <option value="all">Todos los estados</option>
               {Object.entries(ORDER_STATUS_LABEL).map(([key, label]) => (
                 <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+            <select value={deviceType} onChange={(e) => { setDeviceType(e.target.value); setPage(1) }} className={`${inputCls} sm:w-40`}>
+              <option value="all">Todos los tipos</option>
+              {DEVICE_TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
               ))}
             </select>
             <select value={brand} onChange={(e) => { setBrand(e.target.value); setPage(1) }} className={`${inputCls} sm:w-40`}>

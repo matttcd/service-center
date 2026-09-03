@@ -44,7 +44,8 @@ export function buildPickupHtml(order, customer, pickup) {
   const phones = [customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' / ') || ''
   const address = customer?.address || ''
   const receivedByName = order?.receivedByName || ''
-  const devName = `${titleCase(order?.brand || '')} ${titleCase(order?.model || '')}`.trim()
+  const deviceType = order?.deviceType || 'Celular'
+  const devName = `${deviceType} · ${titleCase(order?.brand || '')} ${titleCase(order?.model || '')}`.trim()
   const accessoryList = (order?.accessories || '').split(',').map((s) => s.trim()).filter(Boolean)
   const conditionList = (order?.conditions || '').split(',').map((s) => s.trim()).filter(Boolean)
   const fixList = (order?.fix || '').split(',').map((s) => s.trim()).filter(Boolean)
