@@ -80,7 +80,7 @@ function findDotIndex(cx, cy) {
   return -1
 }
 
-export default function PatternPad({ value = [], onChange }) {
+export default function PatternPad({ value = [], onChange, disabled = false }) {
   const svgRef = useRef(null)
   const lockRef = useRef(null)
   const [currentPattern, setCurrentPattern] = useState([])
@@ -157,36 +157,46 @@ export default function PatternPad({ value = [], onChange }) {
     onChange([])
   }
 
-  const handleUndo = () => {
-    const next = currentPattern.slice(0, -1)
-    setCurrentPattern(next)
-    onChange(next)
-  }
-
   return (
     <div className="flex flex-col gap-1">
       <div style={{ position: 'relative', width: LOCK_SIZE, height: LOCK_SIZE }}>
-        <svg
-          ref={svgRef}
-          className="patternlock"
-          viewBox="0 0 100 100"
-          style={{ width: LOCK_SIZE, height: LOCK_SIZE, cursor: 'crosshair', touchAction: 'none' }}
-        >
-          <g className="lock-actives" />
-          <g className="lock-lines" />
-          <g className="lock-dots">
-            <circle cx="20" cy="20" r="2" />
-            <circle cx="50" cy="20" r="2" />
-            <circle cx="80" cy="20" r="2" />
-            <circle cx="20" cy="50" r="2" />
-            <circle cx="50" cy="50" r="2" />
-            <circle cx="80" cy="50" r="2" />
-            <circle cx="20" cy="80" r="2" />
-            <circle cx="50" cy="80" r="2" />
-            <circle cx="80" cy="80" r="2" />
-          </g>
-        </svg>
-        {activeSteps.length > 0 && (
+        {disabled ? (
+          <svg viewBox="0 0 100 100" width={LOCK_SIZE} height={LOCK_SIZE} className="cursor-not-allowed rounded-2xl border border-slate-300 dark:border-slate-700" style={{ touchAction: 'none', opacity: 0.5 }}>
+            <g>
+              <circle cx="20" cy="20" r="2" className="fill-slate-300 dark:fill-slate-600" />
+              <circle cx="50" cy="20" r="2" className="fill-slate-300 dark:fill-slate-600" />
+              <circle cx="80" cy="20" r="2" className="fill-slate-300 dark:fill-slate-600" />
+              <circle cx="20" cy="50" r="2" className="fill-slate-300 dark:fill-slate-600" />
+              <circle cx="50" cy="50" r="2" className="fill-slate-300 dark:fill-slate-600" />
+              <circle cx="80" cy="50" r="2" className="fill-slate-300 dark:fill-slate-600" />
+              <circle cx="20" cy="80" r="2" className="fill-slate-300 dark:fill-slate-600" />
+              <circle cx="50" cy="80" r="2" className="fill-slate-300 dark:fill-slate-600" />
+              <circle cx="80" cy="80" r="2" className="fill-slate-300 dark:fill-slate-600" />
+            </g>
+          </svg>
+        ) : (
+          <svg
+            ref={svgRef}
+            className="patternlock"
+            viewBox="0 0 100 100"
+            style={{ width: LOCK_SIZE, height: LOCK_SIZE, cursor: 'crosshair', touchAction: 'none' }}
+          >
+            <g className="lock-actives" />
+            <g className="lock-lines" />
+            <g className="lock-dots">
+              <circle cx="20" cy="20" r="2" />
+              <circle cx="50" cy="20" r="2" />
+              <circle cx="80" cy="20" r="2" />
+              <circle cx="20" cy="50" r="2" />
+              <circle cx="50" cy="50" r="2" />
+              <circle cx="80" cy="50" r="2" />
+              <circle cx="20" cy="80" r="2" />
+              <circle cx="50" cy="80" r="2" />
+              <circle cx="80" cy="80" r="2" />
+            </g>
+          </svg>
+        )}
+        {!disabled && activeSteps.length > 0 && (
           <svg
             viewBox="0 0 100 100"
             width={LOCK_SIZE}
@@ -219,17 +229,8 @@ export default function PatternPad({ value = [], onChange }) {
       <div className="flex items-center justify-start gap-1.5">
         <button
           type="button"
-          onClick={handleUndo}
-          disabled={!currentPattern.length}
-          title="Deshacer último punto"
-          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          ←
-        </button>
-        <button
-          type="button"
           onClick={handleClear}
-          disabled={!currentPattern.length}
+          disabled={!currentPattern.length || disabled}
           title="Borrar el patrón"
           className="inline-flex h-7 items-center justify-center gap-1 rounded-full border border-slate-300 px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
         >

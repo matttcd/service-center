@@ -2,14 +2,142 @@
 // Settings: configuración general (solo admin)
 // ============================================
 import { useEffect, useState } from 'react'
-import { Save, AlertCircle, CheckCircle2, Stethoscope, Upload } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle2, Stethoscope, Upload, Plus, X, Package, MonitorSmartphone, Wrench } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import { formatMoney } from '../utils/helpers.js'
 import { api } from '../utils/api.js'
 
+// Editor genérico de una lista de opciones (chips editables).
+function ListEditor({ title, icon, desc, items, onSave }) {
+  const [list, setList] = useState(items || [])
+  const [draft, setDraft] = useState('')
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    if (!dirty) setList(items || [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items])
+
+  const addItem = () => {
+    const v = draft.trim()
+    if (!v) return
+    if (!list.some((x) => x.toLowerCase() === v.toLowerCase())) {
+      setList((prev) => [...prev, v])
+      setDirty(true)
+    }
+    setDraft('')
+    setMsg(null)
+  }
+
+  const removeItem = (idx) => {
+    setList((prev) => prev.filter((_, i) => i !== idx))
+    setDirty(true)
+    setMsg(null)
+  }
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    setMsg(null)
+    const res = await onSave(list)
+    if (res.error) {
+      setMsg({ type: 'error', text: res.error })
+    } else {
+      setDirty(false)
+      setMsg({ type: 'ok', text: 'Lista guardada.' })
+    }
+    setSaving(false)
+  }
+
+  const inputCls =
+    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
+
+  return (
+    <Card>
+      <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+        <h2 className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
+          {icon}
+          {title}
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{desc}</p>
+      </div>
+
+      <div className="space-y-4 px-5 py-5">
+        {msg && (
+          <p className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+            msg.type === 'ok'
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+              : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+          }`}>
+            {msg.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            {msg.text}
+          </p>
+        )}
+
+        {list.length === 0 ? (
+          <p className="text-sm text-slate-400">Sin opciones cargadas todavía.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {list.map((item, i) => (
+              <span
+                key={`${item}-${i}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                {item}
+                <button
+                  type="button"
+                  onClick={() => removeItem(i)}
+                  title="Quitar"
+                  className="rounded-full p-0.5 text-slate-400 transition hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-500/10"
+                >
+                  <X size={14} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem() } }}
+            placeholder="Nueva opción..."
+            className={inputCls}
+          />
+          <button
+            type="button"
+            onClick={addItem}
+            disabled={!draft.trim()}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition hover:bg-slate-200 disabled:opacity-40 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            title="Agregar"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
+          >
+            <Save size={16} />
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export default function Settings() {
-  const { config, saveConfig } = useData()
+  const { config, saveConfig, catalogLists, saveCatalogLists } = useData()
   const [revisionFee, setRevisionFee] = useState('')
   const [appliedFee, setAppliedFee] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -183,6 +311,30 @@ export default function Settings() {
           </div>
         </div>
       </Card>
+
+      <ListEditor
+        title="Accesorios"
+        icon={<Package size={18} className="text-primary-500" />}
+        desc="Accesorios comunes que el cliente puede dejar junto al equipo."
+        items={catalogLists.accessories}
+        onSave={(list) => saveCatalogLists({ accessories: list })}
+      />
+
+      <ListEditor
+        title="Estado del equipo"
+        icon={<MonitorSmartphone size={18} className="text-primary-500" />}
+        desc="Condiciones en las que puede ingresar el equipo."
+        items={catalogLists.conditions}
+        onSave={(list) => saveCatalogLists({ conditions: list })}
+      />
+
+      <ListEditor
+        title="Arreglos"
+        icon={<Wrench size={18} className="text-primary-500" />}
+        desc="Reparaciones más comunes para cargar el diagnóstico."
+        items={catalogLists.fixes}
+        onSave={(list) => saveCatalogLists({ fixes: list })}
+      />
     </div>
   )
 }

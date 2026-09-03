@@ -141,6 +141,45 @@ function migrateCatalogDeviceType() {
 }
 migrateCatalogDeviceType()
 
+// Agrega noPin: false a órdenes existentes.
+function migrateNoPin() {
+  const db = getDB()
+  if (db.meta?.noPinMigrated) return
+  let changed = 0
+  for (const o of db.orders || []) {
+    if (o.noPin === undefined) { o.noPin = false; changed++ }
+  }
+  mutate((d) => { d.meta = { ...(d.meta || {}), noPinMigrated: true } })
+    .then(() => console.log(`Migración noPin: ${changed} orden(es) actualizada(s).`))
+}
+migrateNoPin()
+
+const DEFAULT_LISTS = {
+  accessories: ['Funda', 'Cargador', 'Vidrio templado', 'SIM', 'SD', 'Auriculares'],
+  conditions: ['Apagado', 'Mojado', 'Golpeado', 'Display Roto', 'No se pudo probar funciones básicas'],
+  fixes: ['Cambio de pantalla', 'Cambio de módulo', 'Cambio de batería', 'Pin de carga', 'Micrófono', 'Parlante', 'Botón de encendido', 'Flex', 'Software', 'Limpieza'],
+}
+
+// Crea db.catalog.accessories / conditions / fixes con defaults si no existen.
+function migrateCatalogLists() {
+  const db = getDB()
+  if (db.meta?.catalogListsMigrated) return
+  const cat = db.catalog
+  if (cat) {
+    let changed = false
+    for (const key of Object.keys(DEFAULT_LISTS)) {
+      if (!Array.isArray(cat[key])) { cat[key] = DEFAULT_LISTS[key]; changed = true }
+    }
+    if (changed) {
+      mutate((d) => { d.meta = { ...(d.meta || {}), catalogListsMigrated: true } })
+        .then(() => console.log('Migración catalog lists: listas creadas con defaults.'))
+      return
+    }
+  }
+  mutate((d) => { d.meta = { ...(d.meta || {}), catalogListsMigrated: true } })
+}
+migrateCatalogLists()
+
 // ============================================
 // Tiempo real (Server-Sent Events)
 // ============================================
@@ -484,6 +523,40 @@ app.post('/api/catalog/models/bulk', auth, (req, res) => {
   })
 })
 
+// Listas de accesorios, condiciones y arreglos (editables desde Configuración).
+app.get('/api/catalog/lists', auth, (req, res) => {
+  const db = getDB()
+  const catalog = db.catalog || {}
+  res.json({
+    accessories: catalog.accessories || DEFAULT_LISTS.accessories,
+    conditions: catalog.conditions || DEFAULT_LISTS.conditions,
+    fixes: catalog.fixes || DEFAULT_LISTS.fixes,
+  })
+})
+
+app.put('/api/catalog/lists', auth, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo los administradores pueden editar las listas.' })
+  const body = req.body || {}
+  const normalize = (v) =>
+    Array.isArray(v)
+      ? v.map((s) => titleCase(String(s).trim())).filter(Boolean)
+      : undefined
+  const accessories = normalize(body.accessories)
+  const conditions = normalize(body.conditions)
+  const fixes = normalize(body.fixes)
+  if (accessories === undefined && conditions === undefined && fixes === undefined) {
+    return res.status(400).json({ error: 'No se envió ninguna lista para actualizar.' })
+  }
+  mutate((d) => {
+    d.catalog = d.catalog || {}
+    if (accessories !== undefined) d.catalog.accessories = accessories
+    if (conditions !== undefined) d.catalog.conditions = conditions
+    if (fixes !== undefined) d.catalog.fixes = fixes
+  }).then(() => {
+    res.json({ ok: true })
+  }).catch(() => res.status(500).json({ error: 'No se pudo guardar las listas.' }))
+})
+
 // Cuenta una marca/modelo en el catálogo (y los crea si faltan).
 function bumpCatalog(d, brand, model, deviceType = 'Celular') {
   d.catalog = d.catalog || { brands: [], models: [] }
@@ -618,6 +691,7 @@ app.post('/api/orders', auth, (req, res) => {
       accessories: normalizeList(String(body.accessories || '')),
       conditions: normalizeList(String(body.conditions || '')),
       pin: String(body.pin || ''),
+      noPin: !!body.noPin,
       pattern: storedPattern,
       diagnosisType,
       issue: sentenceCase(String(body.issue || '')),
@@ -935,7 +1009,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   const {
-    deviceType, brand, model, pin, pattern, accessories, conditions,
+    deviceType, brand, model, pin, noPin, pattern, accessories, conditions,
     technicianNotes, fix, price, issue, note, editNote, deleteNote,
   } = req.body || {}
   const role = req.user.role
@@ -971,7 +1045,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
       return res.status(403).json({ error: 'Solo podés eliminar tus propias notas.' })
     }
   }
-  const equipFields = [deviceType, brand, model, pin, pattern, accessories, conditions]
+  const equipFields = [deviceType, brand, model, pin, noPin, pattern, accessories, conditions]
   const touchesEquip = equipFields.some((v) => v !== undefined)
   if (touchesEquip && !isEmpOrAdmin) {
     return res.status(403).json({ error: 'Solo recepción o administradores pueden editar los detalles del equipo.' })
@@ -994,6 +1068,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
     if (brand !== undefined) o.brand = String(brand)
     if (model !== undefined) o.model = String(model)
     if (pin !== undefined) o.pin = String(pin)
+    if (noPin !== undefined) o.noPin = !!noPin
     if (pattern !== undefined) o.pattern = Array.isArray(pattern) ? pattern : []
     if (accessories !== undefined) o.accessories = normalizeList(String(accessories))
     if (conditions !== undefined) o.conditions = normalizeList(String(conditions))

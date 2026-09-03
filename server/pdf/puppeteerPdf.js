@@ -2,13 +2,28 @@
 // puppeteerPdf.js: singleton Chromium browser + html-to-PDF rendering
 // ============================================
 import puppeteer from 'puppeteer'
+import { existsSync } from 'node:fs'
 
 let browserPromise = null
 
+function resolveExecutablePath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH
+  const candidates = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ]
+  for (const p of candidates) {
+    if (existsSync(p)) return p
+  }
+  return undefined
+}
+
 async function getBrowser() {
   if (!browserPromise) {
+    const executablePath = resolveExecutablePath()
     browserPromise = puppeteer.launch({
       headless: true,
+      executablePath,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     })
   }

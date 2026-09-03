@@ -75,6 +75,7 @@ export default function OrderDetail() {
   const [equipBrand, setEquipBrand] = useState('')
   const [equipModel, setEquipModel] = useState('')
   const [equipPin, setEquipPin] = useState('')
+  const [equipNoPin, setEquipNoPin] = useState(false)
   const [equipPattern, setEquipPattern] = useState([])
   const [equipAccessories, setEquipAccessories] = useState('')
   const [equipConditions, setEquipConditions] = useState('')
@@ -231,6 +232,7 @@ export default function OrderDetail() {
     setEquipBrand(order.brand || '')
     setEquipModel(order.model || '')
     setEquipPin(order.pin || '')
+    setEquipNoPin(!!order.noPin)
     setEquipPattern(order.pattern || [])
     setEquipAccessories(order.accessories || '')
     setEquipConditions(order.conditions || '')
@@ -241,7 +243,7 @@ export default function OrderDetail() {
   const saveEditEquip = async () => {
     setBusy('equip')
     const res = await updateOrder(order.id, {
-      deviceType: equipDeviceType === 'Otro' ? titleCase(equipCustomDeviceType.trim()) || 'Otro' : equipDeviceType, brand: titleCase(equipBrand), model: titleCase(equipModel), pin: equipPin,
+      deviceType: equipDeviceType === 'Otro' ? titleCase(equipCustomDeviceType.trim()) || 'Otro' : equipDeviceType, brand: titleCase(equipBrand), model: titleCase(equipModel), pin: equipNoPin ? '' : equipPin, noPin: equipNoPin,
       pattern: equipPattern, accessories: equipAccessories, conditions: equipConditions, issue: equipIssue,
     })
     if (!res.error) { setEditingEquip(false); showNotice('Equipo actualizado.') } else showNotice(res.error)
@@ -510,11 +512,15 @@ export default function OrderDetail() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className={labelCls}>PIN / contraseña</label>
-                    <input value={equipPin} onChange={(e) => setEquipPin(e.target.value)} className={inputCls} />
+                    <input value={equipPin} onChange={(e) => setEquipPin(e.target.value)} disabled={equipNoPin} className={`${inputCls} ${equipNoPin ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                    <label className="flex items-center gap-2 mt-1 text-sm text-slate-500 dark:text-slate-400 select-none cursor-pointer">
+                      <input type="checkbox" checked={equipNoPin} onChange={(e) => { setEquipNoPin(e.target.checked); if (e.target.checked) setEquipPin('') }} className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
+                      El cliente no dejó contraseña
+                    </label>
                   </div>
                   <div>
                     <label className={labelCls}>Patrón de desbloqueo</label>
-                    <PatternPad value={equipPattern} onChange={setEquipPattern} />
+                    <PatternPad key={equipNoPin ? 'nopin' : 'pin'} value={equipPattern} onChange={setEquipPattern} disabled={equipNoPin} />
                   </div>
                 </div>
                 )}
@@ -576,6 +582,8 @@ export default function OrderDetail() {
                         <p className="inline-block rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                           {order.pin}
                         </p>
+                      ) : order.noPin ? (
+                        <p className="text-sm italic text-slate-400">El cliente no proporcionó contraseña</p>
                       ) : (
                         <p className="text-sm text-slate-400">Sin PIN / contraseña</p>
                       )}

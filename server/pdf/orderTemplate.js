@@ -57,7 +57,7 @@ function field(label, value, opts = {}) {
   return `<div class="field${full}"><div class="lbl">${esc(label)}</div><div class="val ${cls}">${value || '<span style="color:#999">&mdash;</span>'}</div></div>`
 }
 
-export function buildOrderHtml(order, customer) {
+export function buildOrderHtml(order, customer, contractBulletsOverride) {
   const custName = customer?.fullName || order?.customerName || ''
   const dni = customer?.dni || ''
   const phones = [customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' / ') || '—'
@@ -66,6 +66,7 @@ export function buildOrderHtml(order, customer) {
   const deviceType = order?.deviceType || 'Celular'
   const devName = `${deviceType} · ${titleCase(order?.brand || '')} ${titleCase(order?.model || '')}`.trim()
   const pin = order?.pin || ''
+  const noPin = order?.noPin || false
   const accessoryList = (order?.accessories || '').split(',').map((s) => s.trim()).filter(Boolean)
   const conditionList = (order?.conditions || '').split(',').map((s) => s.trim()).filter(Boolean)
   const issue = order?.issue || ''
@@ -75,7 +76,7 @@ export function buildOrderHtml(order, customer) {
   const isRevision = order?.diagnosisType === 'revision'
   const hasFixData = fixList.length > 0 || order?.price > 0
 
-  const contractBullets = [
+  const contractBullets = contractBulletsOverride || [
     'Para la entrega del equipo, el cliente o un tercero asignado deberán presentar la <strong>orden</strong>. Si es un tercero, deberá contar con una <strong>autorización explícita</strong> del titular. Si el cliente no presenta la orden física, se podrá entregar el equipo con una constancia de retiro firmada (únicamente el cliente titular). Sin la <strong>orden original</strong> no se reconocerá garantía alguna.',
     'La garantía tiene una duración de <strong>treinta (30) días</strong> corridos desde el retiro y cubre exclusivamente las reparaciones detalladas en la presente orden.',
     'Transcurridos <strong>treinta (30) días</strong> desde la notificación de que el equipo está listo sin que haya sido retirado, El Gringo Celulares se reserva el derecho de modificar el presupuesto debido a variaciones en los costos de repuestos.',
@@ -119,8 +120,8 @@ export function buildOrderHtml(order, customer) {
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 5mm; margin-bottom: 3mm; }
   .grid2-full { grid-column: 1 / -1; }
 
-  .equip-grid { display: flex; gap: 5mm; margin-bottom: 3mm; }
-  .equip-col { flex: 1; }
+  .equip-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1mm 5mm; margin-bottom: 3mm; }
+  .equip-col { }
 
   .legal-list { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.45; color: #222; margin-top: 3mm; padding-left: 5mm; }
   .legal-list li { margin-bottom: 2mm; }
@@ -172,15 +173,17 @@ export function buildOrderHtml(order, customer) {
       ${field('Marca / Modelo', esc(devName))}
       ${field('Accesorios', plainList(accessoryList))}
       ${field('Estado', plainList(conditionList))}
-      ${field('Chequeos / notas generales', esc(issue) || '<span style="color:#999">&mdash;</span>')}
+    </div>
+    <div class="equip-col">
+      ${field('PIN / contrasena', noPin ? '<em style="color:#999">El cliente no proporcionó contraseña</em>' : esc(pin) || '—')}
+      <div class="field">
+        <div class="lbl">Patron de desbloqueo</div>
+        ${noPin ? '<em style="color:#999">El cliente no proporcionó patron</em>' : (order?.pattern?.length > 0 ? patternSvg(order.pattern) : '<div style="font-size:10pt;color:#999">Sin patron</div>')}
+      </div>
     </div>
     <div class="equip-col">
       ${field('Recibido por', esc(receivedByName))}
-      ${field('PIN / contrasena', esc(pin))}
-      <div class="field">
-        <div class="lbl">Patron de desbloqueo</div>
-        ${order?.pattern?.length > 0 ? patternSvg(order.pattern) : '<div style="font-size:10pt;color:#999">Sin patron</div>'}
-      </div>
+      ${field('Chequeos / notas generales', esc(issue) || '<span style="color:#999">&mdash;</span>')}
     </div>
   </div>
 

@@ -293,6 +293,9 @@ export function DataProvider({ children }) {
   // ---------- Configuración ----------
   const saveConfig = async (fields) => run(api('/config', { method: 'POST', body: fields }))
 
+  // Guarda las listas editables (accesorios / condiciones / arreglos).
+  const saveCatalogLists = async (lists) => run(api('/catalog/lists', { method: 'PUT', body: lists }))
+
   // ---------- Derivados / listas por estado ----------
   const derived = useMemo(() => {
     const byStatus = (s) => data.orders.filter((o) => o.status === s)
@@ -341,6 +344,11 @@ export function DataProvider({ children }) {
     technicians: data.technicians,
     config: data.config,
     catalog: data.catalog,
+    catalogLists: {
+      accessories: data.catalog?.accessories || [],
+      conditions: data.catalog?.conditions || [],
+      fixes: data.catalog?.fixes || [],
+    },
     actividad,
     actividadHasMore,
     actividadError,
@@ -367,6 +375,7 @@ export function DataProvider({ children }) {
     addUser,
     toggleUserActive,
     saveConfig,
+    saveCatalogLists,
   }
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>

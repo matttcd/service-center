@@ -10,9 +10,6 @@ import PatternPad from './PatternPad.jsx'
 import { useData } from '../context/DataContext.jsx'
 import { titleCase, sentenceCase } from '../utils/helpers.js'
 import {
-  COMMON_ACCESSORIES,
-  COMMON_CONDITIONS,
-  COMMON_FIXES,
   BRAND_BADGE_COUNT,
   MODEL_BADGE_COUNT,
 } from '../utils/constants.js'
@@ -35,8 +32,12 @@ const chipIdle =
 const chipAdd =
   'inline-flex items-center gap-1 rounded-full border border-dashed border-primary-400 px-3 py-1.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/40 dark:text-primary-400 dark:hover:bg-primary-500/10'
 
+const ACCESSORY_FALLBACK = ['Funda', 'Cargador', 'Vidrio templado', 'SIM', 'SD', 'Auriculares']
+const CONDITION_FALLBACK = ['Apagado', 'Mojado', 'Golpeado', 'Display Roto', 'No se pudo probar funciones básicas']
+const FIX_FALLBACK = ['Cambio de pantalla', 'Cambio de módulo', 'Cambio de batería', 'Pin de carga', 'Micrófono', 'Parlante', 'Botón de encendido', 'Flex', 'Software', 'Limpieza']
+
 export default function OrderForm({ open, onClose, onCreated }) {
-  const { customers, catalog, addCustomer, addOrder, addCatalogBrand, addCatalogModel } = useData()
+  const { customers, catalog, addCustomer, addOrder, addCatalogBrand, addCatalogModel, catalogLists } = useData()
   const [custQuery, setCustQuery] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [newCustomer, setNewCustomer] = useState({ fullName: '', dni: '', phone: '', address: '' })
@@ -51,6 +52,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [customAccessory, setCustomAccessory] = useState('')
   const [conditions, setConditions] = useState([])
   const [pin, setPin] = useState('')
+  const [noPin, setNoPin] = useState(false)
   const [pattern, setPattern] = useState([])
   const [diagnosisType, setDiagnosisType] = useState('visible') // 'visible' | 'revision'
   const [issue, setIssue] = useState('')
@@ -61,6 +63,10 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
+
+  const accessoryOptions = catalogLists?.accessories?.length ? catalogLists.accessories : ACCESSORY_FALLBACK
+  const conditionOptions = catalogLists?.conditions?.length ? catalogLists.conditions : CONDITION_FALLBACK
+  const fixOptions = catalogLists?.fixes?.length ? catalogLists.fixes : FIX_FALLBACK
 
   useEffect(() => {
     if (!open) return
@@ -78,6 +84,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
     setCustomAccessory('')
     setConditions([])
     setPin('')
+    setNoPin(false)
 setPattern([])
     setDiagnosisType('visible')
 setIssue('')
@@ -147,6 +154,7 @@ setIssue('')
     !!customAccessory ||
     conditions.length > 0 ||
     !!pin ||
+    !!noPin ||
     pattern.length > 0 ||
     fixes.length > 0 ||
     !!customFix
@@ -243,7 +251,8 @@ setIssue('')
         model,
         accessories: accList.map((a) => titleCase(a)).join(', '),
         conditions: conditions.map((c) => titleCase(c)).join(', '),
-        pin: pin.trim(),
+        pin: noPin ? '' : pin.trim(),
+        noPin,
         pattern: pattern.length >= 3 ? pattern : null,
         diagnosisType,
         issue: sentenceCase(issue.trim()),
@@ -381,9 +390,10 @@ setIssue('')
             </div>
 
             {/* Marca */}
+            {deviceType !== 'Otro' && (
             <div>
               <label className={labelCls}>Marca</label>
-              {deviceType && deviceType !== 'Otro' ? (
+              {deviceType ? (
               <div className="flex flex-wrap items-center gap-2">
                 {topBrands.map((b) => (
                   <button key={b.id} type="button" onClick={() => { setBrand(b.name); setModel('') }}
@@ -409,11 +419,13 @@ setIssue('')
               <p className="text-sm text-slate-400">Elegí el tipo de dispositivo primero.</p>
               )}
             </div>
+            )}
 
             {/* Modelo */}
+            {deviceType !== 'Otro' && (
             <div>
               <label className={labelCls}>Modelo</label>
-              {deviceType && deviceType !== 'Otro' ? (
+              {deviceType ? (
               <div className="flex flex-wrap items-center gap-2">
                 {brand ? (
                   brandModels.length ? (
@@ -449,11 +461,12 @@ setIssue('')
               <p className="text-sm text-slate-400">Elegí el tipo de dispositivo primero.</p>
               )}
             </div>
+            )}
 
             <div>
               <label className={labelCls}>Estado en que entra el equipo</label>
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                {COMMON_CONDITIONS.map((c) => (
+                {conditionOptions.map((c) => (
                   <button key={c} type="button"
                     onClick={() => setConditions((list) => (list.includes(c) ? list.filter((x) => x !== c) : [...list, c]))}
                     className={conditions.includes(c) ? chipSelected : chipIdle}>
@@ -467,18 +480,22 @@ setIssue('')
               <div className="flex flex-col justify-around gap-4">
                 <div>
                   <label className={labelCls}>PIN / contraseña del equipo</label>
-                  <input type="text" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="PIN o contraseña" className={inputCls} />
+                  <input type="text" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="PIN o contraseña" disabled={noPin} className={`${inputCls} ${noPin ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                  <label className="flex items-center gap-2 mt-1 text-sm text-slate-500 dark:text-slate-400 select-none cursor-pointer">
+                    <input type="checkbox" checked={noPin} onChange={(e) => { setNoPin(e.target.checked); if (e.target.checked) setPin('') }} className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
+                    El cliente no dejó contraseña
+                  </label>
                 </div>
                 <div>
                   <label className={labelCls}>Con accesorios</label>
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {COMMON_ACCESSORIES.map((a) => (
+                    {accessoryOptions.map((a) => (
                       <button key={a} type="button" onClick={() => toggleAccessory(a)}
                         className={accessories.includes(a) ? chipSelected : chipIdle}>
                         {a}
                       </button>
                     ))}
-                    {accessories.filter((a) => !COMMON_ACCESSORIES.includes(a)).map((a) => (
+                    {accessories.filter((a) => !accessoryOptions.includes(a)).map((a) => (
                       <span key={a} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
                         {a}
                         <button type="button" onClick={() => toggleAccessory(a)} aria-label={`Quitar ${a}`} className="transition hover:text-red-500">
@@ -500,7 +517,7 @@ setIssue('')
               <div className="flex flex-col">
                 <label className={labelCls}>Patrón de desbloqueo</label>
                 <div className="pt-1">
-                  <PatternPad value={pattern} onChange={setPattern} />
+                  <PatternPad key={noPin ? 'nopin' : 'pin'} value={pattern} onChange={setPattern} disabled={noPin} />
                 </div>
               </div>
             </div>
@@ -531,13 +548,13 @@ setIssue('')
               <div>
                 <label className={labelCls}>Arreglo a realizar</label>
                 <div className="flex flex-wrap items-center gap-2">
-                  {COMMON_FIXES.map((f) => (
+                  {fixOptions.map((f) => (
                     <button key={f} type="button" onClick={() => toggleFix(f)}
                       className={fixes.includes(f) ? chipSelected : chipIdle}>
                       {f}
                     </button>
                   ))}
-                  {fixes.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
+                  {fixes.filter((f) => !fixOptions.includes(f)).map((f) => (
                     <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
                       {f}
                       <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500">

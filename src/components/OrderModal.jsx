@@ -29,7 +29,6 @@ import Modal from './Modal.jsx'
 import NotesModal from './NotesModal.jsx'
 import TechnicianSelect from './TechnicianSelect.jsx'
 import { PatternPreview } from './PatternPad.jsx'
-import { COMMON_FIXES } from '../utils/constants.js'
 import {
   ORDER_STATUS_LABEL,
   orderStatusTone,
@@ -38,6 +37,8 @@ import {
   titleCase,
 } from '../utils/helpers.js'
 import { nextStatus, nextStatusLabel } from '../../shared/fsm.js'
+
+const FIX_FALLBACK = ['Cambio de pantalla', 'Cambio de módulo', 'Cambio de batería', 'Pin de carga', 'Micrófono', 'Parlante', 'Botón de encendido', 'Flex', 'Software', 'Limpieza']
 
 
 
@@ -64,7 +65,8 @@ const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-
 export default function OrderModal({ order, onClose }) {
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { customers, setOrderStatus, toggleNotified, updateOrder, confirmOrder, editNote, deleteNote } = useData()
+  const { customers, setOrderStatus, toggleNotified, updateOrder, confirmOrder, editNote, deleteNote, catalogLists } = useData()
+  const fixOptions = catalogLists?.fixes?.length ? catalogLists.fixes : FIX_FALLBACK
   const [fixList, setFixList] = useState(() => (order?.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
   const [customFix, setCustomFix] = useState('')
   const [priceText, setPriceText] = useState(order?.price ? String(order.price) : '')
@@ -296,7 +298,11 @@ export default function OrderModal({ order, onClose }) {
             <div className="flex flex-col gap-4">
               <div>
                 <label className={labelCls}>PIN / contraseña del equipo</label>
-                <input type="text" value={order.pin || ''} readOnly disabled className={inputCls} placeholder="—" />
+                {order.noPin ? (
+                  <p className="text-sm italic text-slate-400">El cliente no proporcionó contraseña</p>
+                ) : (
+                  <input type="text" value={order.pin || ''} readOnly disabled className={inputCls} placeholder="—" />
+                )}
               </div>
               <div>
                 <label className={labelCls}>Con accesorios</label>
@@ -423,7 +429,7 @@ export default function OrderModal({ order, onClose }) {
                   </div>
                   {canEditWork && !isReadOnly && (
                   <div className="flex flex-wrap items-center gap-2">
-                    {COMMON_FIXES.map((f) => (
+                    {fixOptions.map((f) => (
                       <button
                         key={f}
                         type="button"
@@ -433,7 +439,7 @@ export default function OrderModal({ order, onClose }) {
                         {f}
                       </button>
                     ))}
-                    {fixList.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
+                    {fixList.filter((f) => !fixOptions.includes(f)).map((f) => (
                       <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
                         {f}
                         <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500">
