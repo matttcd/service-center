@@ -1,5 +1,23 @@
-# Levanta la app con Docker: frontend (nginx) + backend (Node/Express)
+# Levanta la app con Docker: frontend (nginx) + backend (Node/Express) + postgres (base de datos)
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: service-center-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: service_center
+      POSTGRES_USER: service_center
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?Definí PG_PASSWORD en el .env}
+    volumes:
+      - service-center_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U service_center -d service_center"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: .
@@ -13,8 +31,12 @@ services:
       - PRINT_BRIDGE_HOST=${PRINT_BRIDGE_HOST:-localhost}
       - PRINT_BRIDGE_PORT=9200
       - JWT_SECRET=${JWT_SECRET:?Definí JWT_SECRET antes de levantar el sistema}
+      - DATABASE_URL=postgresql://service_center:${PG_PASSWORD}@postgres:5432/service_center
     volumes:
       - service-center_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     expose:
       - "3000"
 
@@ -33,3 +55,4 @@ services:
 volumes:
   # Los datos de la base central se guardan acá y sobreviven reinicios.
   service-center_data:
+  service-center_pgdata:

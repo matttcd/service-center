@@ -1,20 +1,25 @@
 // ============================================
 // Servidor de la API REST del servicio técnico
+// Persistencia: PostgreSQL vía Prisma
 // ============================================
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import dotenv from 'dotenv'
+import { execFile } from 'node:child_process'
+import fs from 'node:fs'
+
 const __file = fileURLToPath(import.meta.url)
 const __serverDir = path.dirname(__file)
 const __rootDir = path.resolve(__serverDir, '..')
 dotenv.config({ path: path.join(__rootDir, '.env') })
+dotenv.config({ path: path.join(__serverDir, '.env') })
+
 import express from 'express'
 import cors from 'cors'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import fs from 'node:fs'
-import { initDB, getDB, mutate, persist, createBackup, listBackups, restoreBackup, purgeTrash, onDataChange } from './store.js'
-import { buildSeed } from './seed.js'
+import { PrismaClient } from '@prisma/client'
+
 import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase, normalizeList } from './helpers.js'
 import { printZplLabel } from './printer.js'
 import { printPdfToBridge, listBridgePrinters } from './printer/pdf_bridge_client.js'
@@ -22,6 +27,13 @@ import { ORDER_STATUSES, allowedTransitions } from '../shared/fsm.js'
 import { buildOrderHtml } from './pdf/orderTemplate.js'
 import { buildPickupHtml } from './pdf/pickupTemplate.js'
 import { htmlToPdf } from './pdf/puppeteerPdf.js'
+import { seedIfEmpty, DEFAULT_LISTS } from './seed.js'
+
+export const prisma = new PrismaClient()
+
+const DATA_DIR = process.env.DATA_DIR || path.join(__serverDir, 'data')
+const BACKUP_DIR = path.join(DATA_DIR, 'backups')
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 4000
@@ -33,15 +45,11 @@ if (!JWT_SECRET) {
   console.error('Falta la variable de entorno JWT_SECRET. Definila antes de iniciar el servidor.')
   process.exit(1)
 }
-if (NODE_ENV !== 'production' && !process.env.JWT_SECRET) {
-  console.warn('[WARN] Usando JWT_SECRET por defecto (solo desarrollo). Definí JWT_SECRET para entornos productivos.')
-}
 
 // Límite de intentos de login por IP+cuenta (anti fuerza bruta).
 const MAX_LOGIN_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS || 5)
 const LOGIN_WINDOW_MS = 15 * 60 * 1000
 const loginAttempts = new Map()
-// Contraseñas del seed: si un usuario aún usa una, se le exige cambiarla.
 const DEFAULT_PASSWORDS = ['admin123']
 function checkLoginLimit(key) {
   const now = Date.now()
@@ -64,192 +72,30 @@ function noteLoginFailure(key) {
 app.use(cors())
 app.use(express.json())
 
-await initDB(buildSeed)
+// Inicializa la base: si está vacía, aplica el seed (admin + catálogo).
+await seedIfEmpty()
 
-// ============================================
-// Migración: normaliza el texto ya guardado (Title/Sentence Case).
-// Se ejecuta una sola vez y se marca para no repetirla en cada arranque.
-// ============================================
-function migrateNormalizedText() {
-  const db = getDB()
-  if (!db || db.meta?.normalizedText) return
-
-  let changed = 0
-  const touch = (before, after) => {
-    if (before !== after) changed += 1
-    return after
-  }
-
-  for (const c of db.customers || []) {
-    c.fullName = touch(c.fullName, titleCase(c.fullName))
-    c.address = touch(c.address, titleCase(c.address))
-  }
-  for (const o of db.orders || []) {
-    o.brand = touch(o.brand, titleCase(o.brand))
-    o.model = touch(o.model, titleCase(o.model))
-    o.accessories = touch(o.accessories, normalizeList(o.accessories))
-    o.conditions = touch(o.conditions, normalizeList(o.conditions))
-    o.issue = touch(o.issue, sentenceCase(o.issue))
-    o.fix = touch(o.fix, normalizeList(o.fix))
-    o.technicianNotes = touch(o.technicianNotes, sentenceCase(o.technicianNotes))
-    if (!Array.isArray(o.notesLog)) o.notesLog = []
-  }
-  for (const b of db.catalog?.brands || []) {
-    b.name = touch(b.name, titleCase(b.name))
-  }
-  for (const m of db.catalog?.models || []) {
-    m.brand = touch(m.brand, titleCase(m.brand))
-    m.name = touch(m.name, titleCase(m.name))
-  }
-  for (const u of db.users || []) {
-    u.name = touch(u.name, titleCase(u.name))
-  }
-
-  if (changed > 0) {
-    mutate((d) => {
-      d.meta = { ...(d.meta || {}), normalizedText: true }
-    }).then(() => console.log(`Migración de texto: ${changed} campo(s) normalizado(s).`))
-  } else {
-    mutate((d) => {
-      d.meta = { ...(d.meta || {}), normalizedText: true }
-    }).then(() => console.log('Migración de texto: sin cambios.'))
-  }
+// Suscriptores que se notifican cuando la base cambia (para tiempo real).
+const changeListeners = new Set()
+export function onDataChange(fn) {
+  changeListeners.add(fn)
+  return () => changeListeners.delete(fn)
 }
-migrateNormalizedText()
-
-// Migración: agregar deviceType a órdenes existentes.
-function migrateDeviceType() {
-  const db = getDB()
-  if (db.meta?.deviceTypeMigrated) return
-  let changed = 0
-  for (const o of db.orders || []) {
-    if (!o.deviceType) { o.deviceType = 'Celular'; changed++ }
-  }
-  mutate((d) => { d.meta = { ...(d.meta || {}), deviceTypeMigrated: true } })
-    .then(() => console.log(`Migración deviceType: ${changed} orden(es) actualizada(s).`))
-}
-// Agrega deviceType a modelos existentes del catálogo que no lo tengan.
-function migrateCatalogDeviceType() {
-  const db = getDB()
-  if (db.meta?.catalogDeviceTypeMigrated) return
-  let changed = 0
-  for (const m of db.catalog?.models || []) {
-    if (!m.deviceType) { m.deviceType = 'Celular'; changed++ }
-  }
-  mutate((d) => { d.meta = { ...(d.meta || {}), catalogDeviceTypeMigrated: true } })
-    .then(() => console.log(`Migración catalog deviceType: ${changed} modelo(s) actualizado(s).`))
-}
-migrateCatalogDeviceType()
-
-// Agrega noPin: false a órdenes existentes.
-function migrateNoPin() {
-  const db = getDB()
-  if (db.meta?.noPinMigrated) return
-  let changed = 0
-  for (const o of db.orders || []) {
-    if (o.noPin === undefined) { o.noPin = false; changed++ }
-  }
-  mutate((d) => { d.meta = { ...(d.meta || {}), noPinMigrated: true } })
-    .then(() => console.log(`Migración noPin: ${changed} orden(es) actualizada(s).`))
-}
-migrateNoPin()
-
-const DEFAULT_LISTS = {
-  accessories: ['Funda', 'Cargador', 'Vidrio templado', 'SIM', 'SD', 'Auriculares'],
-  conditions: ['Apagado', 'Mojado', 'Golpeado', 'Display Roto', 'No se pudo probar funciones básicas'],
-  fixes: ['Cambio de pantalla', 'Cambio de módulo', 'Cambio de batería', 'Pin de carga', 'Micrófono', 'Parlante', 'Botón de encendido', 'Flex', 'Software', 'Limpieza'],
-  terms: [
-    'Para la entrega del equipo, el cliente o un tercero asignado deberán presentar la <strong>orden</strong>. Si es un tercero, deberá contar con una <strong>autorización explícita</strong> del titular. Si el cliente no presenta la orden física, se podrá entregar el equipo con una constancia de retiro firmada (únicamente el cliente titular). Sin la <strong>orden original</strong> no se reconocerá garantía alguna.',
-    'La garantía tiene una duración de <strong>treinta (30) días</strong> corridos desde el retiro y cubre exclusivamente las reparaciones detalladas en la presente orden.',
-    'Transcurridos <strong>treinta (30) días</strong> desde la notificación de que el equipo está listo sin que haya sido retirado, El Gringo Celulares se reserva el derecho de modificar el presupuesto debido a variaciones en los costos de repuestos.',
-    'Los pagos son exclusivamente <strong>en efectivo</strong>.',
-    'Para cualquier duda o consulta sobre el estado de su dispositivo comunicarse al <strong>3704-583266</strong> o al <strong>3704-676320</strong>.',
-    'Declaro haber leído y acepto las condiciones precedentemente descriptas.',
-  ],
-}
-
-// Límite máximo de caracteres totales para los términos (los términos reales usan ~993).
-const MAX_TERMS_CHARS = 1600
-
-// Crea db.catalog.accessories / conditions / fixes / terms con defaults si no existen.
-function migrateCatalogLists() {
-  const db = getDB()
-  if (db.meta?.catalogListsMigrated) return
-  const cat = db.catalog
-  if (cat) {
-    let changed = false
-    for (const key of Object.keys(DEFAULT_LISTS)) {
-      if (!Array.isArray(cat[key])) { cat[key] = DEFAULT_LISTS[key]; changed = true }
-    }
-    if (changed) {
-      mutate((d) => { d.meta = { ...(d.meta || {}), catalogListsMigrated: true } })
-        .then(() => console.log('Migración catalog lists: listas creadas con defaults.'))
-      return
-    }
-  }
-  mutate((d) => { d.meta = { ...(d.meta || {}), catalogListsMigrated: true } })
-}
-migrateCatalogLists()
-
-// ============================================
-// Tiempo real (Server-Sent Events)
-// ============================================
-const eventClients = new Set()
-
-// Envía un evento a todos los clientes conectados.
-function broadcast(type, data = {}) {
-  const payload = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`
-  for (const res of eventClients) {
+function notifyChange() {
+  changeListeners.forEach((l) => {
     try {
-      res.write(payload)
+      l()
     } catch {
-      eventClients.delete(res)
+      // Un listener con error no debe romper la llamada.
     }
-  }
+  })
 }
-
-// Cuando la base cambia, avisamos a todos los clientes conectados.
-onDataChange(() => broadcast('data-changed'))
-
-// ============================================
-// Copias de seguridad automáticas
-// ============================================
-const BACKUP_HOUR = Number(process.env.BACKUP_HOUR ?? 3)
-const PAPELERA_RETENTION_DAYS = Number(process.env.PAPELERA_RETENTION_DAYS ?? 30)
-
-function scheduleBackups() {
-  const run = () => {
-    try {
-      const name = createBackup()
-      if (name) console.log(`Copia de seguridad creada: ${name}`)
-    } catch (e) {
-      console.error('No se pudo crear la copia de seguridad:', e)
-    }
-    try {
-      const purged = purgeTrash(PAPELERA_RETENTION_DAYS)
-      if (purged.customers || purged.orders) {
-        persist().then(() =>
-          console.log(`Papelera: purgados ${purged.customers} cliente(s) y ${purged.orders} orden(es).`),
-        )
-      }
-    } catch (e) {
-      console.error('No se pudo purgar la papelera:', e)
-    }
-  }
-  const arm = () => {
-    const now = new Date()
-    const next = new Date(now)
-    next.setHours(BACKUP_HOUR, 0, 0, 0)
-    if (next <= now) next.setDate(next.getDate() + 1)
-    setTimeout(() => {
-      run()
-      arm()
-    }, next - now)
-  }
-  run()
-  arm()
+// Helper: aplica una mutación y notifica a los clientes SSE.
+async function commit(mutateFn) {
+  const result = await mutateFn()
+  notifyChange()
+  return result
 }
-scheduleBackups()
 
 // Devuelve un usuario sin datos sensibles.
 const publicUser = (u) => ({
@@ -261,33 +107,49 @@ const publicUser = (u) => ({
 })
 
 // Registra una entrada de auditoría.
-const audit = (d, action, table, recordId, userId, details) => {
-  d.auditLogs.unshift({
-    id: uid(),
-    userId,
-    action,
-    table,
-    recordId,
-    details,
-    timestamp: new Date().toISOString(),
+async function audit(action, table, recordId, userId, details) {
+  await prisma.auditLog.create({
+    data: { action, table, recordId, userId, details, timestamp: new Date() },
   })
 }
 
 // Adjunta a una orden datos legibles: cliente, responsables y estado.
-function decorateOrder(d, order) {
-  const customer = d.customers.find((c) => c.id === order.customerId)
-  const names = new Map(d.users.map((u) => [u.id, u.name]))
+async function decorateOrder(order) {
+  const userIds = [
+    order.assignedTo, order.receivedBy, order.repairedBy, order.deliveredBy,
+    order.notifiedBy, order.confirmedBy,
+  ].filter(Boolean)
+  const users = await prisma.user.findMany({ where: { id: { in: [...new Set(userIds)] } } })
+  const names = new Map(users.map((u) => [u.id, u.name]))
+  let customerName = '(cliente eliminado)'
+  if (order.customerId) {
+    const customer = await prisma.customer.findUnique({ where: { id: order.customerId } })
+    if (customer) customerName = customer.fullName
+  }
+  const history = (order.history || []).map((h) => ({
+    ...h,
+    at: h.at instanceof Date ? h.at.toISOString() : h.at,
+    byName: h.by ? names.get(h.by) || '—' : '—',
+  }))
   return {
     ...order,
-    customerName: customer?.fullName || '(cliente eliminado)',
+    id: order.id,
+    customerName,
     assignedToName: order.assignedTo ? names.get(order.assignedTo) || '—' : null,
     receivedByName: names.get(order.receivedBy) || '—',
     repairedByName: order.repairedBy ? names.get(order.repairedBy) || '—' : null,
     deliveredByName: order.deliveredBy ? names.get(order.deliveredBy) || '—' : null,
     notifiedByName: order.notifiedBy ? names.get(order.notifiedBy) || '—' : null,
     confirmedByName: order.confirmedBy ? names.get(order.confirmedBy) || '—' : null,
-    history: (order.history || []).map((h) => ({ ...h, byName: names.get(h.by) || '—' })),
+    history,
+    notesLog: order.notes || [],
   }
+}
+
+// Mapea filas de la relación history/notes a los campos anidados que espera el front.
+const orderInclude = {
+  history: { orderBy: { at: 'asc' }, include: { user: true } },
+  notes: { orderBy: { at: 'asc' } },
 }
 
 function pad4(n) {
@@ -300,27 +162,35 @@ function formatDateLabel(iso) {
 }
 
 // ---------- Autenticación ----------
-// Lista pública de perfiles (usuarios activos) para el login: solo nombre y rol.
-app.get('/api/auth/profiles', (req, res) => {
-  const profiles = getDB()
-    .users.filter((u) => u.active)
-    .map((u) => ({ id: u.id, name: u.name, role: u.role }))
-    .sort((a, b) => a.name.localeCompare(b.name))
-  res.json({ profiles })
+app.get('/api/auth/profiles', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({ where: { active: true } })
+    const profiles = users
+      .map((u) => ({ id: u.id, name: u.name, role: u.role }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    res.json({ profiles })
+  } catch (e) {
+    res.status(500).json({ error: 'Error del servidor.' })
+  }
 })
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password, profileId } = req.body || {}
-  const user = profileId
-    ? getDB().users.find((u) => u.id === profileId)
-    : getDB().users.find(
-        (u) => u.email.toLowerCase() === String(email || '').trim().toLowerCase(),
-      )
+  let user = null
+  try {
+    if (profileId) {
+      user = await prisma.user.findUnique({ where: { id: profileId } })
+    } else {
+      user = await prisma.user.findFirst({
+        where: { email: String(email || '').trim().toLowerCase() },
+      })
+    }
+  } catch (e) {
+    user = null
+  }
   const rateKey = `${req.ip}:${String(profileId || email || '').toLowerCase()}`
   if (checkLoginLimit(rateKey)) {
-    return res
-      .status(429)
-      .json({ error: 'Demasiados intentos fallidos. Probá de nuevo en unos minutos.' })
+    return res.status(429).json({ error: 'Demasiados intentos fallidos. Probá de nuevo en unos minutos.' })
   }
   if (!user || !bcrypt.compareSync(String(password || ''), user.password)) {
     noteLoginFailure(rateKey)
@@ -340,9 +210,9 @@ function usesDefaultPassword(user) {
   return DEFAULT_PASSWORDS.some((p) => bcrypt.compareSync(p, user.password))
 }
 
-app.post('/api/auth/change-password', auth, (req, res) => {
+app.post('/api/auth/change-password', auth, async (req, res) => {
   const { currentPassword, newPassword } = req.body || {}
-  const user = getDB().users.find((u) => u.id === req.user.id)
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } })
   if (!user) return res.status(401).json({ error: 'No autorizado.' })
   if (!bcrypt.compareSync(String(currentPassword || ''), user.password)) {
     return res.status(400).json({ error: 'La contraseña actual es incorrecta.' })
@@ -352,11 +222,15 @@ app.post('/api/auth/change-password', auth, (req, res) => {
     return res.status(400).json({ error: 'La contraseña nueva debe tener al menos 4 caracteres.' })
   }
   const hash = bcrypt.hashSync(pw, 10)
-  mutate((d) => {
-    const target = d.users.find((u) => u.id === req.user.id)
-    if (target) target.password = hash
-    audit(d, 'password_change', 'users', req.user.id, req.user.id, `Cambio de contraseña (${req.user.name})`)
-  }).then(() => res.json({ ok: true }))
+  try {
+    await commit(async () => {
+      await prisma.user.update({ where: { id: req.user.id }, data: { password: hash } })
+      await audit('password_change', 'users', req.user.id, req.user.id, `Cambio de contraseña (${req.user.name})`)
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al cambiar la contraseña.' })
+  }
 })
 
 function auth(req, res, next) {
@@ -365,9 +239,11 @@ function auth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'No autorizado.' })
   try {
     const payload = jwt.verify(token, JWT_SECRET)
-    req.user = getDB().users.find((u) => u.id === payload.id) || null
-    if (!req.user || !req.user.active) return res.status(401).json({ error: 'No autorizado.' })
-    next()
+    prisma.user.findUnique({ where: { id: payload.id } }).then((u) => {
+      req.user = u || null
+      if (!req.user || !req.user.active) return res.status(401).json({ error: 'No autorizado.' })
+      next()
+    }).catch(() => res.status(401).json({ error: 'No autorizado.' }))
   } catch {
     return res.status(401).json({ error: 'Sesión expirada.' })
   }
@@ -381,14 +257,28 @@ function adminOnly(req, res, next) {
 }
 
 // ---------- Tiempo real: canal de eventos (SSE) ----------
-app.get('/api/events', (req, res) => {
-  // EventSource no puede enviar headers, así que el token viaja como query.
+const eventClients = new Set()
+
+function broadcast(type, data = {}) {
+  const payload = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`
+  for (const res of eventClients) {
+    try {
+      res.write(payload)
+    } catch {
+      eventClients.delete(res)
+    }
+  }
+}
+
+onDataChange(() => broadcast('data-changed'))
+
+app.get('/api/events', async (req, res) => {
   const token = req.query.token
   if (!token) return res.status(401).json({ error: 'No autorizado.' })
-  let user
+  let user = null
   try {
     const payload = jwt.verify(String(token), JWT_SECRET)
-    user = getDB().users.find((u) => u.id === payload.id) || null
+    user = await prisma.user.findUnique({ where: { id: payload.id } })
   } catch {
     user = null
   }
@@ -404,7 +294,6 @@ app.get('/api/events', (req, res) => {
 
   eventClients.add(res)
 
-  // Heartbeat: evita que proxies/gateways corten la conexión inactiva.
   const heartbeat = setInterval(() => {
     try {
       res.write(': ping\n\n')
@@ -420,88 +309,115 @@ app.get('/api/events', (req, res) => {
 })
 
 // ---------- Bootstrap ----------
-app.get('/api/bootstrap', auth, (req, res) => {
-  const db = getDB()
-  const live = (r) => !r.deletedAt
-  const allLive = db.orders.filter(live)
-  // El bootstrap solo envía las órdenes activas (no entregadas). El histórico
-  // se consulta paginado vía /api/orders para no saturar la red.
-  const orders = allLive
-    .filter((o) => o.status !== 'entregado')
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-    .map((o) => decorateOrder(db, o))
-  return res.json({
-    user: publicUser(req.user),
-    customers: db.customers.filter(live),
-    orders,
-    ordersTotals: {
-      total: allLive.length,
-      active: orders.length,
-      delivered: allLive.filter((o) => o.status === 'entregado').length,
-    },
-    catalog: db.catalog || { brands: [], models: [] },
-    users: req.user.role === 'admin' ? db.users.map(publicUser) : [],
-    technicians: db.users
-      .filter((u) => u.active && u.role === 'tecnico')
-      .map(publicUser),
-    config: {
-      revisionFee: db.config?.revisionFee ?? 0,
-      ...(req.user.role === 'admin' ? { whatsapp: { ...(db.config?.whatsapp || {}), apiToken: undefined } } : {}),
-    },
-  })
+app.get('/api/bootstrap', auth, async (req, res) => {
+  try {
+    const customers = await prisma.customer.findMany({ where: { deletedAt: null } })
+    const allOrders = await prisma.order.findMany({ where: { deletedAt: null }, include: orderInclude })
+    const liveOrders = allOrders.filter((o) => !o.deletedAt)
+    const orders = liveOrders
+      .filter((o) => o.status !== 'entregado')
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    const decorated = []
+    for (const o of orders) decorated.push(await decorateOrder(o))
+    const catalog = await loadCatalog()
+    const users = await prisma.user.findMany()
+    const technicians = users.filter((u) => u.active && u.role === 'tecnico')
+    const config = await loadConfigValue('main')
+    return res.json({
+      user: publicUser(req.user),
+      customers,
+      orders: decorated,
+      ordersTotals: {
+        total: liveOrders.length,
+        active: orders.length,
+        delivered: liveOrders.filter((o) => o.status === 'entregado').length,
+      },
+      catalog,
+      users: req.user.role === 'admin' ? users.map(publicUser) : [],
+      technicians: technicians.map(publicUser),
+      config: {
+        revisionFee: config?.revisionFee ?? 0,
+        ...(req.user.role === 'admin' ? { whatsapp: { ...(config?.whatsapp || {}), apiToken: undefined } } : {}),
+      },
+    })
+  } catch (e) {
+    console.error('Error en bootstrap:', e)
+    res.status(500).json({ error: 'Error del servidor.' })
+  }
 })
 
 // ---------- Catálogo de marcas y modelos ----------
-app.get('/api/catalog', auth, (req, res) => {
-  const db = getDB()
-  const brands = [...(db.catalog?.brands || [])].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name))
-  const models = [...(db.catalog?.models || [])].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name))
-  res.json({ brands, models })
+// deviceType opcional: si viene, filtra marcas y modelos a ese tipo de dispositivo.
+async function loadCatalog(deviceType) {
+  const type = deviceType && deviceType !== 'Otro' ? String(deviceType).trim() : null
+  const [brands, models, accessories, conditions, fixes, config] = await Promise.all([
+    type ? prisma.catalogModel.findMany({ where: { deviceType: type }, distinct: ['brand'] })
+           .then((rows) => prisma.catalogBrand.findMany({ where: { name: { in: rows.map((r) => r.brand) } } }))
+         : prisma.catalogBrand.findMany(),
+    type ? prisma.catalogModel.findMany({ where: { deviceType: type } })
+         : prisma.catalogModel.findMany(),
+    prisma.catalogAccessory.findMany(),
+    prisma.catalogCondition.findMany(),
+    prisma.catalogFix.findMany(),
+    loadConfigValue('main'),
+  ])
+  const terms = config?.terms ? config.terms : DEFAULT_LISTS.terms
+  return {
+    brands: [...brands].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name)),
+    models: [...models].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name)),
+    accessories: accessories.map((a) => a.name),
+    conditions: conditions.map((c) => c.name),
+    fixes: fixes.map((f) => f.name),
+    terms,
+  }
+}
+
+app.get('/api/catalog', auth, async (req, res) => {
+  try {
+    const catalog = await loadCatalog(req.query.deviceType)
+    res.json({ brands: catalog.brands, models: catalog.models })
+  } catch (e) {
+    console.error('Error en /api/catalog:', e)
+    res.status(500).json({ error: 'Error del servidor.' })
+  }
 })
 
-app.post('/api/catalog/brands', auth, (req, res) => {
+app.post('/api/catalog/brands', auth, async (req, res) => {
   const name = titleCase(String(req.body?.name || '').trim())
   if (!name) return res.status(400).json({ error: 'El nombre de la marca es obligatorio.' })
-  mutate((d) => {
-    d.catalog = d.catalog || { brands: [], models: [] }
-    let b = d.catalog.brands.find((x) => x.name.toLowerCase() === name.toLowerCase())
-    if (!b) {
-      b = { id: uid(), name, usage: 0 }
-      d.catalog.brands.push(b)
-      audit(d, 'create', 'catalog', b.id, req.user.id, `Nueva marca en catálogo: ${name}`)
-    }
-  }).then(() => {
-    const b = getDB().catalog.brands.find((x) => x.name.toLowerCase() === name.toLowerCase())
-    res.json({ ok: true, brand: b })
-  })
+  try {
+    const brand = await commit(() => prisma.catalogBrand.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    }))
+    res.json({ ok: true, brand })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al crear la marca.' })
+  }
 })
 
-app.post('/api/catalog/models', auth, (req, res) => {
+app.post('/api/catalog/models', auth, async (req, res) => {
   const brand = titleCase(String(req.body?.brand || '').trim())
   const name = titleCase(String(req.body?.name || '').trim())
   const deviceType = String(req.body?.deviceType || 'Celular').trim()
   if (!brand || !name) return res.status(400).json({ error: 'La marca y el modelo son obligatorios.' })
-  mutate((d) => {
-    d.catalog = d.catalog || { brands: [], models: [] }
-    if (!d.catalog.brands.find((x) => x.name.toLowerCase() === brand.toLowerCase())) {
-      d.catalog.brands.push({ id: uid(), name: brand, usage: 0 })
-    }
-    let m = d.catalog.models.find((x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase())
-    if (!m) {
-      m = { id: uid(), brand, name, deviceType, usage: 0 }
-      d.catalog.models.push(m)
-      audit(d, 'create', 'catalog', m.id, req.user.id, `Nuevo modelo en catálogo: ${brand} ${name} (${deviceType})`)
-    }
-  }).then(() => {
-    const m = getDB().catalog.models.find(
-      (x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase(),
-    )
-    res.json({ ok: true, model: m })
-  })
+  try {
+    const model = await commit(async () => {
+      await prisma.catalogBrand.upsert({ where: { name: brand }, update: {}, create: { name: brand } })
+      return prisma.catalogModel.upsert({
+        where: { brand_name_deviceType: { brand, name, deviceType } },
+        update: { deviceType },
+        create: { brand, name, deviceType },
+      })
+    })
+    res.json({ ok: true, model })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al crear el modelo.' })
+  }
 })
 
-// Importación masiva de modelos al catálogo (admin only).
-app.post('/api/catalog/models/bulk', auth, (req, res) => {
+app.post('/api/catalog/models/bulk', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo los administradores pueden importar modelos.' })
   const items = req.body?.models
   if (!Array.isArray(items) || items.length === 0) {
@@ -510,50 +426,52 @@ app.post('/api/catalog/models/bulk', auth, (req, res) => {
   if (items.length > 5000) {
     return res.status(400).json({ error: 'Máximo 5000 modelos por importación.' })
   }
-  let created = 0
-  let skipped = 0
-  mutate((d) => {
-    d.catalog = d.catalog || { brands: [], models: [] }
-    for (const item of items) {
-      const brand = titleCase(String(item?.brand || '').trim())
-      const name = titleCase(String(item?.name || '').trim())
-      const deviceType = String(item?.deviceType || 'Celular').trim()
-      if (!brand || !name) { skipped++; continue }
-      if (!d.catalog.brands.find((x) => x.name.toLowerCase() === brand.toLowerCase())) {
-        d.catalog.brands.push({ id: uid(), name: brand, usage: 0 })
+  try {
+    const result = await commit(async () => {
+      let created = 0
+      let skipped = 0
+      for (const item of items) {
+        const brand = titleCase(String(item?.brand || '').trim())
+        const name = titleCase(String(item?.name || '').trim())
+        const deviceType = String(item?.deviceType || 'Celular').trim()
+        if (!brand || !name) { skipped++; continue }
+        await prisma.catalogBrand.upsert({ where: { name: brand }, update: {}, create: { name: brand } })
+        const exists = await prisma.catalogModel.findUnique({ where: { brand_name_deviceType: { brand, name, deviceType } } })
+        if (exists) { skipped++; continue }
+        await prisma.catalogModel.create({ data: { brand, name, deviceType } })
+        created++
       }
-      const exists = d.catalog.models.find(
-        (x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === name.toLowerCase(),
-      )
-      if (exists) { skipped++; continue }
-      d.catalog.models.push({ id: uid(), brand, name, deviceType, usage: 0 })
-      created++
-    }
-  }).then(() => {
-    res.json({ ok: true, created, skipped, total: getDB().catalog.models.length })
-  })
+      const total = await prisma.catalogModel.count()
+      return { created, skipped, total }
+    })
+    res.json({ ok: true, ...result })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al importar modelos.' })
+  }
 })
 
-// Listas de accesorios, condiciones, arreglos y términos (editables desde Configuración).
-app.get('/api/catalog/lists', auth, (req, res) => {
-  const db = getDB()
-  const catalog = db.catalog || {}
+async function loadConfigValue(key) {
+  const row = await prisma.config.findUnique({ where: { key } })
+  return row ? row.value : null
+}
+
+app.get('/api/catalog/lists', auth, async (req, res) => {
+  const catalog = await loadCatalog()
   res.json({
-    accessories: catalog.accessories || DEFAULT_LISTS.accessories,
-    conditions: catalog.conditions || DEFAULT_LISTS.conditions,
-    fixes: catalog.fixes || DEFAULT_LISTS.fixes,
-    terms: catalog.terms || DEFAULT_LISTS.terms,
+    accessories: catalog.accessories,
+    conditions: catalog.conditions,
+    fixes: catalog.fixes,
+    terms: catalog.terms,
   })
 })
 
-app.put('/api/catalog/lists', auth, (req, res) => {
+app.put('/api/catalog/lists', auth, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo los administradores pueden editar las listas.' })
   const body = req.body || {}
   const normalize = (v) =>
     Array.isArray(v)
       ? v.map((s) => titleCase(String(s).trim())).filter(Boolean)
       : undefined
-  // Los términos son frases largas: no se titleCasean, solo se recortan.
   const normalizeTerms = (v) =>
     Array.isArray(v)
       ? v.map((s) => String(s).trim()).filter(Boolean)
@@ -565,40 +483,58 @@ app.put('/api/catalog/lists', auth, (req, res) => {
   if (accessories === undefined && conditions === undefined && fixes === undefined && terms === undefined) {
     return res.status(400).json({ error: 'No se envió ninguna lista para actualizar.' })
   }
-  // Validar límite de caracteres para términos
+  const MAX_TERMS_CHARS = 1600
   if (terms !== undefined && terms.join('').length > MAX_TERMS_CHARS) {
     return res.status(400).json({ error: `Los términos no pueden superar ${MAX_TERMS_CHARS} caracteres en total.` })
   }
-  mutate((d) => {
-    d.catalog = d.catalog || {}
-    if (accessories !== undefined) d.catalog.accessories = accessories
-    if (conditions !== undefined) d.catalog.conditions = conditions
-    if (fixes !== undefined) d.catalog.fixes = fixes
-    if (terms !== undefined) d.catalog.terms = terms
-  }).then(() => {
+  try {
+    await commit(async () => {
+      if (accessories !== undefined) {
+        await prisma.catalogAccessory.deleteMany()
+        await prisma.catalogAccessory.createMany({ data: accessories.map((name) => ({ name })) })
+      }
+      if (conditions !== undefined) {
+        await prisma.catalogCondition.deleteMany()
+        await prisma.catalogCondition.createMany({ data: conditions.map((name) => ({ name })) })
+      }
+      if (fixes !== undefined) {
+        await prisma.catalogFix.deleteMany()
+        await prisma.catalogFix.createMany({ data: fixes.map((name) => ({ name })) })
+      }
+      if (terms !== undefined) {
+        const current = (await loadConfigValue('main')) || {}
+        await upsertConfig('main', { ...current, terms })
+      }
+    })
     res.json({ ok: true })
-  }).catch(() => res.status(500).json({ error: 'No se pudo guardar las listas.' }))
+  } catch (e) {
+    res.status(500).json({ error: 'No se pudo guardar las listas.' })
+  }
 })
 
+async function upsertConfig(key, value) {
+  const existing = await prisma.config.findUnique({ where: { key } })
+  if (existing) return prisma.config.update({ where: { key }, data: { value } })
+  return prisma.config.create({ data: { key, value } })
+}
+
 // Cuenta una marca/modelo en el catálogo (y los crea si faltan).
-function bumpCatalog(d, brand, model, deviceType = 'Celular') {
-  d.catalog = d.catalog || { brands: [], models: [] }
-  let b = d.catalog.brands.find((x) => x.name.toLowerCase() === brand.toLowerCase())
-  if (!b) {
-    b = { id: uid(), name: brand, usage: 0 }
-    d.catalog.brands.push(b)
+async function bumpCatalog(brand, model, deviceType = 'Celular') {
+  await prisma.catalogBrand.upsert({
+    where: { name: brand },
+    update: { usage: { increment: 1 } },
+    create: { name: brand, usage: 1 },
+  })
+  const existingModel = await prisma.catalogModel.findUnique({ where: { brand_name_deviceType: { brand, name: model, deviceType } } })
+  if (existingModel) {
+    await prisma.catalogModel.update({ where: { id: existingModel.id }, data: { usage: { increment: 1 } } })
+  } else {
+    await prisma.catalogModel.create({ data: { brand, name: model, deviceType, usage: 1 } })
   }
-  b.usage += 1
-  let m = d.catalog.models.find((x) => x.brand.toLowerCase() === brand.toLowerCase() && x.name.toLowerCase() === model.toLowerCase())
-  if (!m) {
-    m = { id: uid(), brand, name: model, deviceType, usage: 0 }
-    d.catalog.models.push(m)
-  }
-  m.usage += 1
 }
 
 // ---------- Clientes ----------
-app.post('/api/customers', auth, (req, res) => {
+app.post('/api/customers', auth, async (req, res) => {
   const { fullName, dni, phone, phone2, phone3, email, address } = req.body || {}
   if (!fullName || !fullName.trim()) {
     return res.status(400).json({ error: 'El nombre completo es obligatorio.' })
@@ -607,32 +543,36 @@ app.post('/api/customers', auth, (req, res) => {
   if (dniNorm && !/^\d{6,8}$/.test(dniNorm)) {
     return res.status(400).json({ error: 'El DNI debe tener entre 6 y 8 dígitos.' })
   }
-  const dupDni = getDB().customers.some(
-    (c) => !c.deletedAt && dniNorm && String(c.dni).trim() === dniNorm,
-  )
-  if (dupDni) {
+  const dup = await prisma.customer.findFirst({ where: { deletedAt: null, dni: dniNorm } })
+  if (dup) {
     return res.status(400).json({ error: `Ya existe un cliente con el DNI ${dniNorm}.` })
   }
   const id = uid()
-  mutate((d) => {
-    d.customers.push({
-      id,
-      fullName: titleCase(fullName),
-      dni: dniNorm,
-      phone: String(phone || ''),
-      phone2: String(phone2 || ''),
-      phone3: String(phone3 || ''),
-      email: String(email || '').trim().toLowerCase(),
-      address: titleCase(address),
-      createdAt: todayISO(),
+  try {
+    await commit(async () => {
+      await prisma.customer.create({
+        data: {
+          id,
+          fullName: titleCase(fullName),
+          dni: dniNorm,
+          phone: String(phone || ''),
+          phone2: String(phone2 || ''),
+          phone3: String(phone3 || ''),
+          email: String(email || '').trim().toLowerCase(),
+          address: titleCase(address),
+          createdAt: new Date(),
+        },
+      })
+      await audit('create', 'customers', id, req.user.id, `Alta de cliente ${titleCase(fullName)}${dniNorm ? ` (DNI ${dniNorm})` : ''}`)
     })
-    audit(d, 'create', 'customers', id, req.user.id, `Alta de cliente ${titleCase(fullName)}${dniNorm ? ` (DNI ${dniNorm})` : ''}`)
-  }).then(() => res.json({ ok: true, id }))
+    res.json({ ok: true, id })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al crear el cliente.' })
+  }
 })
 
-app.put('/api/customers/:id', auth, (req, res) => {
-  const db = getDB()
-  const target = db.customers.find((c) => c.id === req.params.id)
+app.put('/api/customers/:id', auth, async (req, res) => {
+  const target = await prisma.customer.findUnique({ where: { id: req.params.id } })
   if (!target) return res.status(404).json({ error: 'Cliente no encontrado.' })
   const { fullName, dni, phone, phone2, phone3, email, address } = req.body || {}
   if (!fullName || !fullName.trim()) {
@@ -642,48 +582,56 @@ app.put('/api/customers/:id', auth, (req, res) => {
   if (dniNorm && !/^\d{6,8}$/.test(dniNorm)) {
     return res.status(400).json({ error: 'El DNI debe tener entre 6 y 8 dígitos.' })
   }
-  const dupDni = db.customers.some(
-    (c) => c.id !== req.params.id && !c.deletedAt && dniNorm && String(c.dni).trim() === dniNorm,
-  )
-  if (dupDni) {
+  const dup = await prisma.customer.findFirst({ where: { deletedAt: null, dni: dniNorm, id: { not: req.params.id } } })
+  if (dup) {
     return res.status(400).json({ error: `Ya existe un cliente con el DNI ${dniNorm}.` })
   }
-  mutate((d) => {
-    const c = d.customers.find((x) => x.id === req.params.id)
-    Object.assign(c, {
-      fullName: titleCase(fullName),
-      dni: dniNorm,
-      phone: String(phone || ''),
-      phone2: String(phone2 || ''),
-      phone3: String(phone3 || ''),
-      email: String(email || '').trim().toLowerCase(),
-      address: titleCase(address),
+  try {
+    await commit(async () => {
+      await prisma.customer.update({
+        where: { id: req.params.id },
+        data: {
+          fullName: titleCase(fullName),
+          dni: dniNorm,
+          phone: String(phone || ''),
+          phone2: String(phone2 || ''),
+          phone3: String(phone3 || ''),
+          email: String(email || '').trim().toLowerCase(),
+          address: titleCase(address),
+        },
+      })
+      await audit('update', 'customers', req.params.id, req.user.id, `Edición de cliente ${titleCase(fullName)}`)
     })
-    audit(d, 'update', 'customers', c.id, req.user.id, `Edición de cliente ${c.fullName}`)
-  }).then(() => res.json({ ok: true }))
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al actualizar el cliente.' })
+  }
 })
 
-app.delete('/api/customers/:id', auth, adminOnly, (req, res) => {
-  const db = getDB()
-  const target = db.customers.find((c) => c.id === req.params.id)
+app.delete('/api/customers/:id', auth, adminOnly, async (req, res) => {
+  const target = await prisma.customer.findUnique({ where: { id: req.params.id } })
   if (!target) return res.status(404).json({ error: 'Cliente no encontrado.' })
   if (target.deletedAt) return res.status(400).json({ error: 'El cliente ya está eliminado.' })
-  mutate((d) => {
-    const now = new Date().toISOString()
-    d.orders.filter((o) => o.customerId === req.params.id).forEach((o) => (o.deletedAt = now))
-    d.customers.find((c) => c.id === req.params.id).deletedAt = now
-    audit(d, 'delete', 'customers', req.params.id, req.user.id, `Baja de cliente ${target.fullName}`)
-  }).then(() => res.json({ ok: true }))
+  try {
+    const now = new Date()
+    await commit(async () => {
+      await prisma.order.updateMany({ where: { customerId: req.params.id }, data: { deletedAt: now } })
+      await prisma.customer.update({ where: { id: req.params.id }, data: { deletedAt: now } })
+      await audit('delete', 'customers', req.params.id, req.user.id, `Baja de cliente ${target.fullName}`)
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al eliminar el cliente.' })
+  }
 })
 
 // ---------- Órdenes ----------
-app.post('/api/orders', auth, (req, res) => {
+app.post('/api/orders', auth, async (req, res) => {
   if (!['recepcion', 'admin'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Solo recepción o administradores pueden crear órdenes.' })
   }
   const body = req.body || {}
-  const db = getDB()
-  const customer = db.customers.find((c) => c.id === body.customerId)
+  const customer = await prisma.customer.findUnique({ where: { id: body.customerId } })
   if (!customer || customer.deletedAt) {
     return res.status(400).json({ error: 'Cliente inexistente o eliminado.' })
   }
@@ -691,94 +639,101 @@ app.post('/api/orders', auth, (req, res) => {
   const model = titleCase(String(body.model || '').trim())
   if (!brand) return res.status(400).json({ error: 'Elegí la marca del dispositivo.' })
   if (!model) return res.status(400).json({ error: 'Elegí el modelo del dispositivo.' })
-  const deviceType = ['Celular', 'Tablet', 'Notebook / PC', 'Smart TV', 'Consola', 'Impresora', 'Otro'].includes(body.deviceType) ? body.deviceType : 'Celular'
+  const validTypes = ['Celular', 'Tablet', 'Notebook / PC', 'Smart TV', 'Consola', 'Impresora', 'Otro']
+  const deviceType = validTypes.includes(body.deviceType) ? body.deviceType : 'Celular'
   const diagnosisType = body.diagnosisType === 'revision' ? 'revision' : 'visible'
   const price = Math.max(0, Number(body.price) || 0)
   const advance = Math.max(0, Number(body.advance) || 0)
   const pattern = Array.isArray(body.pattern)
     ? body.pattern.filter((n) => Number.isInteger(n) && n >= 0 && n <= 8).slice(0, 9)
     : []
-  const storedPattern = pattern.length >= 3 ? pattern : null
+  const storedPattern = pattern.length >= 3 ? pattern : []
 
-  let order = null
-  mutate((d) => {
-    const orderNumber = `OS${pad4((d.orderCounter || 0) + 1)}`
-    d.orderCounter = (d.orderCounter || 0) + 1
-    order = {
-      id: uid(),
-      orderNumber,
-      customerId: body.customerId,
-      deviceType,
-      brand,
-      model,
-      accessories: normalizeList(String(body.accessories || '')),
-      conditions: normalizeList(String(body.conditions || '')),
-      pin: String(body.pin || ''),
-      noPin: !!body.noPin,
-      pattern: storedPattern,
-      diagnosisType,
-      issue: sentenceCase(String(body.issue || '')),
-      fix: normalizeList(String(body.fix || '')),
-      price,
-      advance,
-      status: 'recibido',
-      technicianNotes: '',
-      notesLog: [],
-      assignedTo: null,
-      repairedBy: null,
-      notified: false,
-      notifiedAt: null,
-      notifiedBy: null,
-      confirmed: false,
-      confirmedAt: null,
-      confirmedBy: null,
-      history: [{ status: 'recibido', at: new Date().toISOString(), by: req.user.id }],
-      receivedBy: req.user.id,
-      createdAt: todayISO(),
-      deliveredAt: null,
-      deliveredBy: null,
-    }
-    d.orders.push(order)
-    bumpCatalog(d, brand, model, deviceType)
-    audit(
-      d,
-      'create',
-      'orders',
-      order.id,
-      req.user.id,
-      `Orden ${orderNumber} · ${brand} ${model} de ${customer.fullName}${diagnosisType === 'revision' ? ' (a revisión)' : ''}`,
-    )
-  }).then(() => {
-    res.json({ ok: true, order: decorateOrder(getDB(), order) })
-  })
+  try {
+    const order = await commit(async () => {
+      const counter = await prisma.orderCounter.upsert({
+        where: { key: 'order' },
+        update: { value: { increment: 1 } },
+        create: { key: 'order', value: 1 },
+      })
+      const orderNumber = `OS${pad4(counter.value)}`
+      const created = await prisma.order.create({
+        data: {
+          orderNumber,
+          customerId: body.customerId,
+          deviceType,
+          brand,
+          model,
+          accessories: normalizeList(String(body.accessories || '')),
+          conditions: normalizeList(String(body.conditions || '')),
+          pin: String(body.pin || ''),
+          noPin: !!body.noPin,
+          pattern: storedPattern,
+          diagnosisType,
+          issue: sentenceCase(String(body.issue || '')),
+          fix: normalizeList(String(body.fix || '')),
+          price,
+          advance,
+          status: 'recibido',
+          receivedBy: req.user.id,
+          createdAt: new Date(),
+          history: {
+            create: { status: 'recibido', by: req.user.id, at: new Date() },
+          },
+        },
+        include: orderInclude,
+      })
+      await bumpCatalog(brand, model, deviceType)
+      await audit(
+        'create',
+        'orders',
+        created.id,
+        req.user.id,
+        `Orden ${orderNumber} · ${brand} ${model} de ${customer.fullName}${diagnosisType === 'revision' ? ' (a revisión)' : ''}`,
+      )
+      return created
+    })
+    res.json({ ok: true, order: await decorateOrder(order) })
+  } catch (e) {
+    console.error('Error creando orden:', e)
+    res.status(500).json({ error: 'Error al crear la orden.' })
+  }
 })
 
-app.get('/api/orders', auth, (req, res) => {
-  const db = getDB()
+app.get('/api/orders', auth, async (req, res) => {
   const { status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotified, onlyNotConfirmed } = req.query
   const query = String(q || '').trim().toLowerCase()
   const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 0))
   const offset = Math.max(0, Number(req.query.offset) || 0)
 
-  let list = db.orders
-    .filter((o) => !o.deletedAt)
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-    .map((o) => decorateOrder(db, o))
-
-  if (status && status !== 'all') list = list.filter((o) => o.status === status)
-  if (brand && brand !== 'all') list = list.filter((o) => o.brand === brand)
-  if (deviceType && deviceType !== 'all') list = list.filter((o) => o.deviceType === deviceType)
-  if (from) list = list.filter((o) => o.createdAt >= from)
-  if (to) list = list.filter((o) => o.createdAt <= to)
+  const where = { deletedAt: null }
+  if (status && status !== 'all') where.status = status
+  if (brand && brand !== 'all') where.brand = brand
+  if (deviceType && deviceType !== 'all') where.deviceType = deviceType
+  if (from) where.createdAt = { ...(where.createdAt || {}), gte: new Date(from) }
+  if (to) where.createdAt = { ...(where.createdAt || {}), lte: new Date(to) }
   if (onlyNotNotified === '1') {
-    list = list.filter((o) => !o.notified && ['presupuesto', 'terminado'].includes(o.status))
+    where.notified = false
+    where.status = { in: ['presupuesto', 'terminado'] }
   }
   if (onlyNotified === '1') {
-    list = list.filter((o) => o.notified && ['presupuesto', 'terminado'].includes(o.status))
+    where.notified = true
+    where.status = { in: ['presupuesto', 'terminado'] }
   }
   if (onlyNotConfirmed === '1') {
-    list = list.filter((o) => !o.confirmed && o.status === 'presupuesto')
+    where.confirmed = false
+    where.status = 'presupuesto'
   }
+
+  let orders = await prisma.order.findMany({
+    where,
+    include: orderInclude,
+    orderBy: { createdAt: 'desc' },
+  })
+
+  let list = []
+  for (const o of orders) list.push(await decorateOrder(o))
+
   if (query) {
     list = list.filter(
       (o) =>
@@ -793,28 +748,36 @@ app.get('/api/orders', auth, (req, res) => {
   res.json({ orders: list, total })
 })
 
-app.get('/api/orders/:id', auth, (req, res) => {
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === req.params.id)
+app.get('/api/orders/:id', auth, async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
   if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
-  res.json({ order: decorateOrder(db, order) })
+  res.json({ order: await decorateOrder(order) })
 })
+
+async function enrichOrderHtml(orderId) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: orderInclude })
+  if (!order || order.deletedAt) return null
+  const [customer, config] = await Promise.all([
+    prisma.customer.findUnique({ where: { id: order.customerId } }),
+    loadConfigValue('main'),
+  ])
+  const users = await prisma.user.findMany({ where: { id: { in: [order.receivedBy, order.assignedTo].filter(Boolean) } } })
+  const names = new Map(users.map((u) => [u.id, u.name]))
+  const enriched = {
+    ...order,
+    receivedByName: order.receivedBy ? names.get(order.receivedBy) || '—' : '—',
+  }
+  return { order: enriched, customer, terms: config?.terms }
+}
 
 app.get('/api/orders/:id/pdf', auth, async (req, res) => {
   try {
-    const db = getDB()
-    const order = db.orders.find((o) => o.id === req.params.id)
-    if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
-    const customer = db.customers.find((c) => c.id === order.customerId)
-    const names = new Map(db.users.map((u) => [u.id, u.name]))
-    const enriched = {
-      ...order,
-      receivedByName: order.receivedBy ? names.get(order.receivedBy) || '—' : '—',
-    }
-    const html = buildOrderHtml(enriched, customer, db.catalog?.terms)
+    const data = await enrichOrderHtml(req.params.id)
+    if (!data) return res.status(404).json({ error: 'Orden no encontrada.' })
+    const html = buildOrderHtml(data.order, data.customer, data.terms)
     const pdfBuffer = await htmlToPdf(html)
     res.type('application/pdf')
-    res.set('Content-Disposition', `inline; filename="orden-${order.orderNumber}.pdf"`)
+    res.set('Content-Disposition', `inline; filename="orden-${data.order.orderNumber}.pdf"`)
     res.send(pdfBuffer)
   } catch (err) {
     console.error('Error generando PDF:', err)
@@ -822,7 +785,6 @@ app.get('/api/orders/:id/pdf', auth, async (req, res) => {
   }
 })
 
-// Lista de impresoras disponibles en la PC Windows (vía print_bridge).
 app.get('/api/printers', auth, async (req, res) => {
   try {
     const result = await listBridgePrinters()
@@ -834,19 +796,11 @@ app.get('/api/printers', auth, async (req, res) => {
   }
 })
 
-// Imprime la orden directamente en la impresora de la PC local (silenciosa).
 app.post('/api/orders/:id/print', auth, async (req, res) => {
   try {
-    const db = getDB()
-    const order = db.orders.find((o) => o.id === req.params.id)
-    if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
-    const customer = db.customers.find((c) => c.id === order.customerId)
-    const names = new Map(db.users.map((u) => [u.id, u.name]))
-    const enriched = {
-      ...order,
-      receivedByName: order.receivedBy ? names.get(order.receivedBy) || '—' : '—',
-    }
-    const html = buildOrderHtml(enriched, customer, db.catalog?.terms)
+    const data = await enrichOrderHtml(req.params.id)
+    if (!data) return res.status(404).json({ error: 'Orden no encontrada.' })
+    const html = buildOrderHtml(data.order, data.customer, data.terms)
     const pdfBuffer = await htmlToPdf(html)
     const printer = (req.body && req.body.printer) || null
     const result = await printPdfToBridge(pdfBuffer, printer)
@@ -858,9 +812,8 @@ app.post('/api/orders/:id/print', auth, async (req, res) => {
   }
 })
 
-app.post('/api/orders/:id/pickup', auth, (req, res) => {
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === req.params.id)
+app.post('/api/orders/:id/pickup', auth, async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id } })
   if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
   const { pickupBy, pickupName, pickupDni } = req.body || {}
   if (!['client', 'third'].includes(pickupBy)) {
@@ -874,23 +827,28 @@ app.post('/api/orders/:id/pickup', auth, (req, res) => {
       return res.status(400).json({ error: 'El DNI de quien retira es obligatorio.' })
     }
   }
-  mutate((d) => {
-    const o = d.orders.find((x) => x.id === req.params.id)
-    o.pickupBy = pickupBy
-    o.pickupName = pickupBy === 'third' ? pickupName.trim() : ''
-    o.pickupDni = pickupBy === 'third' ? pickupDni.trim() : ''
-  }).then(() => {
+  try {
+    await commit(() => prisma.order.update({
+      where: { id: req.params.id },
+      data: {
+        pickupBy,
+        pickupName: pickupBy === 'third' ? pickupName.trim() : '',
+        pickupDni: pickupBy === 'third' ? pickupDni.trim() : '',
+      },
+    }))
     res.json({ ok: true })
-  })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al guardar datos de retiro.' })
+  }
 })
 
 app.get('/api/orders/:id/pickup-pdf', auth, async (req, res) => {
   try {
-    const db = getDB()
-    const order = db.orders.find((o) => o.id === req.params.id)
+    const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
     if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
-    const customer = db.customers.find((c) => c.id === order.customerId)
-    const names = new Map(db.users.map((u) => [u.id, u.name]))
+    const customer = await prisma.customer.findUnique({ where: { id: order.customerId } })
+    const users = await prisma.user.findMany({ where: { id: { in: [order.receivedBy].filter(Boolean) } } })
+    const names = new Map(users.map((u) => [u.id, u.name]))
     const orderWithName = { ...order, receivedByName: names.get(order.receivedBy) || '—' }
     const pickup = { pickupBy: order.pickupBy, pickupName: order.pickupName, pickupDni: order.pickupDni }
     const html = buildPickupHtml(orderWithName, customer, pickup)
@@ -904,23 +862,25 @@ app.get('/api/orders/:id/pickup-pdf', auth, async (req, res) => {
   }
 })
 
-app.delete('/api/orders/:id', auth, adminOnly, (req, res) => {
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === req.params.id)
+app.delete('/api/orders/:id', auth, adminOnly, async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id } })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden ya está eliminada.' })
-  mutate((d) => {
-    const o = d.orders.find((x) => x.id === req.params.id)
-    o.deletedAt = new Date().toISOString()
-    audit(d, 'delete', 'orders', o.id, req.user.id, `Baja de orden ${o.orderNumber}`)
-  }).then(() => res.json({ ok: true }))
+  try {
+    await commit(async () => {
+      await prisma.order.update({ where: { id: req.params.id }, data: { deletedAt: new Date() } })
+      await audit('delete', 'orders', order.id, req.user.id, `Baja de orden ${order.orderNumber}`)
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al eliminar la orden.' })
+  }
 })
 
 // ---------- Estado de una orden ----------
-app.post('/api/orders/:id/status', auth, (req, res) => {
+app.post('/api/orders/:id/status', auth, async (req, res) => {
   const { status, retiro, assignedTo } = req.body || {}
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === req.params.id)
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   if (!ORDER_STATUSES.includes(status)) {
@@ -933,45 +893,32 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   const isCounter = ['recepcion', 'admin'].includes(role)
 
   // Se puede asignar el técnico junto con la transición (asignación diferida).
-  // Se aplica ANTES de validar la transición para que "recibido -> en_reparacion/en_revision" pase.
   if (assignedTo !== undefined) {
     const canAssign = ['tecnico', 'admin', 'recepcion'].includes(role)
-    if (!canAssign) {
-      return res.status(403).json({ error: 'No tenés permiso para asignar un técnico.' })
-    }
-    const userId = assignedTo
-    if (userId) {
-      const tech = db.users.find((u) => u.id === userId && u.active && u.role === 'tecnico')
+    if (!canAssign) return res.status(403).json({ error: 'No tenés permiso para asignar un técnico.' })
+    if (assignedTo) {
+      const tech = await prisma.user.findFirst({ where: { id: assignedTo, active: true, role: 'tecnico' } })
       if (!tech) return res.status(400).json({ error: 'Técnico no encontrado.' })
     }
-    order.assignedTo = userId
+    order.assignedTo = assignedTo
   }
 
-  // Transiciones permitidas (respetan el flujo real del taller).
   const allowed = allowedTransitions(order).includes(status)
   if (!allowed) {
-    return res.status(400).json({
-      error: `No se puede pasar de "${from}" a "${status}".`,
-    })
+    return res.status(400).json({ error: `No se puede pasar de "${from}" a "${status}".` })
   }
-
-  // Sin confirmación del cliente no se puede comenzar la reparación de un presupuesto.
   if (from === 'presupuesto' && status === 'en_reparacion' && !order.confirmed) {
     return res.status(400).json({ error: 'El cliente debe confirmar el arreglo antes de reparar.' })
   }
-  // Sin técnico asignado no se puede reparar.
   if (status === 'en_reparacion' && !order.assignedTo) {
     return res.status(400).json({ error: 'Asigná un técnico antes de iniciar la reparación.' })
   }
-  // Sin técnico asignado no se puede revisar.
   if (status === 'en_revision' && !order.assignedTo) {
     return res.status(400).json({ error: 'Asigná un técnico antes de iniciar la revisión.' })
   }
-  // No se puede pasar de revisión a presupuesto sin registrar al menos una reparación.
   if (from === 'en_revision' && status === 'presupuesto' && !(order.fix || '').trim()) {
     return res.status(400).json({ error: 'Registrá al menos una reparación antes de pasar a presupuesto.' })
   }
-  // No se puede entregar un equipo sin haber avisado al cliente.
   if (status === 'entregado' && !order.notified && !retiro) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
   }
@@ -988,65 +935,56 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
     return res.status(403).json({ error: 'Solo recepción (o el admin) puede recibir un reingreso por garantía.' })
   }
 
-  mutate((d) => {
-    const o = d.orders.find((x) => x.id === req.params.id)
-    const previous = o.status
-    o.status = status
-    if (assignedTo !== undefined) o.assignedTo = assignedTo || null
-    o.history = o.history || []
-    o.history.push({
-      status,
-      at: new Date().toISOString(),
-      by: req.user.id,
-      note:
-        status === 'entregado' && retiro
-          ? 'Cliente retiró el equipo'
-          : status === 'entregado' && previous === 'presupuesto' && !retiro
-            ? 'Cliente rechazó el presupuesto'
-            : status === 'recibido' && previous === 'entregado'
-              ? 'Reingreso por garantía'
-              : status === 'falta_repuestos'
-                ? 'Esperando repuestos'
-                : status === 'en_reparacion' && previous === 'falta_repuestos'
-                  ? 'Repuestos recibidos'
-                  : assignedTo !== undefined
-                    ? `Asignado a ${assignedTo ? (d.users.find((u) => u.id === assignedTo)?.name || '—') : 'sin técnico'}`
-                    : undefined,
+  try {
+    const updated = await commit(async () => {
+      const previous = order.status
+      let note
+      if (status === 'entregado' && retiro) note = 'Cliente retiró el equipo'
+      else if (status === 'entregado' && previous === 'presupuesto' && !retiro) note = 'Cliente rechazó el presupuesto'
+      else if (status === 'recibido' && previous === 'entregado') note = 'Reingreso por garantía'
+      else if (status === 'falta_repuestos') note = 'Esperando repuestos'
+      else if (status === 'en_reparacion' && previous === 'falta_repuestos') note = 'Repuestos recibidos'
+      else if (assignedTo !== undefined) {
+        const t = assignedTo ? await prisma.user.findUnique({ where: { id: assignedTo } }) : null
+        note = `Asignado a ${assignedTo ? (t?.name || '—') : 'sin técnico'}`
+      }
+
+      const data = {
+        status,
+        ...(assignedTo !== undefined ? { assignedTo: assignedTo || null } : {}),
+        ...(status === 'recibido' && previous === 'entregado' ? { warrantyReturn: true } : {}),
+        ...(status === 'entregado' ? { warrantyReturn: false } : {}),
+        ...(['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) ? { repairedBy: req.user.id } : {}),
+        ...(['presupuesto', 'terminado'].includes(status) ? { notified: false, notifiedAt: null, notifiedBy: null } : {}),
+        ...(status === 'presupuesto' ? { confirmed: false, confirmedAt: null, confirmedBy: null } : {}),
+        ...(status === 'entregado' && !order.deliveredAt ? { deliveredAt: new Date(), deliveredBy: req.user.id } : {}),
+      }
+      await prisma.order.update({
+        where: { id: req.params.id },
+        data: {
+          ...data,
+          history: { create: { status, at: new Date(), by: req.user.id, note: note || '' } },
+        },
+      })
+      await audit(
+        'status',
+        'orders',
+        order.id,
+        req.user.id,
+        `${order.orderNumber} · ${order.brand} ${order.model}: estado "${status}"`,
+      )
+      return prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
     })
-    if (status === 'recibido' && previous === 'entregado') o.warrantyReturn = true
-    if (status === 'entregado') o.warrantyReturn = false
-    if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status)) o.repairedBy = req.user.id
-    if (['presupuesto', 'terminado'].includes(status)) {
-      o.notified = false
-      o.notifiedAt = null
-      o.notifiedBy = null
-    }
-    if (status === 'presupuesto') {
-      o.confirmed = false
-      o.confirmedAt = null
-      o.confirmedBy = null
-    }
-    if (status === 'entregado' && !o.deliveredAt) {
-      o.deliveredAt = todayISO()
-      o.deliveredBy = req.user.id
-    }
-    audit(
-      d,
-      'status',
-      'orders',
-      o.id,
-      req.user.id,
-      `${o.orderNumber} · ${o.brand} ${o.model}: estado "${status}"`,
-    )
-  }).then(() => {
-    res.json({ ok: true, order: decorateOrder(getDB(), order) })
-  })
+    res.json({ ok: true, order: await decorateOrder(updated) })
+  } catch (e) {
+    console.error('Error en cambio de estado:', e)
+    res.status(500).json({ error: 'Error al cambiar el estado.' })
+  }
 })
 
 // ---------- Edición de notas / presupuesto del técnico ----------
-app.put('/api/orders/:id', auth, (req, res) => {
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === req.params.id)
+app.put('/api/orders/:id', auth, async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   const {
@@ -1057,7 +995,6 @@ app.put('/api/orders/:id', auth, (req, res) => {
   const isAssignedTech = role === 'tecnico' && order.assignedTo === req.user.id
   const isEmpOrAdmin = ['recepcion', 'admin'].includes(role)
 
-  // Permisos por campo
   if (fix !== undefined && !isAssignedTech) {
     return res.status(403).json({ error: 'Solo el técnico encargado puede modificar el tipo de reparación.' })
   }
@@ -1072,7 +1009,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
   }
   if (editNote !== undefined) {
     const noteId = editNote?.id
-    const entry = (order.notesLog || []).find((n) => n.id === noteId)
+    const entry = (order.notes || []).find((n) => n.id === noteId)
     if (!entry) return res.status(404).json({ error: 'Nota no encontrada.' })
     if (entry.by !== req.user.id && role !== 'admin') {
       return res.status(403).json({ error: 'Solo podés editar tus propias notas.' })
@@ -1080,7 +1017,7 @@ app.put('/api/orders/:id', auth, (req, res) => {
   }
   if (deleteNote !== undefined) {
     const noteId = deleteNote?.id
-    const entry = (order.notesLog || []).find((n) => n.id === noteId)
+    const entry = (order.notes || []).find((n) => n.id === noteId)
     if (!entry) return res.status(404).json({ error: 'Nota no encontrada.' })
     if (entry.by !== req.user.id && role !== 'admin') {
       return res.status(403).json({ error: 'Solo podés eliminar tus propias notas.' })
@@ -1091,127 +1028,163 @@ app.put('/api/orders/:id', auth, (req, res) => {
   if (touchesEquip && !isEmpOrAdmin) {
     return res.status(403).json({ error: 'Solo recepción o administradores pueden editar los detalles del equipo.' })
   }
-
-  // Para órdenes a revisión, el tipo de reparación no se puede definir hasta que
-  // haya un técnico asignado y la orden esté en "en_revision".
   if (fix !== undefined && order.diagnosisType === 'revision' && !(order.fix || '').trim() && (!order.assignedTo || order.status !== 'en_revision')) {
     return res.status(400).json({ error: 'Asigná un técnico y pasá la orden a revisión antes de definir el arreglo.' })
   }
 
-  const touched = touchesEquip || fix !== undefined || price !== undefined || technicianNotes !== undefined || note !== undefined || issue !== undefined
-  mutate((d) => {
-    const o = d.orders.find((x) => x.id === req.params.id)
-    const budgetChanged =
-      (fix !== undefined && normalizeList(String(fix)) !== normalizeList(String(o.fix || ''))) ||
-      (price !== undefined && String(Math.max(0, Number(price) || 0)) !== String(o.price || 0))
-    // Equipo
-    if (deviceType !== undefined) o.deviceType = String(deviceType)
-    if (brand !== undefined) o.brand = String(brand)
-    if (model !== undefined) o.model = String(model)
-    if (pin !== undefined) o.pin = String(pin)
-    if (noPin !== undefined) o.noPin = !!noPin
-    if (pattern !== undefined) o.pattern = Array.isArray(pattern) ? pattern : []
-    if (accessories !== undefined) o.accessories = normalizeList(String(accessories))
-    if (conditions !== undefined) o.conditions = normalizeList(String(conditions))
-    // Reparación
-    if (fix !== undefined) o.fix = normalizeList(String(fix))
-    const prevPrice = o.price
-    if (price !== undefined) o.price = Math.max(0, Number(price) || 0)
-    if (issue !== undefined) o.issue = sentenceCase(String(issue))
-    // Historial para cambios relevantes
-    o.history = o.history || []
-    if (price !== undefined && Number(o.price) !== Number(prevPrice || 0)) {
-      o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: `Presupuesto: $${Number(price) || 0}` })
-    }
-    if (fix !== undefined) {
-      o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: `Arreglo: ${normalizeList(String(fix)) || 'sin definir'}` })
-    }
-    // Notas del técnico (legacy)
-    if (technicianNotes !== undefined) o.technicianNotes = sentenceCase(String(technicianNotes))
-    // Notas vía note (append a notesLog)
-    if (note !== undefined && String(note).trim()) {
-      const entry = { id: uid(), at: new Date().toISOString(), by: req.user.id, byName: req.user.name || '—', text: sentenceCase(String(note).trim()) }
-      o.notesLog = o.notesLog || []
-      o.notesLog.push(entry)
-      o.technicianNotes = entry.text
-    }
-    // Editar nota existente
-    if (editNote !== undefined && editNote?.id && editNote?.text) {
-      o.notesLog = o.notesLog || []
-      const entry = o.notesLog.find((n) => n.id === editNote.id)
-      if (entry) {
-        entry.text = sentenceCase(String(editNote.text).trim())
-        entry.editedAt = new Date().toISOString()
+  try {
+    await commit(async () => {
+      const budgetChanged =
+        (fix !== undefined && normalizeList(String(fix)) !== normalizeList(String(order.fix || ''))) ||
+        (price !== undefined && String(Math.max(0, Number(price) || 0)) !== String(order.price || 0))
+
+      const updateData = {}
+      const historyCreates = []
+      const noteOps = []
+
+      if (deviceType !== undefined) updateData.deviceType = String(deviceType)
+      if (brand !== undefined) updateData.brand = String(brand)
+      if (model !== undefined) updateData.model = String(model)
+      if (pin !== undefined) updateData.pin = String(pin)
+      if (noPin !== undefined) updateData.noPin = !!noPin
+      if (pattern !== undefined) updateData.pattern = Array.isArray(pattern) ? pattern : []
+      if (accessories !== undefined) updateData.accessories = normalizeList(String(accessories))
+      if (conditions !== undefined) updateData.conditions = normalizeList(String(conditions))
+      if (technicianNotes !== undefined) updateData.technicianNotes = sentenceCase(String(technicianNotes))
+      if (issue !== undefined) updateData.issue = sentenceCase(String(issue))
+
+      const prevPrice = order.price
+      if (price !== undefined) {
+        updateData.price = Math.max(0, Number(price) || 0)
+        if (Number(price) !== Number(prevPrice || 0)) {
+          historyCreates.push({ status: order.status, at: new Date(), by: req.user.id, note: `Presupuesto: $${Number(price) || 0}` })
+        }
       }
-    }
-    // Eliminar nota existente
-    if (deleteNote !== undefined && deleteNote?.id) {
-      o.notesLog = (o.notesLog || []).filter((n) => n.id !== deleteNote.id)
-      o.technicianNotes = o.notesLog.length > 0 ? o.notesLog[o.notesLog.length - 1].text : ''
-    }
-    if (budgetChanged && o.status === 'presupuesto' && o.confirmed) {
-      o.confirmed = false
-      o.confirmedAt = null
-      o.confirmedBy = null
-    }
-    if (touched) {
-      audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · ${o.brand} ${o.model}: notas/presupuesto actualizados${budgetChanged && o.status === 'presupuesto' ? ' (confirmación desmarcada)' : ''}`)
-    }
-  }).then(() => res.json({ ok: true }))
+      if (fix !== undefined) {
+        updateData.fix = normalizeList(String(fix))
+        historyCreates.push({ status: order.status, at: new Date(), by: req.user.id, note: `Arreglo: ${normalizeList(String(fix)) || 'sin definir'}` })
+      }
+
+      // Notas vía note (append a notesLog)
+      if (note !== undefined && String(note).trim()) {
+        const text = sentenceCase(String(note).trim())
+        const id = uid()
+        noteOps.push({ id, by: req.user.id, byName: req.user.name || '—', text })
+        updateData.technicianNotes = text
+      }
+      // Editar notas existentes en notesLog
+      const notesToEdit = []
+      const notesToDelete = []
+      const notesToAdd = []
+      if (editNote !== undefined && editNote?.id && editNote?.text) {
+        notesToEdit.push({ id: editNote.id, text: sentenceCase(String(editNote.text).trim()) })
+        if (order.notes.length === 1) updateData.technicianNotes = sentenceCase(String(editNote.text).trim())
+      }
+      if (deleteNote !== undefined && deleteNote?.id) {
+        notesToDelete.push(deleteNote.id)
+        const remaining = (order.notes || []).filter((n) => n.id !== deleteNote.id)
+        updateData.technicianNotes = remaining.length > 0 ? remaining[remaining.length - 1].text : ''
+      }
+      if (note !== undefined && String(note).trim()) {
+        notesToAdd.push({ by: req.user.id, byName: req.user.name || '—', text: sentenceCase(String(note).trim()) })
+      }
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          ...updateData,
+          history: historyCreates.length ? { create: historyCreates } : undefined,
+          ...(notesToEdit.length ? {
+            notes: {
+              update: notesToEdit.map((n) => ({ where: { id: n.id }, data: { text: n.text } })),
+            },
+          } : {}),
+          ...(notesToDelete.length ? { notes: { delete: notesToDelete.map((id) => ({ id })) } } : {}),
+          ...(notesToAdd.length ? { notes: { create: notesToAdd } } : {}),
+        },
+      })
+
+      if (budgetChanged && order.status === 'presupuesto' && order.confirmed) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { confirmed: false, confirmedAt: null, confirmedBy: null },
+        })
+      }
+      const touched = touchesEquip || fix !== undefined || price !== undefined || technicianNotes !== undefined || note !== undefined || issue !== undefined
+      if (touched) {
+        await audit('update', 'orders', order.id, req.user.id, `${order.orderNumber} · ${order.brand} ${order.model}: notas/presupuesto actualizados${budgetChanged && order.status === 'presupuesto' ? ' (confirmación desmarcada)' : ''}`)
+      }
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    console.error('Error actualizando orden:', e)
+    res.status(500).json({ error: 'Error al actualizar la orden.' })
+  }
 })
 
 // ---------- Asignación de técnico encargado ----------
-app.post('/api/orders/:id/assign', auth, (req, res) => {
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === req.params.id)
+app.post('/api/orders/:id/assign', auth, async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   const canAssign = ['tecnico', 'admin', 'recepcion'].includes(req.user.role)
-  if (!canAssign) {
-    return res.status(403).json({ error: 'No tenés permiso para asignar un técnico.' })
-  }
+  if (!canAssign) return res.status(403).json({ error: 'No tenés permiso para asignar un técnico.' })
   const userId = req.body?.userId || null
   if (userId) {
-    const tech = db.users.find(
-      (u) => u.id === userId && u.active && u.role === 'tecnico',
-    )
+    const tech = await prisma.user.findFirst({ where: { id: userId, active: true, role: 'tecnico' } })
     if (!tech) return res.status(400).json({ error: 'Técnico no encontrado.' })
   }
-  mutate((d) => {
-    const o = d.orders.find((x) => x.id === req.params.id)
-    o.assignedTo = userId
-    const techName = userId ? (db.users.find((u) => u.id === userId)?.name || '—') : 'sin técnico'
-    o.history = o.history || []
-    o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: `Asignado a ${techName}` })
-    audit(d, 'assign', 'orders', o.id, req.user.id, `${o.orderNumber} · asignado a ${userId || 'sin técnico'}`)
-  }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
+  try {
+    const updated = await commit(async () => {
+      const techName = userId ? (await prisma.user.findUnique({ where: { id: userId } }))?.name || '—' : 'sin técnico'
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          assignedTo: userId,
+          history: { create: { status: order.status, at: new Date(), by: req.user.id, note: `Asignado a ${techName}` } },
+        },
+      })
+      await audit('assign', 'orders', order.id, req.user.id, `${order.orderNumber} · asignado a ${userId || 'sin técnico'}`)
+      return prisma.order.findUnique({ where: { id: order.id }, include: orderInclude })
+    })
+    res.json({ ok: true, order: await decorateOrder(updated) })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al asignar el técnico.' })
+  }
 })
 
 // ---------- Marcar / desmarcar "cliente avisado" ----------
-app.post('/api/orders/:id/notified', auth, (req, res) => {
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === req.params.id)
+app.post('/api/orders/:id/notified', auth, async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   if (!['recepcion', 'admin'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Solo recepción puede marcar al cliente como avisado.' })
   }
   const notified = !!req.body?.notified
-  mutate((d) => {
-    const o = d.orders.find((x) => x.id === req.params.id)
-    o.notified = notified
-    o.notifiedAt = notified ? new Date().toISOString() : null
-    o.notifiedBy = notified ? req.user.id : null
-    o.history = o.history || []
-    o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: notified ? 'Avisado al cliente' : 'Desmarcado aviso al cliente' })
-    audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · cliente ${notified ? 'marcado como avisado' : 'desmarcado como avisado'}`)
-  }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
+  try {
+    const updated = await commit(async () => {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          notified,
+          notifiedAt: notified ? new Date() : null,
+          notifiedBy: notified ? req.user.id : null,
+          history: { create: { status: order.status, at: new Date(), by: req.user.id, note: notified ? 'Avisado al cliente' : 'Desmarcado aviso al cliente' } },
+        },
+      })
+      await audit('update', 'orders', order.id, req.user.id, `${order.orderNumber} · cliente ${notified ? 'marcado como avisado' : 'desmarcado como avisado'}`)
+      return prisma.order.findUnique({ where: { id: order.id }, include: orderInclude })
+    })
+    res.json({ ok: true, order: await decorateOrder(updated) })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al actualizar el aviso.' })
+  }
 })
 
 // ---------- Marcar / desmarcar confirmación del cliente ----------
-app.post('/api/orders/:id/confirm', auth, (req, res) => {
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === req.params.id)
+app.post('/api/orders/:id/confirm', auth, async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   if (!['recepcion', 'admin'].includes(req.user.role)) {
@@ -1221,23 +1194,31 @@ app.post('/api/orders/:id/confirm', auth, (req, res) => {
   if (confirmed && (!order.notified || Number(order.price) <= 0)) {
     return res.status(400).json({ error: 'Cargá el presupuesto y avisá al cliente antes de confirmar el arreglo.' })
   }
-  mutate((d) => {
-    const o = d.orders.find((x) => x.id === req.params.id)
-    o.confirmed = confirmed
-    o.confirmedAt = confirmed ? new Date().toISOString() : null
-    o.confirmedBy = confirmed ? req.user.id : null
-    o.history = o.history || []
-    o.history.push({ status: o.status, at: new Date().toISOString(), by: req.user.id, note: confirmed ? 'Confirmado por el cliente' : 'Desconfirmado' })
-    audit(d, 'update', 'orders', o.id, req.user.id, `${o.orderNumber} · arreglo ${confirmed ? 'confirmado por el cliente' : 'desmarcado como confirmado'}`)
-  }).then(() => res.json({ ok: true, order: decorateOrder(getDB(), order) }))
+  try {
+    const updated = await commit(async () => {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          confirmed,
+          confirmedAt: confirmed ? new Date() : null,
+          confirmedBy: confirmed ? req.user.id : null,
+          history: { create: { status: order.status, at: new Date(), by: req.user.id, note: confirmed ? 'Confirmado por el cliente' : 'Desconfirmado' } },
+        },
+      })
+      await audit('update', 'orders', order.id, req.user.id, `${order.orderNumber} · arreglo ${confirmed ? 'confirmado por el cliente' : 'desmarcado como confirmado'}`)
+      return prisma.order.findUnique({ where: { id: order.id }, include: orderInclude })
+    })
+    res.json({ ok: true, order: await decorateOrder(updated) })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al confirmar el arreglo.' })
+  }
 })
 
 // ---------- Etiqueta ZPL ----------
 app.post('/api/orders/:id/label', auth, async (req, res) => {
-  const db = getDB()
-  const order = db.orders.find((o) => o.id === req.params.id)
+  const order = await prisma.order.findUnique({ where: { id: req.params.id } })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
-  const customer = db.customers.find((c) => c.id === order.customerId)
+  const customer = await prisma.customer.findUnique({ where: { id: order.customerId } })
   const result = await printZplLabel({
     orderNumber: order.orderNumber,
     model: `${order.brand} ${order.model}`.trim(),
@@ -1248,23 +1229,28 @@ app.post('/api/orders/:id/label', auth, async (req, res) => {
 })
 
 // ---------- Configuración (solo admin) ----------
-app.get('/api/config', auth, adminOnly, (req, res) => {
-  res.json({ config: getDB().config || {} })
+app.get('/api/config', auth, adminOnly, async (req, res) => {
+  res.json({ config: (await loadConfigValue('main')) || {} })
 })
 
-app.post('/api/config', auth, adminOnly, (req, res) => {
+app.post('/api/config', auth, adminOnly, async (req, res) => {
   const { revisionFee } = req.body || {}
-  mutate((d) => {
-    d.config = d.config || {}
-    if (revisionFee !== undefined) d.config.revisionFee = Math.max(0, Number(revisionFee) || 0)
-    audit(d, 'update', 'config', null, req.user.id, 'Configuración actualizada')
-  }).then(() => res.json({ ok: true }))
+  try {
+    await commit(async () => {
+      const current = (await loadConfigValue('main')) || {}
+      if (revisionFee !== undefined) current.revisionFee = Math.max(0, Number(revisionFee) || 0)
+      await upsertConfig('main', current)
+      await audit('update', 'config', null, req.user.id, 'Configuración actualizada')
+    })
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al guardar la configuración.' })
+  }
 })
 
 // ---------- Usuarios (solo admin) ----------
-app.post('/api/users', auth, adminOnly, (req, res) => {
+app.post('/api/users', auth, adminOnly, async (req, res) => {
   const { name, email, password, role } = req.body || {}
-  const db = getDB()
   if (!name || !name.trim()) return res.status(400).json({ error: 'El nombre es obligatorio.' })
   if (!password || password.length < 4) {
     return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres.' })
@@ -1272,91 +1258,99 @@ app.post('/api/users', auth, adminOnly, (req, res) => {
   if (!['admin', 'tecnico', 'recepcion'].includes(role)) {
     return res.status(400).json({ error: 'Rol inválido.' })
   }
-
   const id = uid()
-  mutate((d) => {
-    d.users.push({
-      id,
-      name: titleCase(name),
-      email: String(email || '').trim().toLowerCase(),
-      password: bcrypt.hashSync(password, 10),
-      role,
-      active: true,
+  try {
+    await commit(async () => {
+      await prisma.user.create({
+        data: {
+          id,
+          name: titleCase(name),
+          email: String(email || '').trim().toLowerCase(),
+          password: bcrypt.hashSync(password, 10),
+          role,
+          active: true,
+        },
+      })
+      await audit('create', 'users', id, req.user.id, `Alta de usuario ${titleCase(name)} (${role})`)
     })
-    audit(d, 'create', 'users', id, req.user.id, `Alta de usuario ${titleCase(name)} (${role})`)
-  }).then(() => res.json({ ok: true, id }))
+    res.json({ ok: true, id })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al crear el usuario.' })
+  }
 })
 
-app.post('/api/users/:id/toggle', auth, adminOnly, (req, res) => {
-  const db = getDB()
-  const target = db.users.find((u) => u.id === req.params.id)
+app.post('/api/users/:id/toggle', auth, adminOnly, async (req, res) => {
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } })
   if (!target) return res.status(404).json({ error: 'Usuario no encontrado.' })
   if (target.id === req.user.id) {
     return res.status(400).json({ error: 'No podés desactivar tu propio usuario.' })
   }
-  mutate((d) => {
-    const u = d.users.find((x) => x.id === req.params.id)
-    u.active = !u.active
-    audit(d, 'toggle', 'users', u.id, req.user.id, `Usuario ${u.name} ${u.active ? 'activado' : 'desactivado'}`)
-  }).then(() => res.json({ ok: true, active: getDB().users.find((u) => u.id === req.params.id).active }))
+  try {
+    const active = await commit(async () => {
+      await prisma.user.update({ where: { id: req.params.id }, data: { active: !target.active } })
+      await audit('toggle', 'users', target.id, req.user.id, `Usuario ${target.name} ${!target.active ? 'activado' : 'desactivado'}`)
+      return !target.active
+    })
+    res.json({ ok: true, active })
+  } catch (e) {
+    res.status(500).json({ error: 'Error al cambiar el estado del usuario.' })
+  }
 })
 
 // ---------- Auditoría (solo admin) ----------
-app.get('/api/audit', auth, adminOnly, (req, res) => {
-  const db = getDB()
-  const names = new Map(db.users.map((u) => [u.id, u.name]))
-  const total = db.auditLogs.length
+app.get('/api/audit', auth, adminOnly, async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1)
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50))
-  const start = (page - 1) * limit
-  const logs = db.auditLogs
-    .slice(start, start + limit)
-    .map((l) => ({ ...l, userName: names.get(l.userId) || '—' }))
-  return res.json({ logs, total, page, pages: Math.max(1, Math.ceil(total / limit)) })
+  const total = await prisma.auditLog.count()
+  const logs = await prisma.auditLog.findMany({
+    orderBy: { timestamp: 'desc' },
+    skip: (page - 1) * limit,
+    take: limit,
+    include: { user: true },
+  })
+  const mapped = logs.map((l) => ({ ...l, userName: l.user?.name || '—' }))
+  return res.json({ logs: mapped, total, page, pages: Math.max(1, Math.ceil(total / limit)) })
 })
 
 // ---------- Actividad (línea de tiempo, para todos) ----------
-app.get('/api/actividad', auth, (req, res) => {
-  const db = getDB()
-  const names = new Map(db.users.map((u) => [u.id, u.name]))
-  const total = db.auditLogs.length
+app.get('/api/actividad', auth, async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1)
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50))
-  const start = (page - 1) * limit
-  const logs = db.auditLogs
-    .slice(start, start + limit)
-    .map((l) => ({ ...l, userName: names.get(l.userId) || '—' }))
-  return res.json({ logs, total, page, pages: Math.max(1, Math.ceil(total / limit)) })
+  const total = await prisma.auditLog.count()
+  const logs = await prisma.auditLog.findMany({
+    orderBy: { timestamp: 'desc' },
+    skip: (page - 1) * limit,
+    take: limit,
+    include: { user: true },
+  })
+  const mapped = logs.map((l) => ({ ...l, userName: l.user?.name || '—' }))
+  return res.json({ logs: mapped, total, page, pages: Math.max(1, Math.ceil(total / limit)) })
 })
 
 // ---------- Métricas para el admin ----------
-app.get('/api/metrics', auth, adminOnly, (req, res) => {
-  const db = getDB()
-  const live = (o) => !o.deletedAt
-  const orders = db.orders.filter(live)
+app.get('/api/metrics', auth, adminOnly, async (req, res) => {
+  const orders = await prisma.order.findMany({ where: { deletedAt: null } })
   const today = todayISO()
 
-  // Ingresos por período (suma del precio de entregadas).
-  const inRange = (deliveredAt, fromISO, toISO) =>
-    deliveredAt && deliveredAt >= fromISO && deliveredAt <= toISO
-  const now = new Date()
-  const startOfWeek = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)))
-  const startOfMonth = toISODate(new Date(now.getFullYear(), now.getMonth(), 1))
+  const startOfWeek = toISODate(new Date(now().getFullYear(), now().getMonth(), now().getDate() - ((now().getDay() + 6) % 7)))
+  const startOfMonth = toISODate(new Date(now().getFullYear(), now().getMonth(), 1))
   const sumPrice = (list) => list.reduce((acc, o) => acc + (Number(o.price) || 0), 0)
+  const dateOf = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v || '').slice(0, 10))
+  const createdAtDate = (o) => (o.createdAt instanceof Date ? o.createdAt.toISOString().slice(0, 10) : String(o.createdAt || '').slice(0, 10))
 
   const income = {
-    today: sumPrice(orders.filter((o) => o.deliveredAt === today)),
-    week: sumPrice(orders.filter((o) => inRange(o.deliveredAt, startOfWeek, today))),
-    month: sumPrice(orders.filter((o) => inRange(o.deliveredAt, startOfMonth, today))),
+    today: sumPrice(orders.filter((o) => dateOf(o.deliveredAt) === today)),
+    week: sumPrice(orders.filter((o) => dateOf(o.deliveredAt) >= startOfWeek && dateOf(o.deliveredAt) <= today)),
+    month: sumPrice(orders.filter((o) => dateOf(o.deliveredAt) >= startOfMonth && dateOf(o.deliveredAt) <= today)),
   }
 
-  // Tiempo promedio de reparación (creación → entrega) por técnico.
-  const techNames = new Map(db.users.map((u) => [u.id, u.name]))
+  const users = await prisma.user.findMany()
+  const techNames = new Map(users.map((u) => [u.id, u.name]))
   const byTech = new Map()
   for (const o of orders) {
     if (!o.deliveredAt || !o.repairedBy) continue
     const entry = byTech.get(o.repairedBy) || { totalDays: 0, count: 0 }
-    entry.totalDays += Math.max(0, daysBetween(o.createdAt, o.deliveredAt))
+    entry.totalDays += Math.max(0, daysBetween(createdAtDate(o), dateOf(o.deliveredAt)))
     entry.count += 1
     byTech.set(o.repairedBy, entry)
   }
@@ -1364,14 +1358,12 @@ app.get('/api/metrics', auth, adminOnly, (req, res) => {
     .map(([id, e]) => ({ technicianId: id, name: techNames.get(id) || '—', count: e.count, avgDays: e.count ? +(e.totalDays / e.count).toFixed(1) : 0 }))
     .sort((a, b) => b.count - a.count)
 
-  // Entregadas por día (últimos 7 días).
   const deliveredByDay = []
   for (let i = 6; i >= 0; i -= 1) {
     const date = addDays(today, -i)
-    deliveredByDay.push({ date, count: orders.filter((o) => o.deliveredAt === date).length })
+    deliveredByDay.push({ date, count: orders.filter((o) => dateOf(o.deliveredAt) === date).length })
   }
 
-  // Marcas y modelos más reparados (top 5 por cantidad de órdenes vivas).
   const top = (key) => {
     const counts = new Map()
     for (const o of orders) {
@@ -1385,30 +1377,24 @@ app.get('/api/metrics', auth, adminOnly, (req, res) => {
       .slice(0, 5)
   }
 
-  // Dispositivos recibidos por semana y por mes (cantidad de órdenes creadas).
   const devicesByPeriod = (() => {
-    const receivedAt = (o) => o.createdAt
-    const inPeriod = (list, fromISO, toISO) => list.filter((o) => receivedAt(o) >= fromISO && receivedAt(o) <= toISO)
-
-    // Últimas 8 semanas (lunes a domingo).
     const weeks = []
     for (let i = 7; i >= 0; i -= 1) {
       const from = addDays(startOfWeek, -7 * i)
       const to = addDays(from, 6)
-      weeks.push({ label: `${formatDateLabel(from)} - ${formatDateLabel(to)}`, count: inPeriod(orders, from, to).length })
+      weeks.push({ label: `${formatDateLabel(from)} - ${formatDateLabel(to)}`, count: orders.filter((o) => createdAtDate(o) >= from && createdAtDate(o) <= to).length })
     }
-
-    // Últimos 6 meses (desde el 1° de cada mes).
     const months = []
     for (let i = 5; i >= 0; i -= 1) {
-      const first = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const first = new Date(now().getFullYear(), now().getMonth() - i, 1)
       const from = toISODate(first)
       const to = toISODate(new Date(first.getFullYear(), first.getMonth() + 1, 0))
-      months.push({ label: from.slice(0, 7), count: inPeriod(orders, from, to).length })
+      months.push({ label: from.slice(0, 7), count: orders.filter((o) => createdAtDate(o) >= from && createdAtDate(o) <= to).length })
     }
-
     return { weeks, months }
   })()
+
+  function now() { return new Date() }
 
   return res.json({
     income,
@@ -1418,21 +1404,127 @@ app.get('/api/metrics', auth, adminOnly, (req, res) => {
     topBrands: top('brand'),
     topModels: top('model'),
     totals: {
-      deliveredMonth: orders.filter((o) => inRange(o.deliveredAt, startOfMonth, today)).length,
+      deliveredMonth: orders.filter((o) => dateOf(o.deliveredAt) >= startOfMonth && dateOf(o.deliveredAt) <= today).length,
       activeOrders: orders.filter((o) => o.status !== 'entregado').length,
     },
   })
 })
 
 // ---------- Copias de seguridad (solo admin) ----------
+function runPgDump() {
+  const url = process.env.DATABASE_URL
+  return new Promise((resolve, reject) => {
+    execFile('pg_dump', ['--dbname', url, '--format=custom', '--file', 'stdout'], { maxBuffer: 1024 * 1024 * 50 }, (err, stdout) => {
+      if (err) return reject(err)
+      resolve(stdout)
+    })
+  })
+}
+
+async function createBackup() {
+  const dir = BACKUP_DIR
+  fs.mkdirSync(dir, { recursive: true })
+  const name = `db-${Date.now()}.dump`
+  try {
+    const buffer = await runPgDump()
+    fs.writeFileSync(path.join(dir, name), buffer)
+    pruneBackups()
+    return name
+  } catch (e) {
+    console.error('Error creando backup:', e)
+    return null
+  }
+}
+
+function listBackups() {
+  try {
+    return fs
+      .readdirSync(BACKUP_DIR)
+      .filter((f) => /^db-[0-9]+\.dump$/.test(f))
+      .map((name) => {
+        const st = fs.statSync(path.join(BACKUP_DIR, name))
+        return { name, size: st.size, mtime: st.mtime.toISOString() }
+      })
+      .sort((a, b) => b.mtime.localeCompare(a.mtime))
+  } catch {
+    return []
+  }
+}
+
+const MAX_BACKUPS = Number(process.env.MAX_BACKUPS || 30)
+function pruneBackups() {
+  const files = listBackups().map((b) => b.name).sort()
+  while (files.length > MAX_BACKUPS) {
+    const toRemove = files.shift()
+    try {
+      fs.unlinkSync(path.join(BACKUP_DIR, toRemove))
+    } catch {
+      // ignora errores
+    }
+  }
+}
+
+async function restoreBackup(name) {
+  if (!/^db-[0-9]+\.dump$/.test(name)) throw new Error('Nombre de copia inválido.')
+  const full = path.join(BACKUP_DIR, name)
+  if (!fs.existsSync(full)) throw new Error('Copia no encontrada.')
+  const url = process.env.DATABASE_URL
+  await new Promise((resolve, reject) => {
+    const child = execFile('pg_restore', ['--dbname', url, '--clean', '--if-exists', '--no-owner', '--no-privileges', full], (err) => {
+      if (err) return reject(new Error('No se pudo restaurar la copia.'))
+      resolve()
+    })
+    child.on('error', (e) => reject(new Error(`pg_restore no disponible: ${e.message}`)))
+  })
+  notifyChange()
+  return true
+}
+
+// Copias de seguridad automáticas
+const BACKUP_HOUR = Number(process.env.BACKUP_HOUR ?? 3)
+const PAPELERA_RETENTION_DAYS = Number(process.env.PAPELERA_RETENTION_DAYS ?? 30)
+
+function scheduleBackups() {
+  const run = async () => {
+    try {
+      const name = await createBackup()
+      if (name) console.log(`Copia de seguridad creada: ${name}`)
+    } catch (e) {
+      console.error('No se pudo crear la copia de seguridad:', e)
+    }
+    try {
+      const cutoff = new Date(Date.now() - PAPELERA_RETENTION_DAYS * 86400000)
+      const res = await prisma.$transaction([
+        prisma.order.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
+        prisma.customer.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
+      ])
+      console.log(`Papelera: purgados registros antiguos.`)
+    } catch (e) {
+      console.error('No se pudo purgar la papelera:', e)
+    }
+  }
+  const arm = () => {
+    const now = new Date()
+    const next = new Date(now)
+    next.setHours(BACKUP_HOUR, 0, 0, 0)
+    if (next <= now) next.setDate(next.getDate() + 1)
+    setTimeout(() => {
+      run()
+      arm()
+    }, next - now)
+  }
+  run()
+  arm()
+}
+
 app.get('/api/backups', auth, adminOnly, (req, res) => {
   res.json({ backups: listBackups() })
 })
 
-app.post('/api/backups', auth, adminOnly, (req, res) => {
+app.post('/api/backups', auth, adminOnly, async (req, res) => {
   try {
-    const name = createBackup()
-    if (!name) return res.status(400).json({ error: 'Todavía no hay datos para respaldar.' })
+    const name = await createBackup()
+    if (!name) return res.status(400).json({ error: 'No se pudo crear la copia de seguridad.' })
     res.json({ ok: true, name })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -1444,7 +1536,7 @@ app.post('/api/backups/:name/restore', auth, adminOnly, async (req, res) => {
     const name = decodeURIComponent(req.params.name)
     const found = listBackups().find((b) => b.name === name)
     if (!found) return res.status(404).json({ error: 'Copia no encontrada.' })
-    createBackup()
+    await createBackup()
     await restoreBackup(name)
     res.json({ ok: true })
   } catch (e) {
@@ -1471,6 +1563,9 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ error: 'Error interno del servidor.' })
 })
 
+// Arranca backups automáticos en background.
+scheduleBackups()
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor de servicio técnico corriendo en http://0.0.0.0:${PORT}`)
 })
@@ -1478,5 +1573,8 @@ app.listen(PORT, '0.0.0.0', () => {
 process.on('SIGINT', async () => {
   const { closeBrowser } = await import('./pdf/puppeteerPdf.js')
   await closeBrowser()
+  try {
+    await prisma.$disconnect()
+  } catch {}
   process.exit(0)
 })

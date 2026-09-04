@@ -13,7 +13,8 @@ import {
   BRAND_BADGE_COUNT,
   MODEL_BADGE_COUNT,
 } from '../utils/constants.js'
-import { DEVICE_TYPES, DEVICE_TYPE_BRANDS } from '../../shared/fsm.js'
+import { DEVICE_TYPES } from '../../shared/fsm.js'
+import { api } from '../utils/api.js'
 
 const DEVICE_TYPE_ICONS = {
   'Celular': Smartphone,
@@ -63,6 +64,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [filteredCatalog, setFilteredCatalog] = useState({ brands: [], models: [] })
 
   const accessoryOptions = catalogLists?.accessories?.length ? catalogLists.accessories : ACCESSORY_FALLBACK
   const conditionOptions = catalogLists?.conditions?.length ? catalogLists.conditions : CONDITION_FALLBACK
@@ -94,26 +96,45 @@ setIssue('')
     setAdvance('')
     setError('')
     setConfirming(false)
+    setFilteredCatalog({ brands: [], models: [] })
   }, [open])
+
+  // Fetch de marcas y modelos cuando cambia el tipo de dispositivo.
+  useEffect(() => {
+    if (!open || !deviceType || deviceType === 'Otro') {
+      setFilteredCatalog({ brands: [], models: [] })
+      return
+    }
+    let cancelled = false
+    api(`/catalog?deviceType=${encodeURIComponent(deviceType)}`).then((res) => {
+      if (cancelled) return
+      if (res && res.brands) setFilteredCatalog({ brands: res.brands, models: res.models || [] })
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [open, deviceType])
 
   // Badges de marcas y modelos según el catálogo (ordenado por uso).
   const filteredBrands = useMemo(() => {
-    const all = catalog.brands || []
-    const allowed = DEVICE_TYPE_BRANDS[deviceType]
-    if (!allowed || allowed.length === 0) return all
-    return all.filter((b) => allowed.includes(b.name))
-  }, [catalog.brands, deviceType])
+    if (deviceType && deviceType !== 'Otro' && filteredCatalog.brands.length > 0) return filteredCatalog.brands
+    return catalog.brands || []
+  }, [catalog.brands, deviceType, filteredCatalog.brands])
   const topBrands = useMemo(() => filteredBrands.slice(0, BRAND_BADGE_COUNT), [filteredBrands])
   const brandModels = useMemo(
-    () => (catalog.models || []).filter((m) => m.brand === brand && m.deviceType === deviceType).slice(0, MODEL_BADGE_COUNT),
-    [catalog.models, brand, deviceType],
+    () => {
+      const models = (deviceType && deviceType !== 'Otro' && filteredCatalog.models.length > 0) ? filteredCatalog.models : (catalog.models || [])
+      return models.filter((m) => m.brand === brand).slice(0, MODEL_BADGE_COUNT)
+    },
+    [catalog.models, brand, deviceType, filteredCatalog.models],
   )
   const allBrandModels = useMemo(
-    () => (catalog.models || []).filter((m) => m.brand === brand && m.deviceType === deviceType),
-    [catalog.models, brand, deviceType],
+    () => {
+      const models = (deviceType && deviceType !== 'Otro' && filteredCatalog.models.length > 0) ? filteredCatalog.models : (catalog.models || [])
+      return models.filter((m) => m.brand === brand)
+    },
+    [catalog.models, brand, deviceType, filteredCatalog.models],
   )
 
-  const pickerList = picker === 'brand' ? catalog.brands || [] : allBrandModels
+  const pickerList = picker === 'brand' ? filteredBrands : allBrandModels
   const pickerFiltered = pickerList.filter((x) =>
     x.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
   )
@@ -366,11 +387,8 @@ setIssue('')
                       title={t}
                       onClick={() => {
                         setDeviceType(t)
-                        const allowed = DEVICE_TYPE_BRANDS[t]
-                        if (allowed && allowed.length > 0 && brand && !allowed.includes(brand)) {
-                          setBrand('')
-                          setModel('')
-                        }
+                        setBrand('')
+                        setModel('')
                       }}
                       className={`inline-flex h-11 w-11 items-center justify-center rounded-lg border transition ${
                         deviceType === t

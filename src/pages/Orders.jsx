@@ -123,12 +123,12 @@ export default function Orders() {
   const customerOf = (o) => customers.find((c) => c.id === o.customerId)
 
   const onCreated = async (order) => {
+    setPrinting({ order, customer: customerOf(order) })
     const res = await printLabel(order.id)
     setNotice(res.error
       ? { text: `No se imprimió la etiqueta: ${res.error}`, error: true }
       : { text: 'Etiqueta enviada a la impresora.', error: false })
     window.setTimeout(() => setNotice(null), 6000)
-    setPrinting({ order, customer: customerOf(order) })
   }
 
   const inputCls =

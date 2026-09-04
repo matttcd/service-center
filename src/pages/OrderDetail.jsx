@@ -33,7 +33,7 @@ import {
   normalizeList,
 } from '../utils/helpers.js'
 import { COMMON_FIXES } from '../utils/constants.js'
-import { DEVICE_TYPES, DEVICE_TYPE_BRANDS } from '../../shared/fsm.js'
+import { DEVICE_TYPES } from '../../shared/fsm.js'
 
 const DEVICE_TYPE_ICONS = {
   'Celular': Smartphone,

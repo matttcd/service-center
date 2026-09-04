@@ -15,6 +15,9 @@ RUN cd server && npm install --omit=dev
 COPY server ./server
 COPY shared ./shared
 
+# Genera el cliente Prisma desde el esquema (server/prisma/schema.prisma)
+RUN cd server && npx prisma generate
+
 ENV PORT=3000
 ENV DATA_DIR=/app/data
 ENV PYTHON=python3

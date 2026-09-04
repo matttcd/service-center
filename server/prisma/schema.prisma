@@ -1,0 +1,183 @@
+// ============================================
+// Esquema de la base de datos (PostgreSQL + Prisma)
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Usuarios ----------
+model User {
+  id       String  @id @default(uuid())
+  name     String
+  email    String? @unique
+  password String
+  role     String
+  active   Boolean @default(true)
+
+  assignedOrders  Order[] @relation("AssignedTo")
+  repairedOrders  Order[] @relation("RepairedBy")
+  receivedOrders  Order[] @relation("ReceivedBy")
+  deliveredOrders Order[] @relation("DeliveredBy")
+  notifiedOrders  Order[] @relation("NotifiedBy")
+  confirmedOrders Order[] @relation("ConfirmedBy")
+  auditLogs       AuditLog[]
+  historyEntries  OrderHistory[]
+  noteEntries     OrderNote[]
+}
+
+// ---------- Clientes ----------
+model Customer {
+  id        String    @id @default(uuid())
+  fullName  String
+  dni       String    @default("")
+  phone     String    @default("")
+  phone2    String    @default("")
+  phone3    String    @default("")
+  email     String    @default("")
+  address   String    @default("")
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  orders Order[]
+}
+
+// ---------- Órdenes ----------
+model Order {
+  id              String   @id @default(uuid())
+  orderNumber     String   @unique
+  customerId      String
+  deviceType      String   @default("")
+  brand           String   @default("")
+  model           String   @default("")
+  accessories     String   @default("")
+  conditions      String   @default("")
+  pin             String   @default("")
+  noPin           Boolean  @default(false)
+  pattern         Int[]
+  diagnosisType   String   @default("visible")
+  issue           String   @default("")
+  fix             String   @default("")
+  price           Float    @default(0)
+  advance         Float    @default(0)
+  status          String   @default("recibido")
+  technicianNotes String   @default("")
+  assignedTo      String?
+  repairedBy      String?
+  receivedBy      String?
+  createdAt       DateTime @default(now())
+  deliveredAt     DateTime?
+  deliveredBy     String?
+  notified        Boolean  @default(false)
+  notifiedAt      DateTime?
+  notifiedBy      String?
+  confirmed       Boolean  @default(false)
+  confirmedAt     DateTime?
+  confirmedBy     String?
+  pickupBy        String   @default("")
+  pickupName      String   @default("")
+  pickupDni       String   @default("")
+  warrantyReturn  Boolean  @default(false)
+  deletedAt       DateTime?
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  assigned User?    @relation("AssignedTo", fields: [assignedTo], references: [id])
+  repaired User?    @relation("RepairedBy", fields: [repairedBy], references: [id])
+  received User?    @relation("ReceivedBy", fields: [receivedBy], references: [id])
+  delivered User?   @relation("DeliveredBy", fields: [deliveredBy], references: [id])
+  notifiedUser User? @relation("NotifiedBy", fields: [notifiedBy], references: [id])
+  confirmedUser User? @relation("ConfirmedBy", fields: [confirmedBy], references: [id])
+  history     OrderHistory[]
+  notes       OrderNote[]
+}
+
+model OrderHistory {
+  id      String   @id @default(uuid())
+  orderId String
+  status  String
+  at      DateTime @default(now())
+  by      String?
+  note    String   @default("")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [by], references: [id])
+
+  @@index([orderId])
+}
+
+model OrderNote {
+  id      String   @id @default(uuid())
+  orderId String
+  at      DateTime @default(now())
+  by      String?
+  byName  String   @default("")
+  text    String
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [by], references: [id])
+
+  @@index([orderId])
+}
+
+// ---------- Catálogo ----------
+model CatalogBrand {
+  id    String @id @default(uuid())
+  name  String @unique
+  usage Int    @default(0)
+}
+
+model CatalogModel {
+  id         String @id @default(uuid())
+  brand      String
+  name       String
+  deviceType String @default("")
+  usage      Int    @default(0)
+
+  @@unique([brand, name, deviceType])
+}
+
+model CatalogAccessory {
+  id   String @id @default(uuid())
+  name String @unique
+}
+
+model CatalogCondition {
+  id   String @id @default(uuid())
+  name String @unique
+}
+
+model CatalogFix {
+  id   String @id @default(uuid())
+  name String @unique
+}
+
+// ---------- Auditoría ----------
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  table     String
+  recordId  String?
+  details   String   @default("")
+  timestamp DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([timestamp])
+}
+
+// ---------- Configuración y contador ----------
+model Config {
+  key   String @id
+  value Json
+}
+
+model OrderCounter {
+  key   String @id @default("order")
+  value Int    @default(0)
+}

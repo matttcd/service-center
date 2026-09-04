@@ -5,6 +5,22 @@
 // ============================================
 import bcrypt from 'bcryptjs'
 import { uid } from './helpers.js'
+import { prisma } from './db.js'
+
+// ---------- Listas editables por defecto (Configuración) ----------
+export const DEFAULT_LISTS = {
+  accessories: ['Funda', 'Cargador', 'Vidrio templado', 'SIM', 'SD', 'Auriculares'],
+  conditions: ['Apagado', 'Mojado', 'Golpeado', 'Display Roto', 'No se pudo probar funciones básicas'],
+  fixes: ['Cambio de pantalla', 'Cambio de módulo', 'Cambio de batería', 'Pin de carga', 'Micrófono', 'Parlante', 'Botón de encendido', 'Flex', 'Software', 'Limpieza'],
+  terms: [
+    'Para la entrega del equipo, el cliente o un tercero asignado deberán presentar la <strong>orden</strong>. Si es un tercero, deberá contar con una <strong>autorización explícita</strong> del titular. Si el cliente no presenta la orden física, se podrá entregar el equipo con una constancia de retiro firmada (únicamente el cliente titular). Sin la <strong>orden original</strong> no se reconocerá garantía alguna.',
+    'La garantía tiene una duración de <strong>treinta (30) días</strong> corridos desde el retiro y cubre exclusivamente las reparaciones detalladas en la presente orden.',
+    'Transcurridos <strong>treinta (30) días</strong> desde la notificación de que el equipo está listo sin que haya sido retirado, El Gringo Celulares se reserva el derecho de modificar el presupuesto debido a variaciones en los costos de repuestos.',
+    'Los pagos son exclusivamente <strong>en efectivo</strong>.',
+    'Para cualquier duda o consulta sobre el estado de su dispositivo comunicarse al <strong>3704-583266</strong> o al <strong>3704-676320</strong>.',
+    'Declaro haber leído y acepto las condiciones precedentemente descriptas.',
+  ],
+}
 
 // ---------- Catálogo completo de dispositivos ----------
 
@@ -789,4 +805,94 @@ export function buildSeed() {
   )
 
   return db
+}
+
+// Si la base está vacía, crea el admin, el catálogo y las listas por defecto.
+export async function seedIfEmpty() {
+  const userCount = await prisma.user.count()
+  if (userCount > 0) return
+
+  const hash = (p) => bcrypt.hashSync(p, 10)
+  const admin = await prisma.user.create({
+    data: {
+      name: 'Administrador',
+      email: 'admin@local.com',
+      password: hash('admin123'),
+      role: 'admin',
+      active: true,
+    },
+  })
+
+  // Plugins y tablas base antes de insertar marcas/modelos.
+  await prisma.catalogBrand.createMany({
+    data: CATALOG
+      .map((e) => e.brand)
+      .filter((v, i, a) => a.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i)
+      .map((name) => ({ name })),
+    skipDuplicates: true,
+  })
+
+  const seen = new Set()
+  const models = []
+  for (const entry of CATALOG) {
+    for (const name of entry.models) {
+      if (!name) continue
+      const key = `${entry.brand.toLowerCase()}::${name.toLowerCase()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      models.push({ brand: entry.brand, name, deviceType: entry.deviceType || 'Sin categorizar' })
+    }
+  }
+  await prisma.catalogModel.createMany({
+    data: models,
+    skipDuplicates: true,
+  })
+
+  await prisma.catalogAccessory.createMany({
+    data: DEFAULT_LISTS.accessories.map((name) => ({ name })),
+    skipDuplicates: true,
+  })
+  await prisma.catalogCondition.createMany({
+    data: DEFAULT_LISTS.conditions.map((name) => ({ name })),
+    skipDuplicates: true,
+  })
+  await prisma.catalogFix.createMany({
+    data: DEFAULT_LISTS.fixes.map((name) => ({ name })),
+    skipDuplicates: true,
+  })
+
+  await prisma.config.upsert({
+    where: { key: 'main' },
+    update: {},
+    create: {
+      key: 'main',
+      value: {
+        revisionFee: 5000,
+        whatsapp: {
+          instanceId: '',
+          apiToken: '',
+          local: 'El Gringo Celulares',
+          messageTemplate: 'Hola {cliente}, tu {dispositivo} (Orden {orden}) quedó listo para retirar en {local}.',
+        },
+        terms: DEFAULT_LISTS.terms,
+      },
+    },
+  })
+
+  await prisma.orderCounter.upsert({
+    where: { key: 'order' },
+    update: {},
+    create: { key: 'order', value: 0 },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'seed',
+      table: 'db',
+      recordId: null,
+      details: 'Inicialización del sistema de servicio técnico',
+      timestamp: new Date(),
+    },
+  })
 }
