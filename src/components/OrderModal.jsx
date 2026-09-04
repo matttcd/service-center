@@ -72,6 +72,7 @@ export default function OrderModal({ order, onClose }) {
   const [techValue, setTechValue] = useState(order?.assignedTo || '')
   const [busy, setBusy] = useState(false)
   const [alertModal, setAlertModal] = useState(null)
+  const [confirmNotify, setConfirmNotify] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const canBudget = ['recepcion', 'admin'].includes(currentUser?.role)
@@ -569,7 +570,7 @@ export default function OrderModal({ order, onClose }) {
         {/* Acciones */}
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
           {canBudget && !isReadOnly && ['presupuesto', 'terminado'].includes(order.status) && (
-            <button onClick={doNotify} disabled={busy} className={btnGhost}>
+            <button onClick={() => setConfirmNotify(true)} disabled={busy} className={btnGhost}>
               {order.notified ? <BellOff size={14} /> : <Bell size={14} />}
               {order.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
             </button>
@@ -602,6 +603,13 @@ export default function OrderModal({ order, onClose }) {
       title="Aviso"
       message={alertModal}
       type="alert"
+    />
+    <ConfirmModal
+      open={confirmNotify}
+      onClose={() => setConfirmNotify(false)}
+      onConfirm={() => { setConfirmNotify(false); doNotify() }}
+      title={order.notified ? 'Desmarcar aviso' : 'Avisar al cliente'}
+      message={order.notified ? '¿Desmarcar al cliente como avisado?' : '¿Marcar al cliente como avisado?'}
     />
     <NotesModal
       open={notesModalOpen}
