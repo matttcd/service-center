@@ -61,6 +61,7 @@ model Order {
   noPin           Boolean  @default(false)
   pattern         Int[]
   diagnosisType   String   @default("visible")
+  isSimpleService Boolean  @default(false)
   issue           String   @default("")
   fix             String   @default("")
   price           Float    @default(0)

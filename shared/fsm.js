@@ -31,6 +31,7 @@ export const ORDER_STATUS_LABEL = {
 export function allowedTransitions(order) {
   switch (order?.status) {
     case 'recibido':
+      if (order.isSimpleService) return ['terminado', 'en_reparacion', 'entregado']
       return order.diagnosisType === 'revision'
         ? ['en_revision', 'entregado']
         : ['en_reparacion', 'entregado']
@@ -87,7 +88,10 @@ const TECH_ROLES = ['tecnico', 'admin']
 const COUNTER_ROLES = ['recepcion', 'admin']
 
 // Indica si un rol puede disparar la transición hacia `to`.
-export function canTransitionForRole(to, role) {
+export function canTransitionForRole(to, role, order) {
+  if (to === 'terminado' && COUNTER_ROLES.includes(role) && order?.isSimpleService) {
+    return true
+  }
   if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(to) && !TECH_ROLES.includes(role)) {
     return false
   }

@@ -642,6 +642,7 @@ app.post('/api/orders', auth, async (req, res) => {
   const validTypes = ['Celular', 'Tablet', 'Notebook / PC', 'Smart TV', 'Consola', 'Impresora', 'Otro']
   const deviceType = validTypes.includes(body.deviceType) ? body.deviceType : 'Celular'
   const diagnosisType = body.diagnosisType === 'revision' ? 'revision' : 'visible'
+  const isSimpleService = !!body.isSimpleService
   const price = Math.max(0, Number(body.price) || 0)
   const advance = Math.max(0, Number(body.advance) || 0)
   const pattern = Array.isArray(body.pattern)
@@ -670,6 +671,7 @@ app.post('/api/orders', auth, async (req, res) => {
           noPin: !!body.noPin,
           pattern: storedPattern,
           diagnosisType,
+          isSimpleService,
           issue: sentenceCase(String(body.issue || '')),
           fix: normalizeList(String(body.fix || '')),
           price,
@@ -922,7 +924,7 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   if (status === 'entregado' && !order.notified && !retiro) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
   }
-  if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) && !isTech) {
+  if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) && !isTech && !(status === 'terminado' && order.isSimpleService)) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
   }
   if (status === 'presupuesto' && !['recepcion', 'admin', 'tecnico'].includes(role)) {
@@ -989,7 +991,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   const {
     deviceType, brand, model, pin, noPin, pattern, accessories, conditions,
-    technicianNotes, fix, price, issue, note, editNote, deleteNote,
+    technicianNotes, fix, price, issue, note, editNote, deleteNote, isSimpleService,
   } = req.body || {}
   const role = req.user.role
   const isAssignedTech = role === 'tecnico' && order.assignedTo === req.user.id
@@ -1052,6 +1054,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
       if (conditions !== undefined) updateData.conditions = normalizeList(String(conditions))
       if (technicianNotes !== undefined) updateData.technicianNotes = sentenceCase(String(technicianNotes))
       if (issue !== undefined) updateData.issue = sentenceCase(String(issue))
+      if (isSimpleService !== undefined) updateData.isSimpleService = !!isSimpleService
 
       const prevPrice = order.price
       if (price !== undefined) {

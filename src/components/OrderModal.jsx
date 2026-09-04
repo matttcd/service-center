@@ -73,6 +73,7 @@ export default function OrderModal({ order, onClose }) {
   const [busy, setBusy] = useState(false)
   const [alertModal, setAlertModal] = useState(null)
   const [confirmNotify, setConfirmNotify] = useState(false)
+  const [confirm, setConfirm] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const canBudget = ['recepcion', 'admin'].includes(currentUser?.role)
@@ -152,6 +153,14 @@ export default function OrderModal({ order, onClose }) {
     const res = await toggleNotified(order.id, !order.notified)
     setBusy(false)
     if (res.error) setAlertModal(res.error)
+  }
+
+  const doStatus = async (status) => {
+    setBusy(true)
+    const res = await setOrderStatus(order.id, status)
+    setBusy(false)
+    if (res.error) setAlertModal(res.error)
+    else onClose()
   }
 
   const doConfirm = async () => {
@@ -569,6 +578,12 @@ export default function OrderModal({ order, onClose }) {
 
         {/* Acciones */}
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+          {canBudget && order.isSimpleService && order.status === 'recibido' && (
+            <button onClick={() => setConfirm({ title: 'Terminar servicio', message: '¿Marcar este servicio como terminado?', onConfirm: () => doStatus('terminado') })} disabled={busy} className={btnGhost}>
+              <CheckCircle2 size={14} />
+              Terminar
+            </button>
+          )}
           {canBudget && !isReadOnly && ['presupuesto', 'terminado'].includes(order.status) && (
             <button onClick={() => setConfirmNotify(true)} disabled={busy} className={btnGhost}>
               {order.notified ? <BellOff size={14} /> : <Bell size={14} />}
@@ -610,6 +625,13 @@ export default function OrderModal({ order, onClose }) {
       onConfirm={() => { setConfirmNotify(false); doNotify() }}
       title={order.notified ? 'Desmarcar aviso' : 'Avisar al cliente'}
       message={order.notified ? '¿Desmarcar al cliente como avisado?' : '¿Marcar al cliente como avisado?'}
+    />
+    <ConfirmModal
+      open={!!confirm}
+      onClose={() => setConfirm(null)}
+      onConfirm={() => { const fn = confirm?.onConfirm; setConfirm(null); fn?.() }}
+      title={confirm?.title}
+      message={confirm?.message}
     />
     <NotesModal
       open={notesModalOpen}

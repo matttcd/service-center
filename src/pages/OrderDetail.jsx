@@ -726,6 +726,12 @@ export default function OrderDetail() {
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
 
               {/* === ACCIONES RECEPCIÓN / ADMIN === */}
+              {isCounter && status === 'recibido' && order.isSimpleService && (
+                <button key="terminar" onClick={() => setConfirm({ title: 'Terminar servicio', message: '¿Marcar este servicio como terminado?', onConfirm: () => doStatus('terminado') })} disabled={busy === 'terminado'} className={btnPrimary}>
+                  <CheckCircle2 size={16} />
+                  Terminar
+                </button>
+              )}
               {isCounter && status === 'presupuesto' && !order.notified && !order.price && (
                 <p key="no-price" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
                   <FileText size={14} className="text-amber-500" />
