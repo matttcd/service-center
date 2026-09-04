@@ -1414,7 +1414,8 @@ app.get('/api/metrics', auth, adminOnly, async (req, res) => {
 function runPgDump() {
   const url = process.env.DATABASE_URL
   return new Promise((resolve, reject) => {
-    execFile('pg_dump', ['--dbname', url, '--format=custom', '--file', 'stdout'], { maxBuffer: 1024 * 1024 * 50 }, (err, stdout) => {
+    const args = ['exec', 'service-center-db', 'pg_dump', '--dbname', url, '--format=custom', '--file', 'stdout']
+    execFile('docker', args, { maxBuffer: 1024 * 1024 * 50 }, (err, stdout) => {
       if (err) return reject(err)
       resolve(stdout)
     })

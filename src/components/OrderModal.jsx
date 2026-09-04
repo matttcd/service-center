@@ -24,7 +24,6 @@ import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Badge from './Badge.jsx'
 import ConfirmModal from './ConfirmModal.jsx'
-import PrintOrderPanel from './PrintOrderPanel.jsx'
 import Modal from './Modal.jsx'
 import NotesModal from './NotesModal.jsx'
 import TechnicianSelect from './TechnicianSelect.jsx'
@@ -73,7 +72,6 @@ export default function OrderModal({ order, onClose }) {
   const [techValue, setTechValue] = useState(order?.assignedTo || '')
   const [busy, setBusy] = useState(false)
   const [alertModal, setAlertModal] = useState(null)
-  const [printOpen, setPrintOpen] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const canBudget = ['recepcion', 'admin'].includes(currentUser?.role)
@@ -194,11 +192,7 @@ export default function OrderModal({ order, onClose }) {
     setBusy(false)
     if (res.error) setAlertModal(res.error)
     else {
-      if (effectiveNext === 'terminado') {
-        setPrintOpen(true)
-      } else {
-        onClose()
-      }
+      onClose()
     }
   }
 
@@ -620,12 +614,6 @@ export default function OrderModal({ order, onClose }) {
       onSave={saveNote}
       onEdit={(noteId, text) => editNote(order.id, noteId, text)}
       onDelete={(noteId) => deleteNote(order.id, noteId)}
-    />
-    <PrintOrderPanel
-      open={printOpen}
-      order={order}
-      customer={customer}
-      onClose={() => { setPrintOpen(false); onClose() }}
     />
     </>
   )
