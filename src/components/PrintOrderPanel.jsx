@@ -3,11 +3,11 @@
 //   - Opción B: impresión silenciosa en la PC local (elige impresora vía bridge).
 //   - Opción A: impresión desde el navegador (cualquier impresora del dispositivo).
 // ============================================
-import { useEffect, useState } from 'react'
-import { Loader2, Printer, Monitor } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Loader2, Printer, Monitor, RotateCw } from 'lucide-react'
 import Modal from './Modal.jsx'
 import { printOrderServer, listPrinters } from '../utils/print.js'
-import { openOrderPdfForPrint } from '../utils/orderPdf.js'
+import { loadSession } from '../utils/storage.js'
 
 export default function PrintOrderPanel({ open, order, onClose }) {
   const [printers, setPrinters] = useState([])
@@ -15,18 +15,82 @@ export default function PrintOrderPanel({ open, order, onClose }) {
   const [loadingPrinters, setLoadingPrinters] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState(null)
+  const [pdfReady, setPdfReady] = useState(false)
+  const [pdfError, setPdfError] = useState(null)
+  const pdfBlobUrlRef = useRef(null)
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !order) return
+    setPdfReady(false)
+    setPdfError(null)
     setNotice(null)
     setLoadingPrinters(true)
-    listPrinters()
+
+    const session = loadSession()
+    const headers = {}
+    if (session?.token) headers.Authorization = `Bearer ${session.token}`
+
+    const fetchPdf = fetch(`/api/orders/${order.id}/pdf`, { headers })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || `Error ${res.status}`)
+        }
+        const blob = await res.blob()
+        pdfBlobUrlRef.current = URL.createObjectURL(blob)
+        setPdfReady(true)
+      })
+      .catch((e) => setPdfError(e.message || 'No se pudo generar el PDF.'))
+
+    const fetchPrinters = listPrinters()
       .then((list) => {
         setPrinters(list)
         setSelected('')
       })
+      .catch(() => {})
       .finally(() => setLoadingPrinters(false))
-  }, [open])
+
+    Promise.allSettled([fetchPdf, fetchPrinters])
+
+    return () => {
+      if (pdfBlobUrlRef.current) {
+        URL.revokeObjectURL(pdfBlobUrlRef.current)
+        pdfBlobUrlRef.current = null
+      }
+    }
+  }, [open, order])
+
+  const handleRetry = () => {
+    setPdfReady(false)
+    setPdfError(null)
+    setNotice(null)
+
+    const session = loadSession()
+    const headers = {}
+    if (session?.token) headers.Authorization = `Bearer ${session.token}`
+
+    fetch(`/api/orders/${order.id}/pdf`, { headers })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || `Error ${res.status}`)
+        }
+        const blob = await res.blob()
+        pdfBlobUrlRef.current = URL.createObjectURL(blob)
+        setPdfReady(true)
+      })
+      .catch((e) => setPdfError(e.message || 'No se pudo generar el PDF.'))
+  }
+
+  const handleClose = () => {
+    if (pdfBlobUrlRef.current) {
+      URL.revokeObjectURL(pdfBlobUrlRef.current)
+      pdfBlobUrlRef.current = null
+    }
+    setPdfReady(false)
+    setPdfError(null)
+    onClose()
+  }
 
   const handleServerPrint = async () => {
     if (busy || !order) return
@@ -44,11 +108,25 @@ export default function PrintOrderPanel({ open, order, onClose }) {
   }
 
   const handleBrowserPrint = async () => {
-    if (busy || !order) return
+    if (busy || !order || !pdfBlobUrlRef.current) return
     setBusy(true)
     setNotice(null)
     try {
-      await openOrderPdfForPrint({ orderId: order.id })
+      const url = pdfBlobUrlRef.current
+      const w = window.open('', '_blank')
+      if (!w) {
+        throw new Error('Bloqueador de pop-ups activo. Permití ventanas emergentes.')
+      }
+      w.document.open()
+      w.document.write(
+        `<!doctype html><html><head><title>Imprimir orden</title>` +
+        `<style>@media print { body { margin: 0; } }</style></head>` +
+        `<body style="margin:0"><iframe src="${url}" style="width:100%;height:100vh;border:0"></iframe>` +
+        `<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};` +
+        `window.addEventListener('afterprint',function(){window.close();});</script>` +
+        `</body></html>`
+      )
+      w.document.close()
       setNotice({ type: 'success', msg: 'Abriendo diálogo de impresión del navegador…' })
     } catch (e) {
       setNotice({ type: 'error', msg: e.message || 'No se pudo abrir la impresión.' })
@@ -58,8 +136,29 @@ export default function PrintOrderPanel({ open, order, onClose }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} maxWidth="max-w-md" title="Imprimir orden de servicio">
+    <Modal open={open} onClose={handleClose} maxWidth="max-w-md" title="Imprimir orden de servicio">
       <div className="space-y-4">
+        {pdfError ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-12">
+            <p className="text-sm font-medium text-red-600 dark:text-red-400">
+              No se pudo generar el PDF.
+            </p>
+            <button
+              onClick={handleRetry}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              <RotateCw size={15} /> Reintentar
+            </button>
+          </div>
+        ) : !pdfReady ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-12">
+            <Loader2 size={32} className="animate-spin text-primary-500" />
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+              Generando orden…
+            </p>
+          </div>
+        ) : (
+          <>
         {/* Selector de impresora (Opción B) */}
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -123,6 +222,8 @@ export default function PrintOrderPanel({ open, order, onClose }) {
           >
             {notice.msg}
           </p>
+        )}
+          </>
         )}
       </div>
     </Modal>
