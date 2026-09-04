@@ -1413,8 +1413,10 @@ app.get('/api/metrics', auth, adminOnly, async (req, res) => {
 // ---------- Copias de seguridad (solo admin) ----------
 function runPgDump() {
   const url = process.env.DATABASE_URL
+    .replace(/[?&]schema=[^&]*/g, '')
+    .replace(/localhost:5432/, 'postgres:5432')
   return new Promise((resolve, reject) => {
-    const args = ['exec', 'service-center-db', 'pg_dump', '--dbname', url, '--format=custom', '--file', 'stdout']
+    const args = ['exec', 'service-center-db', 'pg_dump', '--dbname', url, '--format=custom']
     execFile('docker', args, { maxBuffer: 1024 * 1024 * 50 }, (err, stdout) => {
       if (err) return reject(err)
       resolve(stdout)

@@ -486,7 +486,6 @@ export default function OrderModal({ order, onClose }) {
                   </div>
                 </div>
               ) : (
-                (order.status !== 'recibido' || order.assignedTo) && (
                 <div>
                   <span className={labelCls}>Tipo de reparación</span>
                   <div className="flex flex-wrap items-center gap-3 mt-1">
@@ -533,7 +532,6 @@ export default function OrderModal({ order, onClose }) {
                     </div>
                   )}
                 </div>
-                )
               )}
             </div>
           </div>

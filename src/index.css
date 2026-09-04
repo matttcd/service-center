@@ -67,6 +67,10 @@ body {
   @apply bg-slate-950 text-slate-100;
 }
 
+/* PatternPad: números de paso */
+:root { --pattern-number-fill: #000; }
+.dark { --pattern-number-fill: #fff; }
+
 /* Scrollbar sutil */
 ::-webkit-scrollbar {
   width: 8px;

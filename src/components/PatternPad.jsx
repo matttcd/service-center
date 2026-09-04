@@ -46,7 +46,7 @@ export function PatternPreview({ value, size = 120, className = '' }) {
               strokeWidth="2.5"
             />
             {active && (
-              <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="bold" className="fill-white">
+              <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="bold" style={{ fill: 'var(--pattern-number-fill)' }}>
                 {seq + 1}
               </text>
             )}
@@ -213,7 +213,7 @@ export default function PatternPad({ value = [], onChange, disabled = false }) {
                   textAnchor="middle"
                   fontSize="6.5"
                   fontWeight="bold"
-                  fill="white"
+                  fill="var(--pattern-number-fill)"
                   stroke="var(--color-primary-700, #1e40af)"
                   strokeWidth="0.5"
                   paintOrder="stroke"
