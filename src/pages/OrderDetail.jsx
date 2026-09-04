@@ -164,7 +164,7 @@ export default function OrderDetail() {
         setLocalOrder(fresh.order)
       } else if (next === 'terminado') {
         showNotice('Equipo marcado como listo. Avisale al cliente.')
-        setPrintOpen(true)
+        if (!order.isSimpleService) setPrintOpen(true)
       } else showNotice('Estado actualizado.')
     } finally {
       setBusy(null)

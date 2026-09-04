@@ -316,6 +316,7 @@ app.get('/api/bootstrap', auth, async (req, res) => {
     const liveOrders = allOrders.filter((o) => !o.deletedAt)
     const orders = liveOrders
       .filter((o) => o.status !== 'entregado')
+      .filter((o) => req.user.role !== 'tecnico' || !o.isSimpleService)
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     const decorated = []
     for (const o of orders) decorated.push(await decorateOrder(o))
