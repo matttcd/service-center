@@ -918,7 +918,7 @@ app.delete('/api/orders/:id', auth, adminOnly, (req, res) => {
 
 // ---------- Estado de una orden ----------
 app.post('/api/orders/:id/status', auth, (req, res) => {
-  const { status, retiro } = req.body || {}
+  const { status, retiro, assignedTo } = req.body || {}
   const db = getDB()
   const order = db.orders.find((o) => o.id === req.params.id)
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
@@ -931,6 +931,21 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
   const role = req.user.role
   const isTech = ['tecnico', 'admin'].includes(role)
   const isCounter = ['recepcion', 'admin'].includes(role)
+
+  // Se puede asignar el técnico junto con la transición (asignación diferida).
+  // Se aplica ANTES de validar la transición para que "recibido -> en_reparacion/en_revision" pase.
+  if (assignedTo !== undefined) {
+    const canAssign = ['tecnico', 'admin', 'recepcion'].includes(role)
+    if (!canAssign) {
+      return res.status(403).json({ error: 'No tenés permiso para asignar un técnico.' })
+    }
+    const userId = assignedTo
+    if (userId) {
+      const tech = db.users.find((u) => u.id === userId && u.active && u.role === 'tecnico')
+      if (!tech) return res.status(400).json({ error: 'Técnico no encontrado.' })
+    }
+    order.assignedTo = userId
+  }
 
   // Transiciones permitidas (respetan el flujo real del taller).
   const allowed = allowedTransitions(order).includes(status)
@@ -977,6 +992,7 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
     const o = d.orders.find((x) => x.id === req.params.id)
     const previous = o.status
     o.status = status
+    if (assignedTo !== undefined) o.assignedTo = assignedTo || null
     o.history = o.history || []
     o.history.push({
       status,
@@ -993,7 +1009,9 @@ app.post('/api/orders/:id/status', auth, (req, res) => {
                 ? 'Esperando repuestos'
                 : status === 'en_reparacion' && previous === 'falta_repuestos'
                   ? 'Repuestos recibidos'
-                  : undefined,
+                  : assignedTo !== undefined
+                    ? `Asignado a ${assignedTo ? (d.users.find((u) => u.id === assignedTo)?.name || '—') : 'sin técnico'}`
+                    : undefined,
     })
     if (status === 'recibido' && previous === 'entregado') o.warrantyReturn = true
     if (status === 'entregado') o.warrantyReturn = false

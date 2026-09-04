@@ -70,6 +70,7 @@ export default function OrderModal({ order, onClose }) {
   const [fixList, setFixList] = useState(() => (order?.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
   const [customFix, setCustomFix] = useState('')
   const [priceText, setPriceText] = useState(order?.price ? String(order.price) : '')
+  const [techValue, setTechValue] = useState(order?.assignedTo || '')
   const [busy, setBusy] = useState(false)
   const [alertModal, setAlertModal] = useState(null)
   const [printOpen, setPrintOpen] = useState(false)
@@ -97,12 +98,13 @@ export default function OrderModal({ order, onClose }) {
       setFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
       setCustomFix('')
       setPriceText(order.price ? String(order.price) : '')
+      setTechValue(order.assignedTo || '')
       setEditingWork(canEditWork && !isReadOnly && !order.fix && !fixLocked)
       return
     }
     const priceClean = Math.abs((Number(priceText) || 0) - (order.price || 0)) <= 0.001
     const fixClean = [...fixList, customFix.trim()].filter(Boolean).join(', ') === (order.fix || '')
-    if (priceClean && fixClean) {
+    if (priceClean && fixClean && techValue === (order.assignedTo || '')) {
       setPriceText(order.price ? String(order.price) : '')
       setFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
       setCustomFix('')
@@ -117,7 +119,7 @@ export default function OrderModal({ order, onClose }) {
   const fixValue = [...fixList, customFix.trim()].filter(Boolean).join(', ')
   const displayedFixes = (order.fix || '').split(',').map((s) => s.trim()).filter(Boolean)
   const lockedBudget = order.status === 'presupuesto' && !order.confirmed
-  const missingTech = (next === 'en_reparacion' || next === 'en_revision') && !order.assignedTo
+  const missingTech = (next === 'en_reparacion' || next === 'en_revision') && !techValue
 
   const workDirty =
     fixValue !== (order.fix || '') ||
@@ -187,7 +189,8 @@ export default function OrderModal({ order, onClose }) {
       setAlertModal('El presupuesto cambió: la confirmación quedó desmarcada. Confirmá el arreglo de nuevo antes de reparar.')
       return
     }
-    const res = await setOrderStatus(order.id, effectiveNext)
+    const extras = techValue !== (order.assignedTo || '') ? { assignedTo: techValue } : {}
+    const res = await setOrderStatus(order.id, effectiveNext, extras)
     setBusy(false)
     if (res.error) setAlertModal(res.error)
     else {
@@ -398,7 +401,7 @@ export default function OrderModal({ order, onClose }) {
             <div className="md:w-48 md:shrink-0">
               <span className={labelCls}>Técnico encargado</span>
               <div className="mt-1">
-                <TechnicianSelect order={order} />
+                <TechnicianSelect order={order} value={techValue} onChange={setTechValue} />
               </div>
               {['en_revision', 'en_reparacion'].includes(order.status) && (
               <div className="mt-3">
@@ -515,7 +518,7 @@ export default function OrderModal({ order, onClose }) {
                     </button>
                     )}
                   </div>
-                  {order.diagnosisType === 'visible' && (Number(order.price) > 0 || Number(order.advance) > 0) && (
+                  {(Number(order.price) > 0 || Number(order.advance) > 0) && (
                     <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {Number(order.price) > 0 && (
                         <label className="block">

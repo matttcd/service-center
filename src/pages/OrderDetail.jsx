@@ -5,8 +5,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Printer, Trash2, Play, Search, Check, CheckCircle2, FileText,
-  PackageCheck, PackageX, RotateCcw, Sticker, Save, Phone, BellRing,
+  ArrowLeft, Printer, Trash2, Check, CheckCircle2, FileText,
+  PackageCheck, RotateCcw, Sticker, Save, Phone, BellRing,
   Lock, Smartphone, User, X, Pencil, MoreVertical, StickyNote, History, ChevronDown,
   Tablet, Laptop, Monitor, Gamepad2, HelpCircle,
 } from 'lucide-react'
@@ -297,8 +297,6 @@ export default function OrderDetail() {
     'inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50'
   const btnGhost =
     'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-  const btnDisabled =
-    'inline-flex items-center gap-1.5 rounded-lg bg-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-500 cursor-not-allowed dark:bg-slate-700 dark:text-slate-400'
   const chipReadonly =
     'inline-flex items-center rounded-full border border-slate-400 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
   const chipSelected =
@@ -772,76 +770,6 @@ export default function OrderDetail() {
                 <button onClick={() => setConfirm({ title: 'Garantía', message: '¿Reingresar el equipo por garantía? Aparecerá en Entrantes.', onConfirm: handleGarantia })} disabled={busy === 'recibido'} className={btnGhost}>
                   <RotateCcw size={16} />
                   Reingresar por garantía
-                </button>
-              )}
-
-              {/* === ACCIONES DEL TÉCNICO === */}
-              {status === 'recibido' && order.diagnosisType === 'visible' && isTech && (
-                <button
-                  onClick={() => doStatus('en_reparacion')}
-                  disabled={busy === 'en_reparacion' || !order.assignedTo}
-                  title={!order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
-                  className={!order.assignedTo ? btnDisabled : btnPrimary}
-                >
-                  <Play size={16} />
-                  Iniciar reparación
-                </button>
-              )}
-              {status === 'recibido' && order.diagnosisType === 'revision' && isTech && (
-                <button
-                  onClick={() => doStatus('en_revision')}
-                  disabled={busy === 'en_revision' || !order.assignedTo}
-                  title={!order.assignedTo ? 'Asigná un técnico antes de iniciar la revisión' : ''}
-                  className={!order.assignedTo ? btnDisabled : btnPrimary}
-                >
-                  <Search size={16} />
-                  Iniciar revisión
-                </button>
-              )}
-              {status === 'en_revision' && isTech && (
-                <button
-                  onClick={() => doStatus('presupuesto')}
-                  disabled={busy === 'presupuesto' || !(order.fix || '').trim()}
-                  title={!(order.fix || '').trim() ? 'Registrá al menos una reparación antes de pasar a presupuesto' : ''}
-                  className={!(order.fix || '').trim() ? btnDisabled : btnPrimary}
-                >
-                  <Play size={16} />
-                  Cargar presupuesto
-                </button>
-              )}
-              {status === 'presupuesto' && isTech && (
-                <button
-                  onClick={() => doStatus('en_reparacion')}
-                  disabled={busy === 'en_reparacion' || !order.confirmed || !order.assignedTo}
-                  title={!order.confirmed ? 'El cliente debe confirmar el arreglo antes de reparar' : !order.assignedTo ? 'Asigná un técnico antes de iniciar la reparación' : ''}
-                  className={(!order.confirmed || !order.assignedTo) ? btnDisabled : btnPrimary}
-                >
-                  <Play size={16} />
-                  Aceptó → reparar
-                </button>
-              )}
-              {status === 'en_reparacion' && isTech && (
-                <>
-                  <button onClick={() => doStatus('terminado')} disabled={busy === 'terminado'} className={btnPrimary}>
-                    <CheckCircle2 size={16} />
-                    Marcar terminado (listo)
-                  </button>
-                  <button onClick={() => doStatus('falta_repuestos')} disabled={busy === 'falta_repuestos'} className={btnGhost}>
-                    <PackageX size={16} />
-                    Falta de repuestos
-                  </button>
-                </>
-              )}
-              {status === 'falta_repuestos' && isTech && (
-                <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnPrimary}>
-                  <Play size={16} />
-                  Repuestos llegaron
-                </button>
-              )}
-              {status === 'terminado' && isTech && (
-                <button onClick={() => doStatus('en_reparacion')} disabled={busy === 'en_reparacion'} className={btnGhost}>
-                  <RotateCcw size={16} />
-                  Volver a reparación
                 </button>
               )}
             </div>

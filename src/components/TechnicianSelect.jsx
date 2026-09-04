@@ -7,15 +7,18 @@ import { Check, ChevronDown, Wrench } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import ConfirmModal from './ConfirmModal.jsx'
 
-export default function TechnicianSelect({ order, onChanged }) {
+export default function TechnicianSelect({ order, value, onChange, onChanged }) {
   const { technicians, assignTechnician } = useData()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [alertModal, setAlertModal] = useState(null)
   const boxRef = useRef(null)
 
-  const value = order.assignedTo || ''
-  const current = technicians.find((t) => t.id === value)
+  // value/onChange presentes => modo controlado (asignación diferida, sin llamar
+  // a la API al elegir). Ausentes => modo inmediato (asigna al instante).
+  const controlled = value !== undefined && onChange !== undefined
+  const selected = controlled ? value : (order.assignedTo || '')
+  const current = technicians.find((t) => t.id === selected)
   const label = current?.name || 'Sin técnico'
 
   const close = () => setOpen(false)
@@ -37,7 +40,11 @@ export default function TechnicianSelect({ order, onChanged }) {
 
   const pick = async (userId) => {
     close()
-    if (userId === value) return
+    if (userId === selected) return
+    if (controlled) {
+      onChange(userId)
+      return
+    }
     setBusy(true)
     const res = await assignTechnician(order.id, userId)
     setBusy(false)
@@ -59,7 +66,7 @@ export default function TechnicianSelect({ order, onChanged }) {
         onClick={() => setOpen((v) => !v)}
         disabled={busy}
         className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-primary-500/30 ${
-          value
+          selected
             ? 'border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300'
             : 'border-dashed border-slate-300 bg-white text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400'
         } ${open ? 'ring-2 ring-primary-500/20' : ''}`}
@@ -75,20 +82,20 @@ export default function TechnicianSelect({ order, onChanged }) {
       {open && (
         <div className="absolute left-0 top-full z-20 mt-1.5 min-w-full overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
           {options.map((t) => {
-            const selected = t.id === value
+            const isSelected = t.id === selected
             return (
               <button
                 key={t.id || 'none'}
                 type="button"
                 onClick={() => pick(t.id)}
                 className={`flex w-full items-center justify-between gap-2 whitespace-nowrap px-3 py-2 text-left text-sm font-medium transition ${
-                  selected
+                  isSelected
                     ? 'bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
                 }`}
               >
                 <span className="truncate">{t.name}</span>
-                {selected && <Check size={16} className="shrink-0" />}
+                {isSelected && <Check size={16} className="shrink-0" />}
               </button>
             )
           })}
