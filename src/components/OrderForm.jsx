@@ -64,7 +64,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
-  const [filteredCatalog, setFilteredCatalog] = useState({ brands: [], models: [] })
+  const [filteredCatalog, setFilteredCatalog] = useState(null)
 
   const accessoryOptions = catalogLists?.accessories?.length ? catalogLists.accessories : ACCESSORY_FALLBACK
   const conditionOptions = catalogLists?.conditions?.length ? catalogLists.conditions : CONDITION_FALLBACK
@@ -102,7 +102,7 @@ setIssue('')
   // Fetch de marcas y modelos cuando cambia el tipo de dispositivo.
   useEffect(() => {
     if (!open || !deviceType || deviceType === 'Otro') {
-      setFilteredCatalog({ brands: [], models: [] })
+      setFilteredCatalog(null)
       return
     }
     let cancelled = false
@@ -115,23 +115,23 @@ setIssue('')
 
   // Badges de marcas y modelos según el catálogo (ordenado por uso).
   const filteredBrands = useMemo(() => {
-    if (deviceType && deviceType !== 'Otro' && filteredCatalog.brands.length > 0) return filteredCatalog.brands
+    if (filteredCatalog) return filteredCatalog.brands
     return catalog.brands || []
-  }, [catalog.brands, deviceType, filteredCatalog.brands])
+  }, [catalog.brands, filteredCatalog])
   const topBrands = useMemo(() => filteredBrands.slice(0, BRAND_BADGE_COUNT), [filteredBrands])
   const brandModels = useMemo(
     () => {
-      const models = (deviceType && deviceType !== 'Otro' && filteredCatalog.models.length > 0) ? filteredCatalog.models : (catalog.models || [])
+      const models = filteredCatalog ? filteredCatalog.models : (catalog.models || [])
       return models.filter((m) => m.brand === brand).slice(0, MODEL_BADGE_COUNT)
     },
-    [catalog.models, brand, deviceType, filteredCatalog.models],
+    [catalog.models, brand, filteredCatalog],
   )
   const allBrandModels = useMemo(
     () => {
-      const models = (deviceType && deviceType !== 'Otro' && filteredCatalog.models.length > 0) ? filteredCatalog.models : (catalog.models || [])
+      const models = filteredCatalog ? filteredCatalog.models : (catalog.models || [])
       return models.filter((m) => m.brand === brand)
     },
-    [catalog.models, brand, deviceType, filteredCatalog.models],
+    [catalog.models, brand, filteredCatalog],
   )
 
   const pickerList = picker === 'brand' ? filteredBrands : allBrandModels

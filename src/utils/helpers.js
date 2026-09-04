@@ -28,8 +28,10 @@ export function todayISO() {
 }
 
 // Parsea una fecha ISO a Date local (sin zona horaria).
+// Acepta YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss.sssZ
 export function parseISO(iso) {
-  const [y, m, d] = iso.split('-').map(Number)
+  const str = String(iso).slice(0, 10)
+  const [y, m, d] = str.split('-').map(Number)
   return new Date(y, m - 1, d)
 }
 
