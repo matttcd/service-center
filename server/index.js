@@ -300,6 +300,7 @@ app.get('/api/bootstrap', auth, async (req, res) => {
     const liveOrders = allOrders.filter((o) => !o.deletedAt)
     const orders = liveOrders
       .filter((o) => o.status !== 'entregado')
+      .filter((o) => req.user.role !== 'tecnico' || !o.isSimpleService)
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     const decorated = []
     for (const o of orders) decorated.push(await decorateOrder(o))
@@ -626,6 +627,7 @@ app.post('/api/orders', auth, async (req, res) => {
   const validTypes = ['Celular', 'Tablet', 'Notebook / PC', 'Smart TV', 'Consola', 'Impresora', 'Otro']
   const deviceType = validTypes.includes(body.deviceType) ? body.deviceType : 'Celular'
   const diagnosisType = body.diagnosisType === 'revision' ? 'revision' : 'visible'
+  const isSimpleService = !!body.isSimpleService
   const price = Math.max(0, Number(body.price) || 0)
   const advance = Math.max(0, Number(body.advance) || 0)
   const pattern = Array.isArray(body.pattern)
@@ -654,6 +656,7 @@ app.post('/api/orders', auth, async (req, res) => {
           noPin: !!body.noPin,
           pattern: storedPattern,
           diagnosisType,
+          isSimpleService,
           issue: sentenceCase(String(body.issue || '')),
           fix: normalizeList(String(body.fix || '')),
           price,
@@ -906,7 +909,7 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   if (status === 'entregado' && !order.notified && !retiro) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
   }
-  if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) && !isTech) {
+  if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) && !isTech && !(status === 'terminado' && order.isSimpleService)) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
   }
   if (status === 'presupuesto' && !['recepcion', 'admin', 'tecnico'].includes(role)) {
@@ -973,7 +976,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   const {
     deviceType, brand, model, pin, noPin, pattern, accessories, conditions,
-    technicianNotes, fix, price, issue, note, editNote, deleteNote,
+    technicianNotes, fix, price, issue, note, editNote, deleteNote, isSimpleService,
   } = req.body || {}
   const role = req.user.role
   const isAssignedTech = role === 'tecnico' && order.assignedTo === req.user.id
@@ -1036,6 +1039,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
       if (conditions !== undefined) updateData.conditions = normalizeList(String(conditions))
       if (technicianNotes !== undefined) updateData.technicianNotes = sentenceCase(String(technicianNotes))
       if (issue !== undefined) updateData.issue = sentenceCase(String(issue))
+      if (isSimpleService !== undefined) updateData.isSimpleService = !!isSimpleService
 
       const prevPrice = order.price
       if (price !== undefined) {
@@ -1397,8 +1401,11 @@ app.get('/api/metrics', auth, adminOnly, async (req, res) => {
 // ---------- Copias de seguridad (solo admin) ----------
 function runPgDump() {
   const url = process.env.DATABASE_URL
+    .replace(/[?&]schema=[^&]*/g, '')
+    .replace(/localhost:5432/, 'postgres:5432')
   return new Promise((resolve, reject) => {
-    execFile('pg_dump', ['--dbname', url, '--format=custom', '--file', 'stdout'], { maxBuffer: 1024 * 1024 * 50 }, (err, stdout) => {
+    const args = ['exec', 'service-center-db', 'pg_dump', '--dbname', url, '--format=custom']
+    execFile('docker', args, { maxBuffer: 1024 * 1024 * 50 }, (err, stdout) => {
       if (err) return reject(err)
       resolve(stdout)
     })

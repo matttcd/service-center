@@ -24,7 +24,6 @@ import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Badge from './Badge.jsx'
 import ConfirmModal from './ConfirmModal.jsx'
-import PrintOrderPanel from './PrintOrderPanel.jsx'
 import Modal from './Modal.jsx'
 import NotesModal from './NotesModal.jsx'
 import TechnicianSelect from './TechnicianSelect.jsx'
@@ -73,7 +72,8 @@ export default function OrderModal({ order, onClose }) {
   const [techValue, setTechValue] = useState(order?.assignedTo || '')
   const [busy, setBusy] = useState(false)
   const [alertModal, setAlertModal] = useState(null)
-  const [printOpen, setPrintOpen] = useState(false)
+  const [confirmNotify, setConfirmNotify] = useState(false)
+  const [confirm, setConfirm] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const canBudget = ['recepcion', 'admin'].includes(currentUser?.role)
@@ -155,6 +155,14 @@ export default function OrderModal({ order, onClose }) {
     if (res.error) setAlertModal(res.error)
   }
 
+  const doStatus = async (status) => {
+    setBusy(true)
+    const res = await setOrderStatus(order.id, status)
+    setBusy(false)
+    if (res.error) setAlertModal(res.error)
+    else onClose()
+  }
+
   const doConfirm = async () => {
     setBusy(true)
     const res = await confirmOrder(order.id, !order.confirmed)
@@ -194,11 +202,7 @@ export default function OrderModal({ order, onClose }) {
     setBusy(false)
     if (res.error) setAlertModal(res.error)
     else {
-      if (effectiveNext === 'terminado') {
-        setPrintOpen(true)
-      } else {
-        onClose()
-      }
+      onClose()
     }
   }
 
@@ -492,7 +496,6 @@ export default function OrderModal({ order, onClose }) {
                   </div>
                 </div>
               ) : (
-                (order.status !== 'recibido' || order.assignedTo) && (
                 <div>
                   <span className={labelCls}>Tipo de reparación</span>
                   <div className="flex flex-wrap items-center gap-3 mt-1">
@@ -539,7 +542,6 @@ export default function OrderModal({ order, onClose }) {
                     </div>
                   )}
                 </div>
-                )
               )}
             </div>
           </div>
@@ -576,8 +578,14 @@ export default function OrderModal({ order, onClose }) {
 
         {/* Acciones */}
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+          {canBudget && order.isSimpleService && order.status === 'recibido' && (
+            <button onClick={() => setConfirm({ title: 'Terminar servicio', message: '¿Marcar este servicio como terminado?', onConfirm: () => doStatus('terminado') })} disabled={busy} className={btnGhost}>
+              <CheckCircle2 size={14} />
+              Terminar
+            </button>
+          )}
           {canBudget && !isReadOnly && ['presupuesto', 'terminado'].includes(order.status) && (
-            <button onClick={doNotify} disabled={busy} className={btnGhost}>
+            <button onClick={() => setConfirmNotify(true)} disabled={busy} className={btnGhost}>
               {order.notified ? <BellOff size={14} /> : <Bell size={14} />}
               {order.notified ? 'Desmarcar avisado' : 'Marcar avisado'}
             </button>
@@ -611,6 +619,20 @@ export default function OrderModal({ order, onClose }) {
       message={alertModal}
       type="alert"
     />
+    <ConfirmModal
+      open={confirmNotify}
+      onClose={() => setConfirmNotify(false)}
+      onConfirm={() => { setConfirmNotify(false); doNotify() }}
+      title={order.notified ? 'Desmarcar aviso' : 'Avisar al cliente'}
+      message={order.notified ? '¿Desmarcar al cliente como avisado?' : '¿Marcar al cliente como avisado?'}
+    />
+    <ConfirmModal
+      open={!!confirm}
+      onClose={() => setConfirm(null)}
+      onConfirm={() => { const fn = confirm?.onConfirm; setConfirm(null); fn?.() }}
+      title={confirm?.title}
+      message={confirm?.message}
+    />
     <NotesModal
       open={notesModalOpen}
       onClose={() => setNotesModalOpen(false)}
@@ -620,12 +642,6 @@ export default function OrderModal({ order, onClose }) {
       onSave={saveNote}
       onEdit={(noteId, text) => editNote(order.id, noteId, text)}
       onDelete={(noteId) => deleteNote(order.id, noteId)}
-    />
-    <PrintOrderPanel
-      open={printOpen}
-      order={order}
-      customer={customer}
-      onClose={() => { setPrintOpen(false); onClose() }}
     />
     </>
   )

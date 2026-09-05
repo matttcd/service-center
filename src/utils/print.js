@@ -12,11 +12,12 @@ export async function printOrderServer(orderId, printer = null) {
 }
 
 // Lista de impresoras instaladas en la PC Windows (print_bridge).
+// Devuelve { printers: string[], error: string | null }.
 export async function listPrinters() {
   try {
     const data = await api('/printers')
-    return data.printers || []
-  } catch {
-    return []
+    return { printers: data.printers || [], error: data.error || null }
+  } catch (e) {
+    return { printers: [], error: e.message || 'No se encontraron impresoras.' }
   }
 }

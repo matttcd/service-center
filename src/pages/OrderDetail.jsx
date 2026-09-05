@@ -67,6 +67,7 @@ export default function OrderDetail() {
   const [showHistory, setShowHistory] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [pickupModal, setPickupModal] = useState(null)
+  const [confirmNotify, setConfirmNotify] = useState(false)
 
   // Edición de equipo
   const [editingEquip, setEditingEquip] = useState(false)
@@ -163,7 +164,7 @@ export default function OrderDetail() {
         setLocalOrder(fresh.order)
       } else if (next === 'terminado') {
         showNotice('Equipo marcado como listo. Avisale al cliente.')
-        setPrintOpen(true)
+        if (!order.isSimpleService) setPrintOpen(true)
       } else showNotice('Estado actualizado.')
     } finally {
       setBusy(null)
@@ -725,6 +726,12 @@ export default function OrderDetail() {
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
 
               {/* === ACCIONES RECEPCIÓN / ADMIN === */}
+              {isCounter && status === 'recibido' && order.isSimpleService && (
+                <button key="terminar" onClick={() => setConfirm({ title: 'Terminar servicio', message: '¿Marcar este servicio como terminado?', onConfirm: () => doStatus('terminado') })} disabled={busy === 'terminado'} className={btnPrimary}>
+                  <CheckCircle2 size={16} />
+                  Terminar
+                </button>
+              )}
               {isCounter && status === 'presupuesto' && !order.notified && !order.price && (
                 <p key="no-price" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
                   <FileText size={14} className="text-amber-500" />
@@ -732,7 +739,7 @@ export default function OrderDetail() {
                 </p>
               )}
               {isCounter && status === 'presupuesto' && !order.notified && order.price && (
-                <button key="avisar" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
+                <button key="avisar" onClick={() => setConfirmNotify(true)} disabled={busy === 'notified'} className={btnPrimary}>
                   <BellRing size={16} />
                   Avisar al cliente
                 </button>
@@ -755,7 +762,7 @@ export default function OrderDetail() {
                 </p>
               )}
               {isCounter && status === 'terminado' && !order.notified && (
-                <button key="avisar2" onClick={handleNotified} disabled={busy === 'notified'} className={btnPrimary}>
+                <button key="avisar2" onClick={() => setConfirmNotify(true)} disabled={busy === 'notified'} className={btnPrimary}>
                   <BellRing size={16} />
                   Avisar al cliente
                 </button>
@@ -838,6 +845,13 @@ export default function OrderDetail() {
         title={confirm?.title}
         message={confirm?.message}
         danger={confirm?.danger}
+      />
+      <ConfirmModal
+        open={confirmNotify}
+        onClose={() => setConfirmNotify(false)}
+        onConfirm={() => { setConfirmNotify(false); handleNotified() }}
+        title="Avisar al cliente"
+        message="¿Marcar al cliente como avisado?"
       />
       <PickupModal
         open={!!pickupModal}

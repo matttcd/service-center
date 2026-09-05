@@ -4,7 +4,7 @@
 //   - Opción A: impresión desde el navegador (cualquier impresora del dispositivo).
 // ============================================
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Printer, Monitor, RotateCw } from 'lucide-react'
+import { Loader2, Printer, Monitor, RotateCw, AlertTriangle } from 'lucide-react'
 import Modal from './Modal.jsx'
 import { printOrderServer, listPrinters } from '../utils/print.js'
 import { loadSession } from '../utils/storage.js'
@@ -17,6 +17,7 @@ export default function PrintOrderPanel({ open, order, onClose }) {
   const [notice, setNotice] = useState(null)
   const [pdfReady, setPdfReady] = useState(false)
   const [pdfError, setPdfError] = useState(null)
+  const [printerError, setPrinterError] = useState(null)
   const pdfBlobUrlRef = useRef(null)
 
   useEffect(() => {
@@ -24,6 +25,7 @@ export default function PrintOrderPanel({ open, order, onClose }) {
     setPdfReady(false)
     setPdfError(null)
     setNotice(null)
+    setPrinterError(null)
     setLoadingPrinters(true)
 
     const session = loadSession()
@@ -43,11 +45,12 @@ export default function PrintOrderPanel({ open, order, onClose }) {
       .catch((e) => setPdfError(e.message || 'No se pudo generar el PDF.'))
 
     const fetchPrinters = listPrinters()
-      .then((list) => {
+      .then(({ printers: list, error }) => {
         setPrinters(list)
         setSelected('')
+        if (error) setPrinterError(error)
       })
-      .catch(() => {})
+      .catch(() => setPrinterError('No se encontraron impresoras.'))
       .finally(() => setLoadingPrinters(false))
 
     Promise.allSettled([fetchPdf, fetchPrinters])
@@ -168,6 +171,20 @@ export default function PrintOrderPanel({ open, order, onClose }) {
             <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
               <Loader2 size={16} className="animate-spin" /> Cargando impresoras…
             </p>
+          ) : printerError ? (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-500" />
+              <div className="flex-1 text-sm">
+                <p className="font-medium text-amber-800 dark:text-amber-200">No se encontraron impresoras.</p>
+                <p className="mt-1 text-amber-700 dark:text-amber-300">Pedile a un administrador que verifique la conexión.</p>
+              </div>
+              <button
+                onClick={() => { setPrinterError(null); setLoadingPrinters(true); listPrinters().then(({ printers: l, error }) => { setPrinters(l); setSelected(''); if (error) setPrinterError(error) }).catch(() => setPrinterError('No se encontraron impresoras.')).finally(() => setLoadingPrinters(false)) }}
+                className="shrink-0 rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-500/40 dark:text-amber-300 dark:hover:bg-amber-500/20"
+              >
+                Reintentar
+              </button>
+            </div>
           ) : (
             <select
               value={selected}
