@@ -8,7 +8,7 @@ import {
   ArrowLeft, Printer, Trash2, Check, CheckCircle2, FileText,
   PackageCheck, RotateCcw, Sticker, Save, Phone, BellRing,
   Lock, Smartphone, User, X, Pencil, MoreVertical, StickyNote, History, ChevronDown,
-  Tablet, Laptop, Monitor, Gamepad2, HelpCircle,
+  Tablet, Laptop, Monitor, Gamepad2, HelpCircle, Truck,
 } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -332,6 +332,9 @@ export default function OrderDetail() {
   if (isCounter && status !== 'entregado') {
     menuItems.push({ key: 'retiro', label: 'Retirar equipo', Icon: PackageCheck, onClick: () => { setMenuOpen(false); setPickupModal({ onConfirm: handleRetiro }) } })
     menuItems.push({ key: 'retiro-sin-orden', label: 'Retirar sin orden', Icon: PackageCheck, onClick: () => { setMenuOpen(false); setPickupModal({ onConfirm: handleRetiro, mode: 'sin-orden' }) } })
+  }
+  if (isCounter && status === 'recibido') {
+    menuItems.push({ key: 'enviar-tercero', label: 'Enviar a tercero', Icon: Truck, onClick: () => { setMenuOpen(false); setSendExternalModal(true) } })
   }
   if (isCounter && status === 'entregado') {
     menuItems.push({ key: 'reprint-pickup', label: 'Reimprimir constancia', Icon: Printer, onClick: () => { setMenuOpen(false); handlePrintPickup() } })
@@ -811,14 +814,7 @@ export default function OrderDetail() {
               </div>
             )}
 
-            {/* === ACCIONES ENVIAR / RECIBIR DE TERCERO === */}
-            {isCounter && order.status !== 'entregado' && order.status !== 'en_tercero' && (
-              <div className="mt-4 flex justify-end">
-                <button onClick={() => setSendExternalModal(true)} disabled={busy} className={btnGhost}>
-                  Enviar a tercero
-                </button>
-              </div>
-            )}
+            {/* === ACCIONES RECIBIR DE TERCERO === */}
             {isCounter && order.status === 'en_tercero' && (
               <div className="mt-4 flex justify-end">
                 <button onClick={() => setConfirm({
