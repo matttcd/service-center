@@ -110,6 +110,7 @@ export function orderStatusTone(status) {
     falta_repuestos: 'orange',
     terminado: 'green',
     entregado: 'slate',
+    en_tercero: 'amber',
   }
   return map[status] || 'slate'
 }

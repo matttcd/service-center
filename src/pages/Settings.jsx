@@ -2,7 +2,7 @@
 // Settings: configuración general (solo admin)
 // ============================================
 import { useEffect, useState } from 'react'
-import { Save, AlertCircle, CheckCircle2, Stethoscope, Upload, Plus, X, Package, MonitorSmartphone, Wrench, FileText } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle2, Stethoscope, Upload, Plus, X, Package, MonitorSmartphone, Wrench, FileText, Users } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import { formatMoney } from '../utils/helpers.js'
@@ -499,6 +499,14 @@ export default function Settings() {
         desc="Cláusulas que se imprimen al pie de cada orden. Máximo 1600 caracteres en total."
         items={catalogLists.terms}
         onSave={(list) => saveCatalogLists({ terms: list })}
+      />
+
+      <ListEditor
+        title="Técnicos externos"
+        icon={<Users size={18} className="text-amber-500" />}
+        desc="Nombres de los técnicos externos disponibles para envío de equipos."
+        items={catalogLists.externalTechnicians}
+        onSave={(list) => saveCatalogLists({ externalTechnicians: list })}
       />
     </div>
   )

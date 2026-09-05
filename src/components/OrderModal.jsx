@@ -577,11 +577,24 @@ export default function OrderModal({ order, onClose }) {
         )}
 
         {/* Acciones */}
+        {order.externalTech && order.status === 'en_tercero' && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-600 dark:bg-amber-500/10">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              Enviado a: <strong>{order.externalTech}</strong>
+              {order.externalSentAt && ` — ${formatDateTime(order.externalSentAt)}`}
+            </p>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
           {canBudget && order.isSimpleService && order.status === 'recibido' && (
             <button onClick={() => setConfirm({ title: 'Terminar servicio', message: '¿Marcar este servicio como terminado?', onConfirm: () => doStatus('terminado') })} disabled={busy} className={btnGhost}>
               <CheckCircle2 size={14} />
               Terminar
+            </button>
+          )}
+          {canBudget && order.status !== 'entregado' && order.status !== 'en_tercero' && (
+            <button onClick={() => navigate(`/ordenes/${order.id}`)} disabled={busy} className={btnGhost}>
+              Enviar a tercero
             </button>
           )}
           {canBudget && !isReadOnly && ['presupuesto', 'terminado'].includes(order.status) && (

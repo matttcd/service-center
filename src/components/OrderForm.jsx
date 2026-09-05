@@ -57,6 +57,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [pattern, setPattern] = useState([])
   const [diagnosisType, setDiagnosisType] = useState('visible') // 'visible' | 'revision'
   const [isSimpleService, setIsSimpleService] = useState(false)
+  const [isExternal, setIsExternal] = useState(false)
   const [issue, setIssue] = useState('')
   const [fixes, setFixes] = useState([])
   const [customFix, setCustomFix] = useState('')
@@ -285,6 +286,7 @@ setIssue('')
         pattern: pattern.length >= 3 ? pattern : null,
         diagnosisType,
         isSimpleService,
+        isExternal,
         issue: sentenceCase(issue.trim()),
         fix: (diagnosisType === 'visible' ? [...fixes, customFix.trim()].filter(Boolean) : []).map((f) => titleCase(f)).join(', '),
         price: Number(price) || 0,
@@ -567,6 +569,11 @@ setIssue('')
               <input type="checkbox" checked={isSimpleService} onChange={(e) => setIsSimpleService(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
               Servicio simple (resuelve recepción)
+            </label>
+            <label className="mt-2 flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-300">
+              <input type="checkbox" checked={isExternal} onChange={(e) => setIsExternal(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500" />
+              Enviar a técnico externo
             </label>
           </div>
 

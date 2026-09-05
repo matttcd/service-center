@@ -68,7 +68,7 @@ export default function Taller() {
         return toTime(last(b)) - toTime(last(a))
       })
     return COLUMNS.map((c, i) => {
-      let sorted = byLastActivity(orders.filter((o) => c.statuses.includes(o.status) && !o.isSimpleService))
+      let sorted = byLastActivity(orders.filter((o) => c.statuses.includes(o.status) && !o.isSimpleService && o.status !== 'en_tercero'))
       if (c.key === 'presupuesto') {
         sorted = [...sorted].sort((a, b) => {
           if (a.confirmed && !b.confirmed) return -1

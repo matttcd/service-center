@@ -12,6 +12,7 @@ export const ORDER_STATUSES = [
   'falta_repuestos',
   'terminado',
   'entregado',
+  'en_tercero',
 ]
 
 // Etiqueta legible de cada estado.
@@ -23,6 +24,7 @@ export const ORDER_STATUS_LABEL = {
   falta_repuestos: 'Falta de repuestos',
   terminado: 'Listo para retirar',
   entregado: 'Entregado',
+  en_tercero: 'En tercero',
 }
 
 // Transiciones permitidas desde cada estado, respetando el tipo de diagnóstico
@@ -31,20 +33,22 @@ export const ORDER_STATUS_LABEL = {
 export function allowedTransitions(order) {
   switch (order?.status) {
     case 'recibido':
-      if (order.isSimpleService) return ['terminado', 'en_reparacion', 'entregado']
+      if (order.isSimpleService) return ['terminado', 'en_reparacion', 'entregado', 'en_tercero']
       return order.diagnosisType === 'revision'
-        ? ['en_revision', 'entregado']
-        : ['en_reparacion', 'entregado']
+        ? ['en_revision', 'entregado', 'en_tercero']
+        : ['en_reparacion', 'entregado', 'en_tercero']
     case 'en_revision':
-      return ['presupuesto', 'entregado']
+      return ['presupuesto', 'entregado', 'en_tercero']
     case 'presupuesto':
-      return ['en_reparacion', 'entregado']
+      return ['en_reparacion', 'entregado', 'en_tercero']
     case 'en_reparacion':
-      return ['terminado', 'presupuesto', 'entregado', 'falta_repuestos']
+      return ['terminado', 'presupuesto', 'entregado', 'falta_repuestos', 'en_tercero']
     case 'falta_repuestos':
-      return ['en_reparacion', 'entregado']
+      return ['en_reparacion', 'entregado', 'en_tercero']
     case 'terminado':
-      return ['entregado', 'en_reparacion']
+      return ['entregado', 'en_reparacion', 'en_tercero']
+    case 'en_tercero':
+      return ['recibido', 'en_revision', 'presupuesto', 'en_reparacion', 'falta_repuestos', 'terminado']
     case 'entregado':
       return ['recibido']
     default:
@@ -66,6 +70,7 @@ export function nextStatusLabel(order) {
     en_reparacion: 'Reparar',
     presupuesto: 'Presupuesto',
     terminado: 'Listo',
+    en_tercero: 'Enviar a tercero',
   }
   return target ? labels[target] || '' : ''
 }
@@ -91,6 +96,12 @@ const COUNTER_ROLES = ['recepcion', 'admin']
 export function canTransitionForRole(to, role, order) {
   if (to === 'terminado' && COUNTER_ROLES.includes(role) && order?.isSimpleService) {
     return true
+  }
+  if (to === 'en_tercero' && !COUNTER_ROLES.includes(role)) {
+    return false
+  }
+  if (order?.status === 'en_tercero' && !COUNTER_ROLES.includes(role)) {
+    return false
   }
   if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(to) && !TECH_ROLES.includes(role)) {
     return false

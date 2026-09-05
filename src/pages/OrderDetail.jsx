@@ -58,7 +58,7 @@ export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote } = useData()
+  const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote, catalogLists } = useData()
   const [printOpen, setPrintOpen] = useState(false)
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
@@ -68,6 +68,8 @@ export default function OrderDetail() {
   const [confirm, setConfirm] = useState(null)
   const [pickupModal, setPickupModal] = useState(null)
   const [confirmNotify, setConfirmNotify] = useState(false)
+  const [sendExternalModal, setSendExternalModal] = useState(false)
+  const [externalTechDraft, setExternalTechDraft] = useState('')
 
   // Edición de equipo
   const [editingEquip, setEditingEquip] = useState(false)
@@ -152,11 +154,11 @@ export default function OrderDetail() {
     if (msg) noticeTimer.current = window.setTimeout(() => setNotice(''), 6000)
   }
 
-  const doStatus = async (next) => {
+  const doStatus = async (next, extras = {}) => {
     setBusy(next)
     setNotice('')
     try {
-      const res = await setOrderStatus(order.id, next)
+      const res = await setOrderStatus(order.id, next, extras)
       if (res.error) return showNotice(res.error)
       if (next === 'entregado') {
         showNotice('Equipo entregado.')
@@ -165,10 +167,21 @@ export default function OrderDetail() {
       } else if (next === 'terminado') {
         showNotice('Equipo marcado como listo. Avisale al cliente.')
         if (!order.isSimpleService) setPrintOpen(true)
+      } else if (next === 'en_tercero') {
+        showNotice(`Equipo enviado a ${extras.externalTech || 'técnico externo'}.`)
+      } else if (order?.status === 'en_tercero') {
+        showNotice('Equipo recibido de técnico externo.')
       } else showNotice('Estado actualizado.')
     } finally {
       setBusy(null)
     }
+  }
+
+  const handleSendExternal = () => {
+    if (!externalTechDraft) return
+    doStatus('en_tercero', { externalTech: externalTechDraft })
+    setSendExternalModal(false)
+    setExternalTechDraft('')
   }
 
   const handleRetiro = async () => {
@@ -780,6 +793,40 @@ export default function OrderDetail() {
                 </button>
               )}
             </div>
+
+            {/* === INFORMACIÓN TÉCNICO EXTERNO === */}
+            {order.externalTech && order.status === 'en_tercero' && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-500/10">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  Enviado a técnico externo: <strong>{order.externalTech}</strong>
+                  {order.externalSentAt && ` — ${formatDateTime(order.externalSentAt)}`}
+                </p>
+              </div>
+            )}
+            {order.externalTech && order.externalReturnAt && order.status !== 'en_tercero' && (
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  Último técnico externo: <strong>{order.externalTech}</strong> — devuelto el {formatDateTime(order.externalReturnAt)}
+                </p>
+              </div>
+            )}
+
+            {/* === ACCIONES ENVIAR / RECIBIR DE TERCERO === */}
+            {isCounter && order.status !== 'entregado' && order.status !== 'en_tercero' && (
+              <div className="mt-4 flex justify-end">
+                <button onClick={() => setSendExternalModal(true)} disabled={busy} className={btnGhost}>
+                  Enviar a tercero
+                </button>
+              </div>
+            )}
+            {isCounter && order.status === 'en_tercero' && (
+              <div className="mt-4 flex justify-end">
+                <button onClick={() => doStatus('recibido')} disabled={busy === 'recibido'} className={btnPrimary}>
+                  <RotateCcw size={16} />
+                  Recibir de tercero
+                </button>
+              </div>
+            )}
           </div>
         </section>
 
@@ -872,6 +919,30 @@ export default function OrderDetail() {
         onEdit={(noteId, text) => editNote(order.id, noteId, text)}
         onDelete={(noteId) => deleteNote(order.id, noteId)}
       />
+
+      {/* Modal enviar a técnico externo */}
+      {sendExternalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Enviar a técnico externo</h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Seleccioná el técnico externo al que se enviará el equipo.</p>
+            <select
+              value={externalTechDraft}
+              onChange={(e) => setExternalTechDraft(e.target.value)}
+              className="mt-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">Seleccionar...</option>
+              {(catalogLists?.externalTechnicians || []).map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => { setSendExternalModal(false); setExternalTechDraft('') }} className={btnGhost}>Cancelar</button>
+              <button onClick={handleSendExternal} disabled={!externalTechDraft || busy} className={btnPrimary}>Enviar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

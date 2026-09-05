@@ -349,6 +349,7 @@ export function DataProvider({ children }) {
       conditions: data.catalog?.conditions || [],
       fixes: data.catalog?.fixes || [],
       terms: data.catalog?.terms || [],
+      externalTechnicians: data.catalog?.externalTechnicians || [],
     },
     actividad,
     actividadHasMore,

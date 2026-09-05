@@ -301,6 +301,8 @@ app.get('/api/bootstrap', auth, async (req, res) => {
     const orders = liveOrders
       .filter((o) => o.status !== 'entregado')
       .filter((o) => req.user.role !== 'tecnico' || !o.isSimpleService)
+      .filter((o) => req.user.role !== 'tecnico' || o.status !== 'en_tercero')
+      .filter((o) => req.user.role !== 'tecnico' || !(o.isExternal && o.status === 'recibido'))
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     const decorated = []
     for (const o of orders) decorated.push(await decorateOrder(o))
@@ -347,6 +349,7 @@ async function loadCatalog(deviceType) {
     loadConfigValue('main'),
   ])
   const terms = config?.terms ? config.terms : DEFAULT_LISTS.terms
+  const externalTechnicians = config?.externalTechnicians ?? DEFAULT_LISTS.externalTechnicians
   return {
     brands: [...brands].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name)),
     models: [...models].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name)),
@@ -354,6 +357,7 @@ async function loadCatalog(deviceType) {
     conditions: conditions.map((c) => c.name),
     fixes: fixes.map((f) => f.name),
     terms,
+    externalTechnicians,
   }
 }
 
@@ -447,6 +451,7 @@ app.get('/api/catalog/lists', auth, async (req, res) => {
     conditions: catalog.conditions,
     fixes: catalog.fixes,
     terms: catalog.terms,
+    externalTechnicians: catalog.externalTechnicians,
   })
 })
 
@@ -465,7 +470,10 @@ app.put('/api/catalog/lists', auth, async (req, res) => {
   const conditions = normalize(body.conditions)
   const fixes = normalize(body.fixes)
   const terms = normalizeTerms(body.terms)
-  if (accessories === undefined && conditions === undefined && fixes === undefined && terms === undefined) {
+  const externalTechnicians = Array.isArray(body.externalTechnicians)
+    ? body.externalTechnicians.map((s) => titleCase(String(s).trim())).filter(Boolean)
+    : undefined
+  if (accessories === undefined && conditions === undefined && fixes === undefined && terms === undefined && externalTechnicians === undefined) {
     return res.status(400).json({ error: 'No se envió ninguna lista para actualizar.' })
   }
   const MAX_TERMS_CHARS = 1600
@@ -489,6 +497,10 @@ app.put('/api/catalog/lists', auth, async (req, res) => {
       if (terms !== undefined) {
         const current = (await loadConfigValue('main')) || {}
         await upsertConfig('main', { ...current, terms })
+      }
+      if (externalTechnicians !== undefined) {
+        const current = (await loadConfigValue('main')) || {}
+        await upsertConfig('main', { ...current, externalTechnicians })
       }
     })
     res.json({ ok: true })
@@ -628,6 +640,8 @@ app.post('/api/orders', auth, async (req, res) => {
   const deviceType = validTypes.includes(body.deviceType) ? body.deviceType : 'Celular'
   const diagnosisType = body.diagnosisType === 'revision' ? 'revision' : 'visible'
   const isSimpleService = !!body.isSimpleService
+  const isExternal = !!body.isExternal
+  const externalTech = isExternal ? titleCase(String(body.externalTech || '').trim()) : ''
   const price = Math.max(0, Number(body.price) || 0)
   const advance = Math.max(0, Number(body.advance) || 0)
   const pattern = Array.isArray(body.pattern)
@@ -657,6 +671,9 @@ app.post('/api/orders', auth, async (req, res) => {
           pattern: storedPattern,
           diagnosisType,
           isSimpleService,
+          isExternal,
+          externalTech,
+          ...(isExternal ? { externalSentAt: new Date() } : {}),
           issue: sentenceCase(String(body.issue || '')),
           fix: normalizeList(String(body.fix || '')),
           price,
@@ -866,7 +883,7 @@ app.delete('/api/orders/:id', auth, adminOnly, async (req, res) => {
 
 // ---------- Estado de una orden ----------
 app.post('/api/orders/:id/status', auth, async (req, res) => {
-  const { status, retiro, assignedTo } = req.body || {}
+  const { status, retiro, assignedTo, externalTech } = req.body || {}
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
@@ -909,6 +926,15 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   if (status === 'entregado' && !order.notified && !retiro) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
   }
+  if (status === 'en_tercero' && !isCounter) {
+    return res.status(403).json({ error: 'Solo recepción (o el admin) puede enviar a técnico externo.' })
+  }
+  if (status === 'en_tercero' && (!externalTech || !externalTech.trim())) {
+    return res.status(400).json({ error: 'Seleccioná el técnico externo.' })
+  }
+  if (from === 'en_tercero' && !isCounter) {
+    return res.status(403).json({ error: 'Solo recepción (o el admin) puede recibir de técnico externo.' })
+  }
   if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) && !isTech && !(status === 'terminado' && order.isSimpleService)) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
   }
@@ -931,6 +957,8 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
       else if (status === 'recibido' && previous === 'entregado') note = 'Reingreso por garantía'
       else if (status === 'falta_repuestos') note = 'Esperando repuestos'
       else if (status === 'en_reparacion' && previous === 'falta_repuestos') note = 'Repuestos recibidos'
+      else if (status === 'en_tercero') note = `Enviado a técnico externo: ${externalTech}`
+      else if (from === 'en_tercero') note = `Equipo devuelto por ${order.externalTech || 'técnico externo'}`
       else if (assignedTo !== undefined) {
         const t = assignedTo ? await prisma.user.findUnique({ where: { id: assignedTo } }) : null
         note = `Asignado a ${assignedTo ? (t?.name || '—') : 'sin técnico'}`
@@ -941,6 +969,8 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
         ...(assignedTo !== undefined ? { assignedTo: assignedTo || null } : {}),
         ...(status === 'recibido' && previous === 'entregado' ? { warrantyReturn: true } : {}),
         ...(status === 'entregado' ? { warrantyReturn: false } : {}),
+        ...(status === 'en_tercero' ? { externalTech, externalSentAt: new Date() } : {}),
+        ...(from === 'en_tercero' ? { externalReturnAt: new Date() } : {}),
         ...(['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) ? { repairedBy: req.user.id } : {}),
         ...(['presupuesto', 'terminado'].includes(status) ? { notified: false, notifiedAt: null, notifiedBy: null } : {}),
         ...(status === 'presupuesto' ? { confirmed: false, confirmedAt: null, confirmedBy: null } : {}),
