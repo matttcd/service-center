@@ -355,7 +355,7 @@ async function loadCatalog(deviceType) {
     models: [...models].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name)),
     accessories: accessories.map((a) => a.name),
     conditions: conditions.map((c) => c.name),
-    fixes: fixes.map((f) => f.name),
+    fixes: [...fixes].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name)).map((f) => f.name),
     terms,
     externalTechnicians,
   }
@@ -530,6 +530,19 @@ async function bumpCatalog(brand, model, deviceType = 'Celular') {
   }
 }
 
+// Incrementa usage de cada fix en el catálogo.
+async function bumpFixUsage(fixString) {
+  if (!fixString) return
+  const names = String(fixString).split(',').map((s) => s.trim()).filter(Boolean)
+  for (const name of names) {
+    await prisma.catalogFix.upsert({
+      where: { name },
+      update: { usage: { increment: 1 } },
+      create: { name, usage: 1 },
+    })
+  }
+}
+
 // ---------- Clientes ----------
 app.post('/api/customers', auth, async (req, res) => {
   const { fullName, dni, phone, phone2, phone3, email, address } = req.body || {}
@@ -688,6 +701,7 @@ app.post('/api/orders', auth, async (req, res) => {
         include: orderInclude,
       })
       await bumpCatalog(brand, model, deviceType)
+      await bumpFixUsage(body.fix)
       await audit(
         'create',
         'orders',
@@ -1081,6 +1095,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
       if (fix !== undefined) {
         updateData.fix = normalizeList(String(fix))
         historyCreates.push({ status: order.status, at: new Date(), by: req.user.id, note: `Arreglo: ${normalizeList(String(fix)) || 'sin definir'}` })
+        await bumpFixUsage(fix)
       }
 
       // Notas vía note (append a notesLog)

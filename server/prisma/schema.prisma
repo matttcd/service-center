@@ -157,8 +157,9 @@ model CatalogCondition {
 }
 
 model CatalogFix {
-  id   String @id @default(uuid())
-  name String @unique
+  id    String @id @default(uuid())
+  name  String @unique
+  usage Int    @default(0)
 }
 
 // ---------- Auditoría ----------
