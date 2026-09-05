@@ -13,6 +13,7 @@ const COLUMNS = [
   { key: 'entrantes', statuses: ['recibido'], title: 'Entrantes' },
   { key: 'taller', statuses: ['en_revision', 'en_reparacion', 'falta_repuestos'], title: 'En taller' },
   { key: 'presupuesto', statuses: ['presupuesto'], title: 'Presupuesto' },
+  { key: 'externos', statuses: ['en_tercero'], title: 'Externos' },
 ]
 
 function Column({ title, orders, onOpen, defaultOpen = false }) {
@@ -68,7 +69,7 @@ export default function Taller() {
         return toTime(last(b)) - toTime(last(a))
       })
     return COLUMNS.map((c, i) => {
-      let sorted = byLastActivity(orders.filter((o) => c.statuses.includes(o.status) && !o.isSimpleService && o.status !== 'en_tercero'))
+      let sorted = byLastActivity(orders.filter((o) => c.statuses.includes(o.status) && !o.isSimpleService))
       if (c.key === 'presupuesto') {
         sorted = [...sorted].sort((a, b) => {
           if (a.confirmed && !b.confirmed) return -1

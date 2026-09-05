@@ -65,7 +65,7 @@ export default function App() {
         <Route
           path="terminados"
           element={
-            <RequireRole roles={['tecnico', 'admin']}>
+            <RequireRole roles={['tecnico', 'admin', 'recepcion']}>
               <Terminados />
             </RequireRole>
           }
