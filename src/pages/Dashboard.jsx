@@ -3,7 +3,7 @@
 // ============================================
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Megaphone, FileText, CheckCircle2, Eye, Inbox, PackageX, DollarSign } from 'lucide-react'
+import { Megaphone, FileText, CheckCircle2, Eye, Inbox, PackageX, DollarSign, Truck } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import { formatDate, titleCase, normalizeList } from '../utils/helpers.js'
@@ -13,7 +13,7 @@ const TABS = [
   { key: 'sin_presupuesto', label: 'Sin presupuesto', Icon: DollarSign, tone: 'text-amber-500', emptyText: 'No hay revisiones pendientes de presupuesto.' },
   { key: 'presupuestos', label: 'Pend. aprobación', Icon: FileText, tone: 'text-primary-500', emptyText: 'No hay presupuestos esperando confirmación del cliente.' },
   { key: 'falta_repuestos', label: 'Falta repuestos', Icon: PackageX, tone: 'text-orange-500', emptyText: 'No hay equipos esperando repuestos.' },
-  { key: 'listos', label: 'Terminados', Icon: CheckCircle2, tone: 'text-emerald-500', emptyText: 'No hay equipos terminados esperando retiro.' },
+  { key: 'externos', label: 'Externos', Icon: Truck, tone: 'text-amber-500', emptyText: 'No hay equipos enviados a técnicos externos.' },
 ]
 
 function KpiCard({ label, value, Icon, color }) {
@@ -64,13 +64,13 @@ function QueueRow({ title, Icon, tone, items, emptyText }) {
 }
 
 export default function Dashboard() {
-  const { pendingBudgetOrders, readyOrders, porAvisarOrders, faltaRepuestosOrders, ingresaronHoyOrders, presupuestoSinPrecioOrders } = useData()
+  const { pendingBudgetOrders, externosOrders, porAvisarOrders, faltaRepuestosOrders, ingresaronHoyOrders, presupuestoSinPrecioOrders } = useData()
   const [activeTab, setActiveTab] = useState('avisar')
 
   const counts = {
     avisar: porAvisarOrders.length,
     presupuestos: pendingBudgetOrders.length,
-    listos: readyOrders.length,
+    externos: externosOrders.length,
     falta_repuestos: faltaRepuestosOrders.length,
     sin_presupuesto: presupuestoSinPrecioOrders.length,
   }
@@ -78,7 +78,7 @@ export default function Dashboard() {
   const tabData = {
     avisar: porAvisarOrders,
     presupuestos: pendingBudgetOrders,
-    listos: readyOrders,
+    externos: externosOrders,
     falta_repuestos: faltaRepuestosOrders,
     sin_presupuesto: presupuestoSinPrecioOrders,
   }

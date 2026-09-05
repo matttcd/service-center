@@ -308,6 +308,7 @@ export function DataProvider({ children }) {
 
     return {
       readyOrders: byLastActivity(byStatus('terminado').filter((o) => o.notified)),
+      externosOrders: byLastActivity(byStatus('en_tercero')),
       pendingBudgetOrders: byLastActivity(
         byStatus('presupuesto').filter((o) => o.price && o.notified && !o.confirmed),
       ),
