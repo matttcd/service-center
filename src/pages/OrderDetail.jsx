@@ -821,7 +821,11 @@ export default function OrderDetail() {
             )}
             {isCounter && order.status === 'en_tercero' && (
               <div className="mt-4 flex justify-end">
-                <button onClick={() => doStatus('recibido')} disabled={busy === 'recibido'} className={btnPrimary}>
+                <button onClick={() => setConfirm({
+                  title: 'Recibir de tercero',
+                  message: '¿Confirmar que el equipo llegó del técnico externo?',
+                  onConfirm: () => doStatus('recibido'),
+                })} disabled={busy === 'recibido'} className={btnPrimary}>
                   <RotateCcw size={16} />
                   Recibir de tercero
                 </button>
