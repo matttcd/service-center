@@ -18,7 +18,8 @@ import express from 'express'
 import cors from 'cors'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import { PrismaClient } from '@prisma/client'
+
+import { prisma, onDataChange, notifyChange } from './db.js'
 
 import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase, normalizeList } from './helpers.js'
 import { printZplLabel } from './printer.js'
@@ -28,8 +29,6 @@ import { buildOrderHtml } from './pdf/orderTemplate.js'
 import { buildPickupHtml } from './pdf/pickupTemplate.js'
 import { htmlToPdf } from './pdf/puppeteerPdf.js'
 import { seedIfEmpty, DEFAULT_LISTS } from './seed.js'
-
-export const prisma = new PrismaClient()
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__serverDir, 'data')
 const BACKUP_DIR = path.join(DATA_DIR, 'backups')
@@ -75,21 +74,6 @@ app.use(express.json())
 // Inicializa la base: si está vacía, aplica el seed (admin + catálogo).
 await seedIfEmpty()
 
-// Suscriptores que se notifican cuando la base cambia (para tiempo real).
-const changeListeners = new Set()
-export function onDataChange(fn) {
-  changeListeners.add(fn)
-  return () => changeListeners.delete(fn)
-}
-function notifyChange() {
-  changeListeners.forEach((l) => {
-    try {
-      l()
-    } catch {
-      // Un listener con error no debe romper la llamada.
-    }
-  })
-}
 // Helper: aplica una mutación y notifica a los clientes SSE.
 async function commit(mutateFn) {
   const result = await mutateFn()

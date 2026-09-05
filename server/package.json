@@ -9,6 +9,7 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
@@ -18,7 +19,6 @@
     "react": "^19.2.8"
   },
   "devDependencies": {
-    "@prisma/client": "^6.19.3",
     "nodemon": "^3.1.14",
     "prisma": "^6.19.3"
   }
