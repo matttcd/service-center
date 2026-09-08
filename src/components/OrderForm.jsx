@@ -568,7 +568,7 @@ setIssue('')
             <label className="mt-2 flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-300">
               <input type="checkbox" checked={isSimpleService} onChange={(e) => setIsSimpleService(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
-              Servicio simple (resuelve recepción)
+              Servicio simple
             </label>
             <label className="mt-2 flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-300">
               <input type="checkbox" checked={isExternal} onChange={(e) => setIsExternal(e.target.checked)}
