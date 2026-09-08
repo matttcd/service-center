@@ -127,6 +127,7 @@ async function decorateOrder(order) {
     confirmedByName: order.confirmedBy ? names.get(order.confirmedBy) || '—' : null,
     history,
     notesLog: order.notes || [],
+    sparePartsLog: order.spareParts || [],
   }
 }
 
@@ -134,6 +135,7 @@ async function decorateOrder(order) {
 const orderInclude = {
   history: { orderBy: { at: 'asc' }, include: { user: true } },
   notes: { orderBy: { at: 'asc' } },
+  spareParts: { orderBy: { at: 'asc' } },
 }
 
 function pad4(n) {
@@ -1021,6 +1023,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
   const {
     deviceType, brand, model, pin, noPin, pattern, accessories, conditions,
     technicianNotes, fix, price, issue, note, editNote, deleteNote, isSimpleService,
+    addSparePart, editSparePart, deleteSparePart,
   } = req.body || {}
   const role = req.user.role
   const isAssignedTech = role === 'tecnico' && order.assignedTo === req.user.id
@@ -1052,6 +1055,25 @@ app.put('/api/orders/:id', auth, async (req, res) => {
     if (!entry) return res.status(404).json({ error: 'Nota no encontrada.' })
     if (entry.by !== req.user.id && role !== 'admin') {
       return res.status(403).json({ error: 'Solo podés eliminar tus propias notas.' })
+    }
+  }
+  if (addSparePart !== undefined && !isAssignedTech) {
+    return res.status(403).json({ error: 'Solo el técnico encargado puede agregar repuestos.' })
+  }
+  if (editSparePart !== undefined) {
+    const partId = editSparePart?.id
+    const entry = (order.spareParts || []).find((p) => p.id === partId)
+    if (!entry) return res.status(404).json({ error: 'Repuesto no encontrado.' })
+    if (entry.by !== req.user.id && role !== 'admin') {
+      return res.status(403).json({ error: 'Solo podés editar tus propios repuestos.' })
+    }
+  }
+  if (deleteSparePart !== undefined) {
+    const partId = deleteSparePart?.id
+    const entry = (order.spareParts || []).find((p) => p.id === partId)
+    if (!entry) return res.status(404).json({ error: 'Repuesto no encontrado.' })
+    if (entry.by !== req.user.id && role !== 'admin') {
+      return res.status(403).json({ error: 'Solo podés eliminar tus propios repuestos.' })
     }
   }
   const equipFields = [deviceType, brand, model, pin, noPin, pattern, accessories, conditions]
@@ -1122,6 +1144,32 @@ app.put('/api/orders/:id', auth, async (req, res) => {
         notesToAdd.push({ by: req.user.id, byName: req.user.name || '—', text: sentenceCase(String(note).trim()) })
       }
 
+      // Repuestos (spare parts)
+      const sparePartsToAdd = []
+      const sparePartsToEdit = []
+      const sparePartsToDelete = []
+      if (addSparePart !== undefined && addSparePart?.name) {
+        sparePartsToAdd.push({
+          name: String(addSparePart.name).trim(),
+          quantity: Math.max(1, parseInt(addSparePart.quantity) || 1),
+          status: 'necesario',
+          by: req.user.id,
+          byName: req.user.name || '—',
+        })
+      }
+      if (editSparePart !== undefined && editSparePart?.id) {
+        const data = {}
+        if (editSparePart.name !== undefined) data.name = String(editSparePart.name).trim()
+        if (editSparePart.quantity !== undefined) data.quantity = Math.max(1, parseInt(editSparePart.quantity) || 1)
+        if (editSparePart.status !== undefined && ['necesario', 'pedido', 'recibido'].includes(editSparePart.status)) {
+          data.status = editSparePart.status
+        }
+        sparePartsToEdit.push({ id: editSparePart.id, data })
+      }
+      if (deleteSparePart !== undefined && deleteSparePart?.id) {
+        sparePartsToDelete.push(deleteSparePart.id)
+      }
+
       await prisma.order.update({
         where: { id: order.id },
         data: {
@@ -1134,6 +1182,13 @@ app.put('/api/orders/:id', auth, async (req, res) => {
           } : {}),
           ...(notesToDelete.length ? { notes: { delete: notesToDelete.map((id) => ({ id })) } } : {}),
           ...(notesToAdd.length ? { notes: { create: notesToAdd } } : {}),
+          ...(sparePartsToAdd.length ? { spareParts: { create: sparePartsToAdd } } : {}),
+          ...(sparePartsToEdit.length ? {
+            spareParts: {
+              update: sparePartsToEdit.map((p) => ({ where: { id: p.id }, data: p.data })),
+            },
+          } : {}),
+          ...(sparePartsToDelete.length ? { spareParts: { delete: sparePartsToDelete.map((id) => ({ id })) } } : {}),
         },
       })
 

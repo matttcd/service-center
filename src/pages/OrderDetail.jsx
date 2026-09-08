@@ -18,6 +18,7 @@ import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import TechnicianSelect from '../components/TechnicianSelect.jsx'
 import NotesModal from '../components/NotesModal.jsx'
+import SparePartsModal from '../components/SparePartsModal.jsx'
 import PrintOrderPanel from '../components/PrintOrderPanel.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import PickupModal from '../components/PickupModal.jsx'
@@ -58,7 +59,7 @@ export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote, catalogLists } = useData()
+  const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote, addSparePart, editSparePart, deleteSparePart, catalogLists } = useData()
   const [printOpen, setPrintOpen] = useState(false)
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState('')
@@ -95,6 +96,7 @@ export default function OrderDetail() {
 
   // Notas del técnico
   const [notesModalOpen, setNotesModalOpen] = useState(false)
+  const [sparePartsModalOpen, setSparePartsModalOpen] = useState(false)
 
   // Orden en modo "override" local: cuando el bootstrap deja de traer una orden
   // entregada (las entregadas se filtran para no saturar la red), la seguimos
@@ -327,6 +329,7 @@ export default function OrderDetail() {
   const conditions = (order.conditions || '').split(',').map((c) => c.trim()).filter(Boolean)
   const displayedFixes = (order.fix || '').split(',').map((f) => f.trim()).filter(Boolean)
   const notesLog = order.notesLog || []
+  const sparePartsLog = order.sparePartsLog || []
 
   const menuItems = []
   if (isCounter && status !== 'entregado') {
@@ -729,6 +732,23 @@ export default function OrderDetail() {
                   </button>
                 </div>
               </div>
+
+              <div>
+                <label className={labelCls}>Repuestos</label>
+                <div className="mt-1">
+                  <button
+                    onClick={() => setSparePartsModalOpen(true)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                      isAssignedTech
+                        ? 'bg-amber-500 text-white hover:bg-amber-600'
+                        : 'border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Package size={15} />
+                    Repuestos{sparePartsLog.length > 0 ? ` (${sparePartsLog.length})` : ''}
+                  </button>
+                </div>
+              </div>
             </div>
 
               {editingRepair && (
@@ -918,6 +938,18 @@ export default function OrderDetail() {
         onSave={saveNote}
         onEdit={(noteId, text) => editNote(order.id, noteId, text)}
         onDelete={(noteId) => deleteNote(order.id, noteId)}
+      />
+
+      {/* Modal de repuestos */}
+      <SparePartsModal
+        open={sparePartsModalOpen}
+        onClose={() => setSparePartsModalOpen(false)}
+        sparePartsLog={sparePartsLog}
+        isAssignedTech={isAssignedTech}
+        currentUser={currentUser}
+        onSave={(name, quantity) => addSparePart(order.id, name, quantity)}
+        onEdit={(partId, data) => editSparePart(order.id, partId, data)}
+        onDelete={(partId) => deleteSparePart(order.id, partId)}
       />
 
       {/* Modal enviar a técnico externo */}

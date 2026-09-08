@@ -231,6 +231,18 @@ export function DataProvider({ children }) {
   const deleteNote = (orderId, noteId) =>
     updateOrder(orderId, { deleteNote: { id: noteId } })
 
+  // Agregar un repuesto faltante.
+  const addSparePart = (orderId, name, quantity) =>
+    updateOrder(orderId, { addSparePart: { name, quantity } })
+
+  // Editar un repuesto existente.
+  const editSparePart = (orderId, partId, data) =>
+    updateOrder(orderId, { editSparePart: { id: partId, ...data } })
+
+  // Eliminar un repuesto existente.
+  const deleteSparePart = (orderId, partId) =>
+    updateOrder(orderId, { deleteSparePart: { id: partId } })
+
   // Marca / desmarca "cliente avisado".
   const toggleNotified = async (orderId, notified) => {
     try {
@@ -370,6 +382,9 @@ export function DataProvider({ children }) {
     updateOrder,
     editNote,
     deleteNote,
+    addSparePart,
+    editSparePart,
+    deleteSparePart,
     toggleNotified,
     confirmOrder,
     assignTechnician,

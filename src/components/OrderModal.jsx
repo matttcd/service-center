@@ -14,6 +14,7 @@ import {
   Lock,
   CheckCircle2,
   History,
+  Package,
   Pencil,
   Phone,
   StickyNote,
@@ -26,6 +27,7 @@ import Badge from './Badge.jsx'
 import ConfirmModal from './ConfirmModal.jsx'
 import Modal from './Modal.jsx'
 import NotesModal from './NotesModal.jsx'
+import SparePartsModal from './SparePartsModal.jsx'
 import TechnicianSelect from './TechnicianSelect.jsx'
 import { PatternPreview } from './PatternPad.jsx'
 import {
@@ -64,7 +66,7 @@ const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-
 export default function OrderModal({ order, onClose }) {
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { customers, setOrderStatus, toggleNotified, updateOrder, confirmOrder, editNote, deleteNote, catalogLists } = useData()
+  const { customers, setOrderStatus, toggleNotified, updateOrder, confirmOrder, editNote, deleteNote, addSparePart, editSparePart, deleteSparePart, catalogLists } = useData()
   const fixOptions = catalogLists?.fixes?.length ? catalogLists.fixes : FIX_FALLBACK
   const [fixList, setFixList] = useState(() => (order?.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
   const [customFix, setCustomFix] = useState('')
@@ -76,6 +78,7 @@ export default function OrderModal({ order, onClose }) {
   const [confirm, setConfirm] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
   const [notesModalOpen, setNotesModalOpen] = useState(false)
+  const [sparePartsModalOpen, setSparePartsModalOpen] = useState(false)
   const canBudget = ['recepcion', 'admin'].includes(currentUser?.role)
   const canEditWork = ['tecnico', 'admin'].includes(currentUser?.role)
   const isReadOnly = !['tecnico'].includes(currentUser?.role)
@@ -239,6 +242,7 @@ export default function OrderModal({ order, onClose }) {
   const accessories = (order.accessories || '').split(',').map((a) => a.trim()).filter(Boolean)
   const conditions = (order.conditions || '').split(',').map((c) => c.trim()).filter(Boolean)
   const notesLog = order.notesLog || []
+  const sparePartsLog = order.sparePartsLog || []
 
   // Para pasar de "En revisión" a "Presupuesto" hace falta al menos una reparación registrada.
   const hasRepair = (fixValue || order.fix || '').trim().length > 0
@@ -417,6 +421,20 @@ export default function OrderModal({ order, onClose }) {
                   >
                     <StickyNote size={15} />
                     Agregar nota{notesLog.length > 0 ? ` (${notesLog.length})` : ''}
+                  </button>
+                </div>
+              </div>
+              )}
+              {['en_revision', 'en_reparacion'].includes(order.status) && (
+              <div className="mt-3">
+                <span className={labelCls}>Repuestos</span>
+                <div className="mt-1">
+                  <button
+                    onClick={() => setSparePartsModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600"
+                  >
+                    <Package size={15} />
+                    Repuestos{sparePartsLog.length > 0 ? ` (${sparePartsLog.length})` : ''}
                   </button>
                 </div>
               </div>
@@ -655,6 +673,16 @@ export default function OrderModal({ order, onClose }) {
       onSave={saveNote}
       onEdit={(noteId, text) => editNote(order.id, noteId, text)}
       onDelete={(noteId) => deleteNote(order.id, noteId)}
+    />
+    <SparePartsModal
+      open={sparePartsModalOpen}
+      onClose={() => setSparePartsModalOpen(false)}
+      sparePartsLog={sparePartsLog}
+      isAssignedTech={!isReadOnly}
+      currentUser={currentUser}
+      onSave={(name, quantity) => addSparePart(order.id, name, quantity)}
+      onEdit={(partId, data) => editSparePart(order.id, partId, data)}
+      onDelete={(partId) => deleteSparePart(order.id, partId)}
     />
     </>
   )
