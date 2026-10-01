@@ -121,3 +121,52 @@ export const ROLE_LABEL = {
   tecnico: 'Técnico',
   recepcion: 'Recepción',
 }
+
+// Reordena un elemento dentro de un array de forma inmutable.
+export function moveArrayItem(list, from, to) {
+  if (!Array.isArray(list)) return []
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length || from === to) {
+    return [...list]
+  }
+  const next = [...list]
+  const [item] = next.splice(from, 1)
+  next.splice(to, 0, item)
+  return next
+}
+
+// Calcula los caracteres totales de un listado de términos legales.
+export function calculateTermsTotal(terms) {
+  if (!Array.isArray(terms)) return 0
+  return terms.join('').length
+}
+
+// Parsea texto multilinea a una lista de marcas y modelos para el catálogo.
+export function parseBulkModels(text) {
+  if (!text || typeof text !== 'string') return []
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+  return lines.map((line) => {
+    const sep = line.includes(',') ? ',' : line.includes('\t') ? '\t' : ' '
+    const [brand, ...rest] = line.split(sep)
+    return {
+      brand: (brand || '').trim(),
+      name: rest.join(' ').trim(),
+    }
+  }).filter((m) => m.brand && m.name)
+}
+
+// Convierte un texto unificado a un array de cláusulas legales para almacenamiento.
+export function termsTextToClauses(rawText) {
+  if (!rawText || typeof rawText !== 'string') return []
+  const blocks = rawText.includes('\n\n')
+    ? rawText.split(/\n\s*\n/)
+    : rawText.split('\n')
+  return blocks
+    .map((b) => b.trim().replace(/^(\d+[.\-)]|[•\-*])\s*/, '').trim())
+    .filter(Boolean)
+}
+
+// Convierte un array de cláusulas a texto unificado para edición fluida.
+export function clausesToTermsText(clauses) {
+  if (!Array.isArray(clauses)) return ''
+  return clauses.filter(Boolean).join('\n\n')
+}
