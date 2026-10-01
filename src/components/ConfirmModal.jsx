@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle, Info, X } from 'lucide-react'
 
 let confirmStack = 0
@@ -18,14 +19,14 @@ export default function ConfirmModal({ open, onClose, onConfirm, title, message,
     }
   }, [open, onClose])
 
-  if (!open) return null
+  if (!open || typeof document === 'undefined') return null
 
   const Icon = danger ? AlertTriangle : Info
   const iconColor = danger ? 'text-red-500' : 'text-primary-500'
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
         <button
           onClick={onClose}
@@ -58,6 +59,7 @@ export default function ConfirmModal({ open, onClose, onConfirm, title, message,
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

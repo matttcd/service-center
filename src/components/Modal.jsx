@@ -2,6 +2,7 @@
 // Modal reutilizable con overlay
 // ============================================
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 // Contador de modales abiertos: el Escape solo cierra el modal superior,
@@ -26,13 +27,13 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
     }
   }, [open, onClose])
 
-  if (!open) return null
+  if (!open || typeof document === 'undefined') return null
 
-  return (
+  return createPortal(
     <div className={`fixed inset-0 ${zIndex} flex items-center justify-center p-0 md:p-4`}>
       {/* Overlay */}
       <div
-        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -56,6 +57,7 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

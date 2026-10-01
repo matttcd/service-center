@@ -127,7 +127,6 @@ export default function OrderModal({ order, onClose }) {
   const workDirty =
     fixValue !== (order.fix || '') ||
     Math.abs((Number(priceText) || 0) - (order.price || 0)) > 0.001
-  const dirty = editingWork && workDirty
   const wantsPresupuesto = order.status === 'en_reparacion' && editingWork && workDirty
   const effectiveNext = wantsPresupuesto ? 'presupuesto' : next
   const effectiveLabel = wantsPresupuesto ? 'Presupuestar' : nextStatusLabel(order)

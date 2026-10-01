@@ -3,8 +3,7 @@
 // editar y eliminar repuestos necesarios.
 // ============================================
 import { useState, useRef, useEffect } from 'react'
-import { createPortal } from 'react-dom'
-import { Save, Package, Pencil, Trash2, X, Check, ChevronDown } from 'lucide-react'
+import { Save, Package, Pencil, Trash2, X, Check } from 'lucide-react'
 import Modal from './Modal.jsx'
 import { formatDateTime } from '../utils/helpers.js'
 import ConfirmModal from './ConfirmModal.jsx'
@@ -77,7 +76,7 @@ export default function SparePartsModal({ open, onClose, sparePartsLog = [], isA
 
   const inputCls = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
 
-  return createPortal(
+  return (
     <Modal open={open} onClose={onClose} title="Repuestos necesarios" maxWidth="max-w-lg" zIndex="z-[60]">
       <div className="flex flex-col" style={{ minHeight: '200px', maxHeight: '60vh' }}>
         {/* Lista de repuestos */}
@@ -206,7 +205,6 @@ export default function SparePartsModal({ open, onClose, sparePartsLog = [], isA
         message="¿Eliminar este repuesto? Esta acción no se puede deshacer."
         danger
       />
-    </Modal>,
-    document.body
+    </Modal>
   )
 }

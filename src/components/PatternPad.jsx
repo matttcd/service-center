@@ -105,7 +105,6 @@ export default function PatternPad({ value = [], onChange, disabled = false }) {
     lockRef.current = lock
 
     const activesGroup = svgRef.current.querySelector('g.lock-actives')
-    let prevCount = 0
 
     const observer = new MutationObserver((mutations) => {
       let added = 0
@@ -130,7 +129,6 @@ export default function PatternPad({ value = [], onChange, disabled = false }) {
       }
       if (removed > 0) {
         setActiveSteps([])
-        prevCount = 0
       }
     })
 

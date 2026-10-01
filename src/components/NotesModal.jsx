@@ -3,10 +3,9 @@
 // editar y eliminar notas del técnico.
 // ============================================
 import { useState, useRef, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { Save, StickyNote, Pencil, Trash2, X, Check } from 'lucide-react'
 import Modal from './Modal.jsx'
-import { formatDate, formatDateTime, sentenceCase } from '../utils/helpers.js'
+import { formatDate, formatDateTime } from '../utils/helpers.js'
 import ConfirmModal from './ConfirmModal.jsx'
 
 function groupByDay(log) {
@@ -66,7 +65,7 @@ export default function NotesModal({ open, onClose, notesLog = [], isAssignedTec
 
   const canModify = (entry) => currentUser && (entry.by === currentUser.id || currentUser.role === 'admin')
 
-  return createPortal(
+  return (
     <Modal open={open} onClose={onClose} title="Notas del técnico" maxWidth="max-w-lg" zIndex="z-[60]">
       <div className="flex flex-col" style={{ minHeight: '300px', maxHeight: '60vh' }}>
         {/* Lista de notas */}
@@ -163,7 +162,6 @@ export default function NotesModal({ open, onClose, notesLog = [], isAssignedTec
         message="¿Eliminar esta nota? Esta acción no se puede deshacer."
         danger
       />
-    </Modal>,
-    document.body
+    </Modal>
   )
 }
