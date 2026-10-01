@@ -115,7 +115,7 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-8 dark:bg-slate-950">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md animate-fade-in">
         {/* Marca */}
         <div className="mb-6 flex flex-col items-center gap-3">
           <img src={logoUrl} alt="Logo" className="h-14 w-14 rounded-full object-contain shadow-lg shadow-blue-500/30" />

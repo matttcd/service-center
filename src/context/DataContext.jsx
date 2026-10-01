@@ -37,7 +37,10 @@ export function DataProvider({ children }) {
   const doRefresh = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true)
     try {
-      const res = await api('/bootstrap')
+      const [res, act] = await Promise.all([
+        api('/bootstrap'),
+        api(`/actividad?page=1&limit=${ACTIVIDAD_PAGE_SIZE}`).catch(() => null),
+      ])
       setData({
         customers: res.customers || [],
         orders: res.orders || [],
@@ -46,13 +49,12 @@ export function DataProvider({ children }) {
         config: res.config || null,
         catalog: res.catalog || { brands: [], models: [] },
       })
-      try {
-        const act = await api(`/actividad?page=1&limit=${ACTIVIDAD_PAGE_SIZE}`)
+      if (act) {
         // Si ya se cargaron más páginas, no pisarlas: solo la primera se recarga.
         setActividad((prev) => (prev.length > ACTIVIDAD_PAGE_SIZE ? prev : act.logs || []))
         setActividadHasMore((act.page || 1) < (act.pages || 1))
         setActividadError('')
-      } catch {
+      } else {
         setActividad([])
         setActividadHasMore(false)
         setActividadError('No se pudieron cargar los movimientos.')
@@ -67,8 +69,14 @@ export function DataProvider({ children }) {
   }, [logout])
 
   // Debounce: una mutación y el evento SSE disparan refresh casi al mismo
-  // tiempo; colapsamos ambos en una sola descarga de bootstrap.
-  const refresh = useCallback((opts) => {
+  // tiempo; colapsamos ambos en una sola descarga de bootstrap. En la carga inicial
+  // pasamos immediate: true para no retrasar la interfaz innecesariamente.
+  const refresh = useCallback((opts = {}) => {
+    if (opts.immediate) {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      refreshTimer.current = null
+      return doRefresh(opts)
+    }
     if (refreshTimer.current) clearTimeout(refreshTimer.current)
     refreshTimer.current = setTimeout(() => {
       refreshTimer.current = null
@@ -96,7 +104,7 @@ export function DataProvider({ children }) {
       setLoading(false)
       return
     }
-    refresh()
+    refresh({ immediate: true })
     if (currentUser.role === 'admin') loadAdminMetrics()
 
     // Canal de tiempo real: recibe avisos cuando algo cambió y recarga en silencio.
@@ -340,7 +348,7 @@ export function DataProvider({ children }) {
         (o) => o.createdAt && o.createdAt.slice(0, 10) === today,
       ),
     }
-  }, [data.orders])
+  }, [data.orders, today])
 
   const value = {
     loading,

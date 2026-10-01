@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import Sidebar from './Sidebar.jsx'
+import DashboardSkeleton from './DashboardSkeleton.jsx'
 import ChangePasswordModal from './ChangePasswordModal.jsx'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -39,12 +40,11 @@ export default function Layout() {
       <main className="px-4 py-6 sm:px-6 lg:ml-64 lg:px-8">
         <div className="mx-auto max-w-6xl">
           {loading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-400">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-primary-600 dark:border-slate-700 dark:border-t-primary-500" />
-              <p className="text-sm">Cargando datos...</p>
-            </div>
+            <DashboardSkeleton />
           ) : (
-            <Outlet />
+            <div className="animate-fade-in">
+              <Outlet />
+            </div>
           )}
         </div>
       </main>
