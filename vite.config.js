@@ -2,9 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// Destino de /api en desarrollo. Por defecto el backend de desarrollo (:3001)
+// Destino de /api en desarrollo. Por defecto el backend de desarrollo (:4000)
 // para NO tocar producción. Si alguna vez querés apuntar a otro lado:
-//   VITE_API_TARGET=http://localhost:8080 npm run dev
+//   VITE_API_TARGET=http://localhost:8081 npm run dev
 const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:4000'
 
 // https://vite.dev/config/
