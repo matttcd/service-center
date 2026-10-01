@@ -80,7 +80,6 @@ export function buildOrderHtml(order, customer, contractBulletsOverride) {
   const priceStr = order?.price > 0 ? formatMoney(order.price) : ''
   const advanceStr = order?.advance > 0 ? formatMoney(order.advance) : ''
   const isRevision = order?.diagnosisType === 'revision'
-  const hasFixData = fixList.length > 0 || order?.price > 0
 
   const contractBullets = contractBulletsOverride || [
     'Para la entrega del equipo, el cliente o un tercero asignado deberán presentar la <strong>orden</strong>. Si es un tercero, deberá contar con una <strong>autorización explícita</strong> del titular. Si el cliente no presenta la orden física, se podrá entregar el equipo con una constancia de retiro firmada (únicamente el cliente titular). Sin la <strong>orden original</strong> no se reconocerá garantía alguna.',

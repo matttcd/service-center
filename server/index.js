@@ -1,9 +1,10 @@
 // ============================================
+// Servidor Express · El Gringo Celulares API
 // Servidor de la API REST del servicio técnico
 // Persistencia: PostgreSQL vía Prisma
 // ============================================
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
@@ -97,45 +98,59 @@ async function audit(action, table, recordId, userId, details) {
   })
 }
 
-// Adjunta a una orden datos legibles: cliente, responsables y estado.
+// Mapea filas de la relación history/notes a los campos anidados que espera el front con JOINs directos.
+const orderInclude = {
+  customer: true,
+  assigned: true,
+  received: true,
+  repaired: true,
+  delivered: true,
+  notifiedUser: true,
+  confirmedUser: true,
+  history: { orderBy: { at: 'asc' }, include: { user: true } },
+  notes: { orderBy: { at: 'asc' } },
+  spareParts: { orderBy: { at: 'asc' } },
+}
+
+// Adjunta a una orden datos legibles: cliente, responsables y estado (optimizado en memoria).
 async function decorateOrder(order) {
-  const userIds = [
-    order.assignedTo, order.receivedBy, order.repairedBy, order.deliveredBy,
-    order.notifiedBy, order.confirmedBy,
-  ].filter(Boolean)
-  const users = await prisma.user.findMany({ where: { id: { in: [...new Set(userIds)] } } })
-  const names = new Map(users.map((u) => [u.id, u.name]))
-  let customerName = '(cliente eliminado)'
-  if (order.customerId) {
+  if (!order) return null
+  let customerName = order.customer?.fullName
+  let assignedToName = order.assigned?.name ?? null
+  let receivedByName = order.received?.name ?? null
+  let repairedByName = order.repaired?.name ?? null
+  let deliveredByName = order.delivered?.name ?? null
+  let notifiedByName = order.notifiedUser?.name ?? null
+  let confirmedByName = order.confirmedUser?.name ?? null
+
+  // Fallback si la orden vino sin includes (ej. en tests)
+  if (!customerName && order.customerId) {
     const customer = await prisma.customer.findUnique({ where: { id: order.customerId } })
-    if (customer) customerName = customer.fullName
+    customerName = customer ? customer.fullName : '(cliente eliminado)'
+  } else if (!customerName) {
+    customerName = '(cliente eliminado)'
   }
+
   const history = (order.history || []).map((h) => ({
     ...h,
     at: h.at instanceof Date ? h.at.toISOString() : h.at,
-    byName: h.by ? names.get(h.by) || '—' : '—',
+    byName: h.user?.name || h.byName || '—',
   }))
+
   return {
     ...order,
     id: order.id,
     customerName,
-    assignedToName: order.assignedTo ? names.get(order.assignedTo) || '—' : null,
-    receivedByName: names.get(order.receivedBy) || '—',
-    repairedByName: order.repairedBy ? names.get(order.repairedBy) || '—' : null,
-    deliveredByName: order.deliveredBy ? names.get(order.deliveredBy) || '—' : null,
-    notifiedByName: order.notifiedBy ? names.get(order.notifiedBy) || '—' : null,
-    confirmedByName: order.confirmedBy ? names.get(order.confirmedBy) || '—' : null,
+    assignedToName: order.assignedTo ? (assignedToName || '—') : null,
+    receivedByName: receivedByName || '—',
+    repairedByName: order.repairedBy ? (repairedByName || '—') : null,
+    deliveredByName: order.deliveredBy ? (deliveredByName || '—') : null,
+    notifiedByName: order.notifiedBy ? (notifiedByName || '—') : null,
+    confirmedByName: order.confirmedBy ? (confirmedByName || '—') : null,
     history,
     notesLog: order.notes || [],
     sparePartsLog: order.spareParts || [],
   }
-}
-
-// Mapea filas de la relación history/notes a los campos anidados que espera el front.
-const orderInclude = {
-  history: { orderBy: { at: 'asc' }, include: { user: true } },
-  notes: { orderBy: { at: 'asc' } },
-  spareParts: { orderBy: { at: 'asc' } },
 }
 
 function pad4(n) {
@@ -155,7 +170,7 @@ app.get('/api/auth/profiles', async (req, res) => {
       .map((u) => ({ id: u.id, name: u.name, role: u.role }))
       .sort((a, b) => a.name.localeCompare(b.name))
     res.json({ profiles })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error del servidor.' })
   }
 })
@@ -171,7 +186,7 @@ app.post('/api/auth/login', async (req, res) => {
         where: { email: String(email || '').trim().toLowerCase() },
       })
     }
-  } catch (e) {
+  } catch {
     user = null
   }
   const rateKey = `${req.ip}:${String(profileId || email || '').toLowerCase()}`
@@ -214,7 +229,7 @@ app.post('/api/auth/change-password', auth, async (req, res) => {
       await audit('password_change', 'users', req.user.id, req.user.id, `Cambio de contraseña (${req.user.name})`)
     })
     res.json({ ok: true })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al cambiar la contraseña.' })
   }
 })
@@ -297,29 +312,47 @@ app.get('/api/events', async (req, res) => {
 // ---------- Bootstrap ----------
 app.get('/api/bootstrap', auth, async (req, res) => {
   try {
-    const customers = await prisma.customer.findMany({ where: { deletedAt: null } })
-    const allOrders = await prisma.order.findMany({ where: { deletedAt: null }, include: orderInclude })
-    const liveOrders = allOrders.filter((o) => !o.deletedAt)
-    const orders = liveOrders
-      .filter((o) => o.status !== 'entregado')
-      .filter((o) => req.user.role !== 'tecnico' || !o.isSimpleService)
-      .filter((o) => req.user.role !== 'tecnico' || o.status !== 'en_tercero')
-      .filter((o) => req.user.role !== 'tecnico' || !(o.isExternal && o.status === 'recibido'))
-      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    const isTech = req.user.role === 'tecnico'
+    const activeWhere = {
+      deletedAt: null,
+      status: { not: 'entregado' },
+      ...(isTech
+        ? {
+            isSimpleService: false,
+            NOT: [
+              { status: 'en_tercero' },
+              { isExternal: true, status: 'recibido' },
+            ],
+          }
+        : {}),
+    }
+
+    const [customers, activeOrders, totalCount, deliveredCount, catalog, users, config] = await Promise.all([
+      prisma.customer.findMany({ where: { deletedAt: null } }),
+      prisma.order.findMany({
+        where: activeWhere,
+        include: orderInclude,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.order.count({ where: { deletedAt: null } }),
+      prisma.order.count({ where: { deletedAt: null, status: 'entregado' } }),
+      loadCatalog(),
+      prisma.user.findMany(),
+      loadConfigValue('main'),
+    ])
+
     const decorated = []
-    for (const o of orders) decorated.push(await decorateOrder(o))
-    const catalog = await loadCatalog()
-    const users = await prisma.user.findMany()
+    for (const o of activeOrders) decorated.push(await decorateOrder(o))
     const technicians = users.filter((u) => u.active && u.role === 'tecnico')
-    const config = await loadConfigValue('main')
+
     return res.json({
       user: publicUser(req.user),
       customers,
       orders: decorated,
       ordersTotals: {
-        total: liveOrders.length,
-        active: orders.length,
-        delivered: liveOrders.filter((o) => o.status === 'entregado').length,
+        total: totalCount,
+        active: activeOrders.length,
+        delivered: deliveredCount,
       },
       catalog,
       users: req.user.role === 'admin' ? users.map(publicUser) : [],
@@ -383,7 +416,7 @@ app.post('/api/catalog/brands', auth, async (req, res) => {
       create: { name },
     }))
     res.json({ ok: true, brand })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al crear la marca.' })
   }
 })
@@ -403,7 +436,7 @@ app.post('/api/catalog/models', auth, async (req, res) => {
       })
     })
     res.json({ ok: true, model })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al crear el modelo.' })
   }
 })
@@ -436,7 +469,7 @@ app.post('/api/catalog/models/bulk', auth, async (req, res) => {
       return { created, skipped, total }
     })
     res.json({ ok: true, ...result })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al importar modelos.' })
   }
 })
@@ -506,7 +539,7 @@ app.put('/api/catalog/lists', auth, async (req, res) => {
       }
     })
     res.json({ ok: true })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'No se pudo guardar las listas.' })
   }
 })
@@ -555,9 +588,11 @@ app.post('/api/customers', auth, async (req, res) => {
   if (dniNorm && !/^\d{6,8}$/.test(dniNorm)) {
     return res.status(400).json({ error: 'El DNI debe tener entre 6 y 8 dígitos.' })
   }
-  const dup = await prisma.customer.findFirst({ where: { deletedAt: null, dni: dniNorm } })
-  if (dup) {
-    return res.status(400).json({ error: `Ya existe un cliente con el DNI ${dniNorm}.` })
+  if (dniNorm) {
+    const dup = await prisma.customer.findFirst({ where: { deletedAt: null, dni: dniNorm } })
+    if (dup) {
+      return res.status(400).json({ error: `Ya existe un cliente con el DNI ${dniNorm}.` })
+    }
   }
   const id = uid()
   try {
@@ -578,7 +613,7 @@ app.post('/api/customers', auth, async (req, res) => {
       await audit('create', 'customers', id, req.user.id, `Alta de cliente ${titleCase(fullName)}${dniNorm ? ` (DNI ${dniNorm})` : ''}`)
     })
     res.json({ ok: true, id })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al crear el cliente.' })
   }
 })
@@ -594,9 +629,11 @@ app.put('/api/customers/:id', auth, async (req, res) => {
   if (dniNorm && !/^\d{6,8}$/.test(dniNorm)) {
     return res.status(400).json({ error: 'El DNI debe tener entre 6 y 8 dígitos.' })
   }
-  const dup = await prisma.customer.findFirst({ where: { deletedAt: null, dni: dniNorm, id: { not: req.params.id } } })
-  if (dup) {
-    return res.status(400).json({ error: `Ya existe un cliente con el DNI ${dniNorm}.` })
+  if (dniNorm) {
+    const dup = await prisma.customer.findFirst({ where: { deletedAt: null, dni: dniNorm, id: { not: req.params.id } } })
+    if (dup) {
+      return res.status(400).json({ error: `Ya existe un cliente con el DNI ${dniNorm}.` })
+    }
   }
   try {
     await commit(async () => {
@@ -615,7 +652,7 @@ app.put('/api/customers/:id', auth, async (req, res) => {
       await audit('update', 'customers', req.params.id, req.user.id, `Edición de cliente ${titleCase(fullName)}`)
     })
     res.json({ ok: true })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al actualizar el cliente.' })
   }
 })
@@ -632,7 +669,7 @@ app.delete('/api/customers/:id', auth, adminOnly, async (req, res) => {
       await audit('delete', 'customers', req.params.id, req.user.id, `Baja de cliente ${target.fullName}`)
     })
     res.json({ ok: true })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al eliminar el cliente.' })
   }
 })
@@ -745,26 +782,28 @@ app.get('/api/orders', auth, async (req, res) => {
     where.status = 'presupuesto'
   }
 
-  let orders = await prisma.order.findMany({
-    where,
-    include: orderInclude,
-    orderBy: { createdAt: 'desc' },
-  })
-
-  let list = []
-  for (const o of orders) list.push(await decorateOrder(o))
-
   if (query) {
-    list = list.filter(
-      (o) =>
-        o.orderNumber.toLowerCase().includes(query) ||
-        (o.customerName || '').toLowerCase().includes(query) ||
-        (o.brand + ' ' + o.model).toLowerCase().includes(query),
-    )
+    where.OR = [
+      { orderNumber: { contains: query, mode: 'insensitive' } },
+      { brand: { contains: query, mode: 'insensitive' } },
+      { model: { contains: query, mode: 'insensitive' } },
+      { customer: { fullName: { contains: query, mode: 'insensitive' } } },
+    ]
   }
 
-  const total = list.length
-  if (limit) list = list.slice(offset, offset + limit)
+  const [total, orders] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.findMany({
+      where,
+      include: orderInclude,
+      orderBy: { createdAt: 'desc' },
+      skip: offset,
+      ...(limit ? { take: limit } : {}),
+    }),
+  ])
+
+  const list = []
+  for (const o of orders) list.push(await decorateOrder(o))
   res.json({ orders: list, total })
 })
 
@@ -857,7 +896,7 @@ app.post('/api/orders/:id/pickup', auth, async (req, res) => {
       },
     }))
     res.json({ ok: true })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al guardar datos de retiro.' })
   }
 })
@@ -892,7 +931,7 @@ app.delete('/api/orders/:id', auth, adminOnly, async (req, res) => {
       await audit('delete', 'orders', order.id, req.user.id, `Baja de orden ${order.orderNumber}`)
     })
     res.json({ ok: true })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al eliminar la orden.' })
   }
 })
@@ -1026,7 +1065,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
     addSparePart, editSparePart, deleteSparePart,
   } = req.body || {}
   const role = req.user.role
-  const isAssignedTech = role === 'tecnico' && order.assignedTo === req.user.id
+  const isAssignedTech = (role === 'tecnico' && order.assignedTo === req.user.id) || role === 'admin'
   const isEmpOrAdmin = ['recepcion', 'admin'].includes(role)
 
   if (fix !== undefined && !isAssignedTech) {
@@ -1236,7 +1275,7 @@ app.post('/api/orders/:id/assign', auth, async (req, res) => {
       return prisma.order.findUnique({ where: { id: order.id }, include: orderInclude })
     })
     res.json({ ok: true, order: await decorateOrder(updated) })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al asignar el técnico.' })
   }
 })
@@ -1265,7 +1304,7 @@ app.post('/api/orders/:id/notified', auth, async (req, res) => {
       return prisma.order.findUnique({ where: { id: order.id }, include: orderInclude })
     })
     res.json({ ok: true, order: await decorateOrder(updated) })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al actualizar el aviso.' })
   }
 })
@@ -1297,7 +1336,7 @@ app.post('/api/orders/:id/confirm', auth, async (req, res) => {
       return prisma.order.findUnique({ where: { id: order.id }, include: orderInclude })
     })
     res.json({ ok: true, order: await decorateOrder(updated) })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al confirmar el arreglo.' })
   }
 })
@@ -1331,7 +1370,7 @@ app.post('/api/config', auth, adminOnly, async (req, res) => {
       await audit('update', 'config', null, req.user.id, 'Configuración actualizada')
     })
     res.json({ ok: true })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al guardar la configuración.' })
   }
 })
@@ -1362,7 +1401,7 @@ app.post('/api/users', auth, adminOnly, async (req, res) => {
       await audit('create', 'users', id, req.user.id, `Alta de usuario ${titleCase(name)} (${role})`)
     })
     res.json({ ok: true, id })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al crear el usuario.' })
   }
 })
@@ -1380,7 +1419,7 @@ app.post('/api/users/:id/toggle', auth, adminOnly, async (req, res) => {
       return !target.active
     })
     res.json({ ok: true, active })
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Error al cambiar el estado del usuario.' })
   }
 })
@@ -1499,15 +1538,43 @@ app.get('/api/metrics', auth, adminOnly, async (req, res) => {
 })
 
 // ---------- Copias de seguridad (solo admin) ----------
+// Localiza el ejecutable de PostgreSQL (pg_dump / pg_restore) en PATH o en rutas estándar de Windows.
+function findPgBinary(binName) {
+  const exe = process.platform === 'win32' ? `${binName}.exe` : binName
+  if (process.platform === 'win32') {
+    const versions = ['18', '17', '16', '15', '14', '13', '12']
+    const roots = [
+      process.env['ProgramFiles'] || 'C:\\Program Files',
+      process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
+    ]
+    for (const root of roots) {
+      for (const ver of versions) {
+        const full = path.join(root, 'PostgreSQL', ver, 'bin', exe)
+        if (fs.existsSync(full)) return full
+      }
+    }
+  }
+  return binName
+}
+
 function runPgDump() {
   const url = process.env.DATABASE_URL
-    .replace(/[?&]schema=[^&]*/g, '')
-    .replace(/localhost:5432/, 'postgres:5432')
+    ? process.env.DATABASE_URL.replace(/[?&]schema=[^&]*/g, '')
+    : ''
+  const bin = findPgBinary('pg_dump')
   return new Promise((resolve, reject) => {
-    const args = ['exec', 'service-center-db', 'pg_dump', '--dbname', url, '--format=custom']
-    execFile('docker', args, { maxBuffer: 1024 * 1024 * 50 }, (err, stdout) => {
-      if (err) return reject(err)
-      resolve(stdout)
+    // 1. Intenta ejecutar pg_dump directamente (ej: en host con PostgreSQL o contenedor con postgresql-client)
+    execFile(bin, ['--dbname', url, '--format=custom'], { maxBuffer: 1024 * 1024 * 50, encoding: 'buffer' }, (err, stdout) => {
+      if (!err && stdout && stdout.length > 0) {
+        return resolve(stdout)
+      }
+      // 2. Si pg_dump directo falla, fallback a docker exec sobre el contenedor postgres
+      const dockerUrl = url.replace(/localhost:5432/, 'postgres:5432')
+      const args = ['exec', 'service-center-db', 'pg_dump', '--dbname', dockerUrl, '--format=custom']
+      execFile('docker', args, { maxBuffer: 1024 * 1024 * 50, encoding: 'buffer' }, (dockerErr, dockerStdout) => {
+        if (dockerErr) return reject(err || dockerErr)
+        resolve(dockerStdout)
+      })
     })
   })
 }
@@ -1560,12 +1627,25 @@ async function restoreBackup(name) {
   const full = path.join(BACKUP_DIR, name)
   if (!fs.existsSync(full)) throw new Error('Copia no encontrada.')
   const url = process.env.DATABASE_URL
+  const bin = findPgBinary('pg_restore')
   await new Promise((resolve, reject) => {
-    const child = execFile('pg_restore', ['--dbname', url, '--clean', '--if-exists', '--no-owner', '--no-privileges', full], (err) => {
-      if (err) return reject(new Error('No se pudo restaurar la copia.'))
-      resolve()
+    // 1. Intenta ejecutar pg_restore directamente
+    const child = execFile(bin, ['--dbname', url, '--clean', '--if-exists', '--no-owner', '--no-privileges', full], (err) => {
+      if (!err) return resolve()
+      // 2. Si pg_restore no está en PATH, fallback a docker exec usando stdin
+      const dockerUrl = url.replace(/localhost:5432/, 'postgres:5432')
+      const args = ['exec', '-i', 'service-center-db', 'pg_restore', '--dbname', dockerUrl, '--clean', '--if-exists', '--no-owner', '--no-privileges']
+      const dockerChild = execFile('docker', args, (dockerErr) => {
+        if (dockerErr) return reject(new Error(`No se pudo restaurar la copia: ${err?.message || dockerErr.message}`))
+        resolve()
+      })
+      if (dockerChild.stdin) {
+        fs.createReadStream(full).pipe(dockerChild.stdin)
+      }
     })
-    child.on('error', (e) => reject(new Error(`pg_restore no disponible: ${e.message}`)))
+    child.on('error', () => {
+      // En caso de que falle por spawn error, el callback de execFile maneja el fallback
+    })
   })
   notifyChange()
   return true
@@ -1585,7 +1665,7 @@ function scheduleBackups() {
     }
     try {
       const cutoff = new Date(Date.now() - PAPELERA_RETENTION_DAYS * 86400000)
-      const res = await prisma.$transaction([
+      await prisma.$transaction([
         prisma.order.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
         prisma.customer.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
       ])
@@ -1610,6 +1690,14 @@ function scheduleBackups() {
 
 app.get('/api/backups', auth, adminOnly, (req, res) => {
   res.json({ backups: listBackups() })
+})
+
+app.get('/api/backups/:name/download', auth, adminOnly, (req, res) => {
+  const name = decodeURIComponent(req.params.name)
+  if (!/^db-[0-9]+\.dump$/.test(name)) return res.status(400).json({ error: 'Nombre de copia inválido.' })
+  const full = path.join(BACKUP_DIR, name)
+  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Copia no encontrada.' })
+  res.download(full, name)
 })
 
 app.post('/api/backups', auth, adminOnly, async (req, res) => {

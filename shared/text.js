@@ -34,8 +34,21 @@ const LOWERCASE_WORDS = new Set([
   'a', 'al', 'por', 'para', 'un', 'una', 'se', 'su', 'sus', 'mi', 'tu',
 ])
 
+function extractWordParts(w) {
+  const match = w.match(/^([^\p{L}\p{N}]*)([\p{L}\p{N}]+)([^\p{L}\p{N}]*)$/u)
+  if (!match) return null
+  return { pre: match[1], core: match[2], post: match[3] }
+}
+
 function capitalizeWord(w) {
   if (!w) return w
+  const parts = extractWordParts(w)
+  if (parts) {
+    const up = parts.core.toUpperCase()
+    if (SPECIAL[up]) return parts.pre + SPECIAL[up] + parts.post
+    if (KEEP_UPPER.has(up)) return parts.pre + up + parts.post
+    return parts.pre + parts.core[0].toUpperCase() + parts.core.slice(1).toLowerCase() + parts.post
+  }
   const up = w.toUpperCase()
   if (SPECIAL[up]) return SPECIAL[up]
   if (KEEP_UPPER.has(up)) return up
@@ -51,10 +64,14 @@ export function titleCase(s) {
     .split(/\s+/)
     .map((w, i) => {
       if (!w) return w
-      const up = w.toUpperCase()
-      if (SPECIAL[up]) return SPECIAL[up]
-      if (KEEP_UPPER.has(up)) return up
-      if (i > 0 && LOWERCASE_WORDS.has(w.toLowerCase())) return w.toLowerCase()
+      const parts = extractWordParts(w)
+      const core = parts ? parts.core : w
+      const up = core.toUpperCase()
+      if (SPECIAL[up]) return parts ? parts.pre + SPECIAL[up] + parts.post : SPECIAL[up]
+      if (KEEP_UPPER.has(up)) return parts ? parts.pre + up + parts.post : up
+      if (i > 0 && LOWERCASE_WORDS.has(core.toLowerCase())) {
+        return parts ? parts.pre + core.toLowerCase() + parts.post : w.toLowerCase()
+      }
       return capitalizeWord(w)
     })
     .join(' ')
@@ -70,6 +87,13 @@ export function sentenceCase(s) {
     .split(/(\s+)/)
     .map((w) => {
       if (!w.trim()) return w
+      const parts = extractWordParts(w)
+      if (parts) {
+        const up = parts.core.toUpperCase()
+        if (SPECIAL[up]) return parts.pre + SPECIAL[up] + parts.post
+        if (KEEP_UPPER.has(up)) return parts.pre + up + parts.post
+        return w
+      }
       const up = w.toUpperCase()
       if (SPECIAL[up]) return SPECIAL[up]
       if (KEEP_UPPER.has(up)) return up
