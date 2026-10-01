@@ -11,5 +11,5 @@ docker compose up -d --build
 echo [3/3] Estado de los contenedores:
 docker ps --filter "name=service-center-"
 echo.
-echo Produccion en http://localhost:8080 - los datos del volumen NO se tocan.
+echo Produccion en http://localhost:8081 - los datos del volumen NO se tocan.
 pause

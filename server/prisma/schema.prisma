@@ -46,6 +46,10 @@ model Customer {
   deletedAt DateTime?
 
   orders Order[]
+
+  @@index([deletedAt])
+  @@index([dni])
+  @@index([phone])
 }
 
 // ---------- Órdenes ----------
@@ -101,6 +105,11 @@ model Order {
   history     OrderHistory[]
   notes       OrderNote[]
   spareParts  OrderSparePart[]
+
+  @@index([deletedAt, status])
+  @@index([customerId])
+  @@index([createdAt])
+  @@index([brand, model])
 }
 
 model OrderHistory {

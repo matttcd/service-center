@@ -91,7 +91,7 @@ async function main() {
         update: { deviceType: m.deviceType || 'Sin categorizar' },
         create: { brand: m.brand, name: m.name, deviceType: m.deviceType || 'Sin categorizar', usage: m.usage || 0 },
       })
-    } catch (e) {
+    } catch {
       // una marca puede no existir aún en la BD; la creamos
       await prisma.catalogBrand.upsert({ where: { name: m.brand }, update: {}, create: { name: m.brand } })
       await prisma.catalogModel.upsert({

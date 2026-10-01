@@ -113,8 +113,6 @@ const browser = await puppeteer.launch({ headless: true, executablePath: CHROME,
 const page = await browser.newPage()
 await page.setViewport({ width: A4_W_PX, height: A4_H_PX })
 
-const mm = (px) => (px / 96) * 25.4
-
 async function measureAll() {
   return await page.evaluate(() => {
     const mm = (px) => (px / 96) * 25.4

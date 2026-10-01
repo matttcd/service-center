@@ -5,7 +5,8 @@ WORKDIR /app
 
 # Python es necesario para la impresión de etiquetas ZPL (server/printer.js usa spawn('python')).
 # Chromium es necesario para la generación de PDFs con Puppeteer.
-RUN apk add --no-cache python3 chromium nss freetype harfbuzz ca-certificates ttf-freefont
+# postgresql-client provee pg_dump y pg_restore para respaldos nativos de PostgreSQL.
+RUN apk add --no-cache python3 chromium nss freetype harfbuzz ca-certificates ttf-freefont postgresql-client
 
 # Copia e instala dependencias del servidor
 COPY server/package*.json ./server/
@@ -29,4 +30,4 @@ EXPOSE 3000
 # Los datos persisten en el volumen /app/data
 VOLUME ["/app/data"]
 
-CMD ["node", "server/index.js"]
+CMD ["sh", "-c", "cd server && npx prisma db push --skip-generate && cd .. && node server/index.js"]

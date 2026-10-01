@@ -8,7 +8,6 @@ import { buildOrderHtml } from '../pdf/orderTemplate.js'
 const CHROME = ['C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'].find(existsSync)
 const A4_W_PX = Math.round((210 / 25.4) * 96)
 const A4_H_PX = Math.round((297 / 25.4) * 96)
-const mm = (px) => (px / 96) * 25.4
 
 // ------------------------------------------------------------------
 // Simula la función de truncado que se implementará en orderTemplate.js
@@ -62,11 +61,6 @@ const baseOrder = {
 function makeIssue(n) {
   const t = 'El equipo presenta daño por líquido. Se requiere revisión exhaustiva del circuito de carga y batería, y reemplazo del módulo display. '
   return t.repeat(Math.ceil(n / t.length)).slice(0, n)
-}
-
-function makeTerms(n) {
-  const t = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore. '
-  return [t.repeat(Math.ceil(n / t.length)).slice(0, n)]
 }
 
 // Términos REALES que están en orderTemplate.js (con <strong>)

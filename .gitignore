@@ -16,8 +16,10 @@ dist-ssr
 .env
 *.env
 
-# Datos de la base compartida (db.json + backups) no se versionan
+# Datos de la base compartida y copias de seguridad de PostgreSQL
 server/data/
+backups/
+*.dump
 
 # Archivos de Python (impresión de etiquetas) y sesiones de trabajo
 __pycache__/
