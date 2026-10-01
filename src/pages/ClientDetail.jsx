@@ -32,11 +32,11 @@ export default function ClientDetail() {
       <div className="py-16 text-center">
         <p className="text-sm text-slate-400">Cliente no encontrado. Podría haber sido dado de baja.</p>
         <button
-          onClick={() => navigate('/clientes')}
+          onClick={() => navigate(-1)}
           className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
         >
           <ArrowLeft size={16} />
-          Volver a clientes
+          Volver
         </button>
       </div>
     )
@@ -80,11 +80,11 @@ export default function ClientDetail() {
   return (
     <div className="space-y-6">
       <button
-        onClick={() => navigate('/clientes')}
+        onClick={() => navigate(-1)}
         className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
       >
         <ArrowLeft size={16} />
-        Volver a clientes
+        Volver
       </button>
 
       {notice && (

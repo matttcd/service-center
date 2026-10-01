@@ -3,9 +3,12 @@
 // ============================================
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Megaphone, FileText, CheckCircle2, Eye, Inbox, PackageX, DollarSign, Truck } from 'lucide-react'
+import { Megaphone, FileText, Inbox, PackageX, DollarSign, Truck, Plus } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
+import OrderForm from '../components/OrderForm.jsx'
+import PrintOrderPanel from '../components/PrintOrderPanel.jsx'
 import { formatDate, titleCase, normalizeList } from '../utils/helpers.js'
 
 const TABS = [
@@ -30,7 +33,7 @@ function KpiCard({ label, value, Icon, color }) {
   )
 }
 
-function QueueRow({ title, Icon, tone, items, emptyText }) {
+function QueueRow({ items, emptyText }) {
   const navigate = useNavigate()
   return (
     <div>
@@ -64,8 +67,17 @@ function QueueRow({ title, Icon, tone, items, emptyText }) {
 }
 
 export default function Dashboard() {
-  const { pendingBudgetOrders, externosOrders, porAvisarOrders, faltaRepuestosOrders, ingresaronHoyOrders, presupuestoSinPrecioOrders } = useData()
+  const { pendingBudgetOrders, externosOrders, porAvisarOrders, faltaRepuestosOrders, ingresaronHoyOrders, presupuestoSinPrecioOrders, refresh } = useData()
+  const { currentUser } = useAuth()
+  const canCreate = ['recepcion', 'admin'].includes(currentUser?.role)
   const [activeTab, setActiveTab] = useState('avisar')
+  const [formOpen, setFormOpen] = useState(false)
+  const [printing, setPrinting] = useState(null)
+
+  const onCreated = (created) => {
+    refresh()
+    setPrinting(created)
+  }
 
   const counts = {
     avisar: porAvisarOrders.length,
@@ -88,9 +100,20 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Resumen del día</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Resumen del día</p>
+        </div>
+        {canCreate && (
+          <button
+            onClick={() => setFormOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+          >
+            <Plus size={16} />
+            Nueva orden
+          </button>
+        )}
       </div>
 
       {/* KPI Cards */}
@@ -125,13 +148,18 @@ export default function Dashboard() {
         </div>
 
         <QueueRow
-          title={activeConfig.label}
-          Icon={activeConfig.Icon}
-          tone={activeConfig.tone}
           items={activeItems}
           emptyText={activeConfig.emptyText}
         />
       </Card>
+
+      {canCreate && <OrderForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={onCreated} />}
+      <PrintOrderPanel
+        open={!!printing}
+        order={printing?.order}
+        customer={printing?.customer}
+        onClose={() => setPrinting(null)}
+      />
     </div>
   )
 }

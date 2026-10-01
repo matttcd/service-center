@@ -1,18 +1,7 @@
 // ============================================
 // Actividad: línea de tiempo de movimientos del sistema
 // ============================================
-import {
-  History,
-  Plus,
-  Pencil,
-  Trash2,
-  RefreshCw,
-  Send,
-  MessageSquareWarning,
-  Upload,
-  Archive,
-  Save,
-} from 'lucide-react'
+import { History } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import EmptyState from '../components/EmptyState.jsx'
@@ -20,21 +9,6 @@ import { ORDER_STATUS_LABEL } from '../utils/helpers.js'
 
 const fmtTime = (iso) =>
   new Date(iso).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })
-
-const ICONS = {
-  create: <Plus size={14} className="text-emerald-500" />,
-  update: <Pencil size={14} className="text-sky-500" />,
-  delete: <Trash2 size={14} className="text-red-500" />,
-  status: <RefreshCw size={14} className="text-primary-500" />,
-  whatsapp: <Send size={14} className="text-emerald-500" />,
-  whatsapp_error: <MessageSquareWarning size={14} className="text-red-500" />,
-  seed: <Upload size={14} className="text-slate-400" />,
-  restore: <Archive size={14} className="text-sky-500" />,
-  toggle: <RefreshCw size={14} className="text-accent-500" />,
-  config: <Save size={14} className="text-accent-500" />,
-  password_change: <RefreshCw size={14} className="text-accent-500" />,
-  assign: <RefreshCw size={14} className="text-primary-500" />,
-}
 
 const DOT_COLORS = {
   create: 'bg-emerald-500',

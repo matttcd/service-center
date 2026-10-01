@@ -2,11 +2,10 @@
 // Clientes: listado en tabla con ordenamiento,
 // búsqueda, filtros y paginación (estilo Órdenes).
 // ============================================
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, ArrowUp, ArrowDown, ChevronsUpDown, ChevronUp, ChevronDown, X } from 'lucide-react'
+import { Plus, Search, ArrowUp, ArrowDown, ChevronsUpDown, ChevronUp, ChevronDown, X, FileSpreadsheet } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
-import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import CustomerForm from '../components/CustomerForm.jsx'
@@ -16,7 +15,6 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
 export default function Clients() {
   const { customers, orders, addCustomer } = useData()
-  const { currentUser } = useAuth()
   const navigate = useNavigate()
 
   const [search, setSearch] = useState('')
@@ -34,7 +32,7 @@ export default function Clients() {
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[1])
 
   // Búsqueda con debounce
-  useMemo(() => {
+  useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(t)
   }, [searchInput])
@@ -101,6 +99,33 @@ export default function Clients() {
     window.setTimeout(() => setNotice(''), 4000)
   }
 
+  const exportCsv = () => {
+    if (!sorted.length) return
+    const headers = ['Nombre', 'DNI', 'Teléfono principal', 'Teléfono 2', 'Teléfono 3', 'Email', 'Dirección', 'Órdenes']
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const dataRows = sorted.map((c) => [
+      escape(c.fullName),
+      escape(c.dni),
+      escape(c.phone),
+      escape(c.phone2),
+      escape(c.phone3),
+      escape(c.email),
+      escape(c.address),
+      c.ordersCount || 0,
+    ].join(','))
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...dataRows].join('\r\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `clientes_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   const inputCls =
     'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
 
@@ -131,13 +156,24 @@ export default function Clients() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Clientes</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{rows.length} de {customers.length} clientes</p>
         </div>
-        <button
-          onClick={() => { setFormError(''); setFormOpen(true) }}
-          className="inline-flex items-center gap-2 self-start rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
-        >
-          <Plus size={16} />
-          Nuevo cliente
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={exportCsv}
+            disabled={sorted.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            title="Exportar clientes a Excel / CSV"
+          >
+            <FileSpreadsheet size={16} className="text-emerald-600 dark:text-emerald-400" />
+            Exportar CSV
+          </button>
+          <button
+            onClick={() => { setFormError(''); setFormOpen(true) }}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+          >
+            <Plus size={16} />
+            Nuevo cliente
+          </button>
+        </div>
       </div>
 
       {notice && (

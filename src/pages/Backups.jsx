@@ -2,8 +2,9 @@
 // Backups: copias de seguridad y rollback (admin)
 // ============================================
 import { useCallback, useEffect, useState } from 'react'
-import { Database, Plus, RotateCcw, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Database, Plus, RotateCcw, AlertTriangle, CheckCircle2, Download } from 'lucide-react'
 import { api } from '../utils/api.js'
+import { loadSession } from '../utils/storage.js'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import Modal from '../components/Modal.jsx'
@@ -70,6 +71,27 @@ export default function Backups() {
     }
   }
 
+  const downloadBackup = async (b) => {
+    try {
+      const token = loadSession()?.token
+      const res = await fetch(`/api/backups/${encodeURIComponent(b.name)}/download`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) throw new Error('No se pudo descargar la copia de seguridad.')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = b.name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setNotice({ type: 'error', text: err.message })
+    }
+  }
+
   const btnPrimary =
     'inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50'
 
@@ -128,14 +150,25 @@ export default function Backups() {
                     <p className="text-xs text-slate-400">{fmtSize(b.size)}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setToRestore(b)}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-accent-200 px-3 py-2 text-sm font-semibold text-accent-600 transition hover:bg-accent-50 dark:border-accent-500/30 dark:hover:bg-accent-500/10"
-                >
-                  <RotateCcw size={15} />
-                  Restaurar
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => downloadBackup(b)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    title="Descargar copia a esta PC"
+                  >
+                    <Download size={15} />
+                    Descargar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setToRestore(b)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-accent-200 px-3 py-2 text-sm font-semibold text-accent-600 transition hover:bg-accent-50 dark:border-accent-500/30 dark:hover:bg-accent-500/10"
+                  >
+                    <RotateCcw size={15} />
+                    Restaurar
+                  </button>
+                </div>
               </div>
             ))}
           </div>

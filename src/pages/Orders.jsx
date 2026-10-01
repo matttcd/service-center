@@ -4,7 +4,7 @@
 // ============================================
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Search, ArrowUp, ArrowDown, ChevronUp, ChevronDown, ChevronsUpDown, X } from 'lucide-react'
+import { Plus, Search, ArrowUp, ArrowDown, ChevronUp, ChevronDown, ChevronsUpDown, X, FileSpreadsheet } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
@@ -131,10 +131,40 @@ export default function Orders() {
     window.setTimeout(() => setNotice(null), 6000)
   }
 
+  const exportCsv = () => {
+    if (!sortedOrders.length) return
+    const headers = ['Nº Orden', 'Fecha', 'Cliente', 'Tipo', 'Marca', 'Modelo', 'Problema', 'Reparación', 'Precio', 'Adelanto', 'Saldo', 'Estado', 'Técnico']
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const rows = sortedOrders.map((o) => [
+      escape(o.orderNumber),
+      escape(formatDate(o.createdAt)),
+      escape(o.customerName),
+      escape(o.deviceType),
+      escape(o.brand),
+      escape(o.model),
+      escape(o.issue),
+      escape(o.fix),
+      o.price || 0,
+      o.advance || 0,
+      Math.max(0, (o.price || 0) - (o.advance || 0)),
+      escape(ORDER_STATUS_LABEL[o.status] || o.status),
+      escape(o.assignedToName || '—'),
+    ].join(','))
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ordenes_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   const inputCls =
     'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
-
-  const checkboxCls = 'h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 dark:border-slate-600'
 
   const thCls =
     'group cursor-pointer select-none whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
@@ -163,15 +193,26 @@ export default function Orders() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Órdenes de servicio</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{pageData.total} orden(es)</p>
         </div>
-        {canCreate && (
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setFormOpen(true)}
-            className="inline-flex items-center gap-2 self-start rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+            onClick={exportCsv}
+            disabled={pageData.orders.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            title="Exportar listado a Excel / CSV"
           >
-            <Plus size={16} />
-            Nueva orden
+            <FileSpreadsheet size={16} className="text-emerald-600 dark:text-emerald-400" />
+            Exportar CSV
           </button>
-        )}
+          {canCreate && (
+            <button
+              onClick={() => setFormOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+            >
+              <Plus size={16} />
+              Nueva orden
+            </button>
+          )}
+        </div>
       </div>
 
       {notice && (

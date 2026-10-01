@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Trash2, Check, CheckCircle2, FileText,
-  PackageCheck, RotateCcw, Sticker, Save, Phone, BellRing,
+  PackageCheck, Package, RotateCcw, Sticker, Save, Phone, BellRing,
   Lock, Smartphone, User, X, Pencil, MoreVertical, StickyNote, History, ChevronDown,
   Tablet, Laptop, Monitor, Gamepad2, HelpCircle, Truck,
 } from 'lucide-react'
@@ -31,7 +31,6 @@ import {
   formatMoney,
   titleCase,
   sentenceCase,
-  normalizeList,
 } from '../utils/helpers.js'
 import { COMMON_FIXES } from '../utils/constants.js'
 import { DEVICE_TYPES } from '../../shared/fsm.js'
@@ -138,11 +137,11 @@ export default function OrderDetail() {
       <div className="py-16 text-center">
         <p className="text-sm text-slate-400">Orden no encontrada.</p>
         <button
-          onClick={() => navigate('/ordenes')}
+          onClick={() => navigate(-1)}
           className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
         >
           <ArrowLeft size={16} />
-          Volver a órdenes
+          Volver
         </button>
       </div>
     )
