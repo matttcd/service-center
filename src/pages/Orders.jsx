@@ -133,7 +133,7 @@ export default function Orders() {
     const res = await printLabel(order.id)
     setNotice(res.error
       ? { text: `No se imprimió la etiqueta: ${res.error}`, error: true }
-      : { text: 'Etiqueta enviada a la impresora.', error: false })
+      : { text: 'Etiqueta enviada a la cola de impresión.', error: false })
     window.setTimeout(() => setNotice(null), 6000)
   }
 

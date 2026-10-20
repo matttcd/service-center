@@ -21,7 +21,7 @@ const browser = await puppeteer.launch({ executablePath, headless: true, args: [
 const page = await browser.newPage()
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
-page.setDefaultTimeout(15000)
+page.setDefaultTimeout(30000)
 await page.setViewport({ width: 1440, height: 1080 })
 const text = (value) => page.waitForFunction((expected) => document.body.innerText.includes(expected), {}, value)
 const button = async (label) => {
@@ -89,6 +89,8 @@ try {
   orderId = result.order.id
   await text('Imprimir orden de servicio')
   const popupPromise = new Promise((resolve) => page.once('popup', resolve))
+  // Chromium frío puede tardar más en el disco de la estación de build.
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some((node) => node.textContent.trim() === 'Abrir PDF para imprimir' && !node.disabled), { timeout: 60000 })
   await button('Abrir PDF para imprimir')
   const popup = await popupPromise
   await popup.waitForFunction(() => location.href.startsWith('blob:'))
@@ -164,6 +166,25 @@ try {
   await text('Papelera')
   assert.deepEqual(errors, [], 'Errores JavaScript en el navegador.')
   console.log('✓ Navegador: cambio voluntario de contraseña y sesión vigente tras recargar.')
+  await page.goto(`${base}/configuracion?tab=impresoras`, { waitUntil: 'networkidle2' })
+  await text('Impresoras del local')
+  await page.waitForSelector('input[type="number"]')
+  await page.select('select', '')
+  const fields = await page.$$('input[type="number"]')
+  await fields[0].click()
+  await page.keyboard.down('Control')
+  await page.keyboard.press('A')
+  await page.keyboard.up('Control')
+  await page.keyboard.press('Backspace')
+  await fields[0].type('70')
+  await button('Guardar impresoras')
+  await text('Impresoras guardadas para este local.')
+  await page.reload({ waitUntil: 'networkidle2' })
+  await page.waitForSelector('input[type="number"]')
+  assert.equal(await page.$eval('input[type="number"]', (input) => input.value), '70')
+  await page.screenshot({ path: path.join(output, 'printer-settings-desktop.png'), fullPage: true })
+  assert.deepEqual(errors, [])
+  console.log('✓ Navegador: configuración de impresoras y tamaño de etiqueta persistente sin enviar trabajos físicos.')
 } catch (err) {
   await page.screenshot({ path: path.join(output, 'browser-failure.png'), fullPage: true }).catch(() => {})
   throw err

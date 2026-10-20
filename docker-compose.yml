@@ -27,6 +27,7 @@ services:
     environment:
       - PORT=3000
       - DATA_DIR=/app/data
+      - PRINT_TRANSPORT=bridge
       - BACKUP_EXPORT_DIR=/app/exported-backups
       # Docker Desktop resuelve el host; con Docker Engine en WSL, indicar la IP de Windows.
       - PRINT_BRIDGE_HOST=${PRINT_BRIDGE_HOST:-host.docker.internal}

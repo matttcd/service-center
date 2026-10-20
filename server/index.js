@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import './env.js'
 
 import fs from 'node:fs'
+import net from 'node:net'
 
 const __file = fileURLToPath(import.meta.url)
 
@@ -19,8 +20,8 @@ import bcrypt from 'bcryptjs'
 import { prisma, onDataChange, notifyChange } from './db.js'
 
 import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase, normalizeList } from './helpers.js'
-import { printZplLabel } from './printer.js'
-import { printPdfToBridge, listBridgePrinters } from './printer/pdf_bridge_client.js'
+import { listPrinters, printPdf, getPrintConfig } from './printing.js'
+import { registerPrintRoutes, sendLabel } from './print-routes.js'
 import { publicUser, usesDefaultPassword, isValidBackupName, createLoginLimiter, sessionVersion, passwordError } from './security.js'
 import { ORDER_STATUSES, allowedTransitions } from '../shared/fsm.js'
 import { buildOrderHtml } from './pdf/orderTemplate.js'
@@ -41,6 +42,8 @@ import { logError } from './logging.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
+let maintenanceMode = false
+let activeMutations = 0
 export { app }
 const PORT = process.env.PORT || 4000
 
@@ -71,7 +74,11 @@ const noteLoginFailure = (key) => loginLimiter.note(key)
 const asyncWrap = (fn) => (req, res, next) => {
   try {
     const result = fn(req, res, next)
-    if (result && typeof result.then === 'function') result.catch(next)
+    if (result && typeof result.then === 'function') {
+      const mutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
+      if (mutation) activeMutations++
+      result.then(() => { if (mutation) activeMutations-- }, (error) => { if (mutation) activeMutations--; next(error) })
+    }
   } catch (err) {
     next(err)
   }
@@ -98,7 +105,7 @@ app.use((req, res, next) => {
 })
 app.use(express.json({ limit: '1mb' }))
 app.use('/api', (req, res, next) => {
-  if (isRestoring() && req.path !== '/health') return res.status(503).json({ error: 'Se está restaurando una copia. Esperá unos segundos y volvé a intentar.', code: 'MAINTENANCE' })
+  if ((maintenanceMode || isRestoring()) && req.path !== '/health') return res.status(503).json({ error: 'El sistema está en mantenimiento. Esperá unos segundos y volvé a intentar.', code: 'MAINTENANCE' })
   next()
 })
 
@@ -106,7 +113,7 @@ app.use('/api', (req, res, next) => {
 app.get('/api/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`
-    res.json({ status: 'ok', verification: process.env.VERIFICATION_INSTANCE || undefined })
+    res.json({ status: 'ok', verification: process.env.VERIFICATION_INSTANCE || undefined, instance: process.env.INSTANCE_ID || undefined, version: process.env.APP_VERSION || undefined })
   } catch {
     res.status(503).json({ status: 'unavailable' })
   }
@@ -891,7 +898,7 @@ app.get('/api/orders/:id/pdf', auth, async (req, res) => {
 
 app.get('/api/printers', auth, async (req, res) => {
   try {
-    const result = await listBridgePrinters()
+    const result = await listPrinters()
     if (!result.ok) return res.status(502).json({ printers: [], error: result.error })
     res.json({ printers: result.printers })
   } catch (err) {
@@ -907,9 +914,9 @@ app.post('/api/orders/:id/print', auth, async (req, res) => {
     const html = buildOrderHtml(data.order, data.customer, data.terms)
     const pdfBuffer = await htmlToPdf(html)
     const printer = (req.body && req.body.printer) || null
-    const result = await printPdfToBridge(pdfBuffer, printer)
+    const result = await printPdf(pdfBuffer, printer)
     if (!result.ok) return res.status(502).json({ error: result.error || 'Error de impresión.' })
-    res.json({ ok: true })
+    res.json({ ok: true, status: 'submitted' })
   } catch (err) {
     logError('Error imprimiendo orden:', err)
     res.status(500).json({ error: 'No se pudo imprimir la orden.' })
@@ -1406,15 +1413,10 @@ app.post('/api/orders/:id/confirm', auth, async (req, res) => {
 // ---------- Etiqueta ZPL ----------
 app.post('/api/orders/:id/label', auth, async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: req.params.id } })
-  if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
+  if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
   const customer = await prisma.customer.findUnique({ where: { id: order.customerId } })
-  const result = await printZplLabel({
-    orderNumber: order.orderNumber,
-    model: `${order.brand} ${order.model}`.trim(),
-    customerName: customer?.fullName || '',
-    date: formatDateLabel(todayISO()),
-  })
-  res.json({ ok: result.ok, error: result.error })
+  const result = await sendLabel(order, customer, await getPrintConfig())
+  res.status(result.ok ? 200 : 502).json({ ok: result.ok, status: result.ok ? 'submitted' : undefined, error: result.error })
 })
 
 // ---------- Configuración (solo admin) ----------
@@ -1635,6 +1637,7 @@ app.post('/api/backups/:name/restore', auth, adminOnly, async (req, res) => {
 })
 
 registerTrashRoutes(app, { prisma, auth, adminOnly, commit, audit })
+registerPrintRoutes(app, { auth, adminOnly, commit })
 
 // ---------- 404 para la API ----------
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }))
@@ -1667,8 +1670,8 @@ export async function startServer() {
     console.log(`Servidor de servicio técnico corriendo en http://${host}:${PORT}`)
   })
   const shutdown = async () => {
-    server.close()
     for (const client of eventClients) client.end()
+    await new Promise((resolve) => { server.close(resolve); setTimeout(resolve, 20000).unref() })
     const { closeBrowser } = await import('./pdf/puppeteerPdf.js')
     await closeBrowser()
     await prisma.$disconnect()
@@ -1676,6 +1679,42 @@ export async function startServer() {
   }
   process.once('SIGINT', shutdown)
   process.once('SIGTERM', shutdown)
+  if (process.platform === 'win32' && process.env.SERVICE_CONTROL_PIPE && process.env.SERVICE_CONTROL_TOKEN) {
+    const control = net.createServer((socket) => {
+      socket.setTimeout(3000, () => socket.destroy())
+      let message = ''
+      socket.on('error', () => {})
+      socket.on('data', async (chunk) => {
+        message += chunk
+        if (message.length > 4096) return socket.destroy()
+        if (!message.includes('\n')) return
+        try {
+          const request = JSON.parse(message)
+          if (request.token !== process.env.SERVICE_CONTROL_TOKEN || !['status', 'maintenance', 'resume', 'shutdown', 'printers'].includes(request.command)) return socket.end('{"ok":false}\n')
+          if (request.command === 'printers') {
+            socket.setTimeout(75000)
+            const result = await listPrinters()
+            return socket.end(JSON.stringify(result) + '\n')
+          }
+          if (request.command === 'maintenance') {
+            socket.setTimeout(35000)
+            maintenanceMode = true
+            const deadline = Date.now() + 30000
+            while (activeMutations && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
+            if (activeMutations) {
+              maintenanceMode = false
+              return socket.end(JSON.stringify({ ok: false, error: 'Hay operaciones en curso. Esperá a que terminen y volvé a intentar.' }) + '\n')
+            }
+          }
+          if (request.command === 'resume') maintenanceMode = false
+          socket.end('{"ok":true}\n')
+          if (request.command === 'shutdown') { control.close(); shutdown() }
+        } catch { socket.destroy() }
+      })
+    })
+    control.on('error', (error) => { logError('Error en el control del servicio:', error); shutdown() })
+    control.listen(process.env.SERVICE_CONTROL_PIPE)
+  }
   if (process.env.VERIFICATION_INSTANCE && process.send) {
     process.on('message', (message) => { if (message === 'verification-shutdown') shutdown() })
   }

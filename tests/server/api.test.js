@@ -49,6 +49,12 @@ beforeEach(async () => {
 })
 
 describe('API HTTP: contratos y seguridad (persistencia simulada)', () => {
+  it('solo administradores pueden configurar impresoras o enviar pruebas', async () => {
+    user.role = 'tecnico'
+    expect((await request('/printing/config')).status).toBe(403)
+    expect((await put('/printing/config', {})).status).toBe(403)
+    expect((await post('/printing/test', { kind: 'order' })).status).toBe(403)
+  })
   it('bloquea el acceso sin sesión y no filtra hashes', async () => {
     const result = await request('/orders/order-1', { auth: null })
     expect(result.status).toBe(401)

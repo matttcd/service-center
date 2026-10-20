@@ -399,7 +399,7 @@ export default function OrderDetail() {
               <button
                 onClick={async () => {
                   const res = await printLabel(order.id)
-                  showNotice(res.error ? res.error : 'Etiqueta enviada a la impresora.')
+                  showNotice(res.error ? res.error : 'Etiqueta enviada a la cola de impresión.')
                 }}
                 className={`${btnGhost} !px-3 !py-1.5 !text-xs`}
               >

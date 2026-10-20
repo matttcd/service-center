@@ -20,6 +20,7 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: "true"
       - run: npm run check
       - run: python3 tests/server/print_bridge_test.py
+      - run: python3 tests/server/windows_print_test.py
       - run: npm audit --audit-level=high && npm audit --prefix server --audit-level=high
       - run: docker compose -p service-center-verify -f docker-compose.verify.yml up -d --build --wait --wait-timeout 240
       - run: npm run test:integration

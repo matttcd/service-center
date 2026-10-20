@@ -12,7 +12,7 @@ const PYTHON = process.env.PYTHON || 'python'
 // Llama al helper Python que imprime la etiqueta ZPL. Devuelve { ok } o
 // { ok: false, error }. La impresora (Zebra/Godex por USB) debe estar
 // instalada en la PC que corre el servidor.
-export function printZplLabel({ orderNumber, model, customerName, date }) {
+export function printZplLabel({ orderNumber, model, customerName, date, printer }) {
   return new Promise((resolve) => {
     const args = [
       SCRIPT,
@@ -21,6 +21,7 @@ export function printZplLabel({ orderNumber, model, customerName, date }) {
       '--customer', String(customerName || ''),
       '--date', String(date || ''),
     ]
+    if (printer) args.push('--printer', String(printer))
     const child = spawn(PYTHON, args, { windowsHide: true })
     let stdout = ''
     let stderr = ''

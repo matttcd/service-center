@@ -24,6 +24,7 @@ async function getBrowser() {
     browserPromise = puppeteer.launch({
       headless: true,
       executablePath,
+      userDataDir: process.env.BROWSER_DATA_DIR || undefined,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     }).then((browser) => {
       browser.once('disconnected', () => { browserPromise = null })
@@ -36,7 +37,7 @@ async function getBrowser() {
   return browserPromise
 }
 
-export async function htmlToPdf(html) {
+export async function htmlToPdf(html, { width, height } = {}) {
   const browser = await getBrowser()
   const page = await browser.newPage()
   try {
@@ -50,7 +51,8 @@ export async function htmlToPdf(html) {
     })
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 15000 })
     const raw = await page.pdf({
-      format: 'A4',
+      ...(width && height ? { width: `${width}mm`, height: `${height}mm` } : { format: 'A4' }),
+      preferCSSPageSize: !!(width && height),
       printBackground: true,
       margin: { top: '0mm', bottom: '0mm', left: '0mm', right: '0mm' },
     })

@@ -119,6 +119,10 @@ export function DataProvider({ children }) {
     const es = new EventSource(`/api/events?token=${encodeURIComponent(token)}`)
     let connected = false
     es.addEventListener('connected', () => {
+      if (connected) {
+        refresh({ silent: true })
+        if (currentUser.role === 'admin') loadAdminMetrics()
+      }
       connected = true
     })
     es.addEventListener('data-changed', () => {

@@ -80,10 +80,12 @@ def list_printers():
         return []
 
 
-def print_zpl(zpl_data):
+def print_zpl(zpl_data, printer_name=None):
     if not HAS_WIN32:
         return False, 'win32print no disponible (¿estás en Windows?)'
-    printer_name = get_default_printer()
+    if printer_name and printer_name not in list_printers():
+        return False, 'La impresora de etiquetas seleccionada no está instalada.'
+    printer_name = printer_name or get_default_printer()
     if not printer_name:
         return False, 'Configurá LABEL_PRINTER_NAME con una impresora de etiquetas ZPL instalada.'
     try:
@@ -187,7 +189,7 @@ def handle_client(conn, addr):
         if not zpl:
             _send_response(conn, False, 'Payload vacío (ni "zpl" ni "pdf").')
             return
-        ok, err = print_zpl(zpl)
+        ok, err = print_zpl(zpl, payload.get('printer') or None)
         _send_response(conn, ok, err)
     except Exception as e:
         try:

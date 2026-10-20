@@ -95,7 +95,7 @@ export default function PrintOrderPanel({ open, order, onClose }) {
     try {
       const res = await printOrderServer(order.id, selected || null)
       if (res.error) setNotice({ type: 'error', msg: res.error })
-      else setNotice({ type: 'success', msg: 'Orden enviada a la impresora.' })
+      else setNotice({ type: 'success', msg: 'Orden enviada a la cola de impresión.' })
     } catch (e) {
       setNotice({ type: 'error', msg: e.message || 'No se pudo imprimir.' })
     } finally {
@@ -175,7 +175,7 @@ export default function PrintOrderPanel({ open, order, onClose }) {
               onChange={(e) => setSelected(e.target.value)}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             >
-              <option value="">Impresora por defecto del sistema</option>
+              <option value="">Impresora de órdenes configurada</option>
               {printers.map((p) => (
                 <option key={p} value={p}>
                   {p}

@@ -4,6 +4,8 @@ Gestión de órdenes de servicio para equipos electrónicos. React en el navegad
 
 La evaluación del código y los pasos pendientes están en [docs/REVISION.md](docs/REVISION.md).
 
+El despliegue principal en preparación es el instalador Windows completo, con impresión nativa y sin bridge separado. Instalación, actualización y recuperación: [docs/WINDOWS.md](docs/WINDOWS.md). Los comandos Docker siguientes conservan la alternativa existente.
+
 ## Estado de verificación
 
 Verificado con PostgreSQL 16 real y Chrome: alta de clientes y órdenes, roles, presupuestos, reparaciones, derivación externa, entrega, garantía, comprobantes PDF, CSV de varias páginas, papelera, cambio de contraseña y recuperación desde un respaldo cifrado. También se probó adoptar una base anterior creada con `db push` conservando sus datos. Las pruebas usan bases descartables y secretos nuevos.

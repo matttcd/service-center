@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { prisma } from './db.js'
 import { startServer } from './index.js'
 import { backupKey } from './backup-crypto.js'
+import { printTransport } from './printing.js'
 
 const serverDir = path.dirname(fileURLToPath(import.meta.url))
 const cli = path.join(serverDir, 'node_modules/prisma/build/index.js')
@@ -15,7 +16,7 @@ function migrate(...args) {
 
 // Rechaza configuración incompleta antes de modificar el esquema.
 backupKey(process.env.BACKUP_ENCRYPTION_KEY)
-if (!process.env.PRINT_BRIDGE_TOKEN) throw new Error('Falta PRINT_BRIDGE_TOKEN.')
+if (printTransport() === 'bridge' && !process.env.PRINT_BRIDGE_TOKEN) throw new Error('Falta PRINT_BRIDGE_TOKEN.')
 
 const tables = await prisma.$queryRaw`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`
 const existing = tables.map((row) => row.tablename)

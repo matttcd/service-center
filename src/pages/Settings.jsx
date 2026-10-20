@@ -25,7 +25,9 @@ import {
   Sparkles,
   Trash2,
   HelpCircle,
+  Printer,
 } from 'lucide-react'
+import PrinterSettings from '../components/PrinterSettings.jsx'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import {
@@ -920,6 +922,7 @@ function TechniciansSection({ catalogLists, saveCatalogLists }) {
 // ----------------------------------------------------
 const SETTINGS_TABS = [
   { key: 'general', label: 'General', Icon: Sliders },
+  { key: 'impresoras', label: 'Impresoras', Icon: Printer },
   { key: 'opciones', label: 'Opciones de orden', Icon: Tags },
   { key: 'catalogo', label: 'Importar catálogo', Icon: Upload },
   { key: 'terminos', label: 'Términos legales', Icon: FileText },
@@ -1009,6 +1012,7 @@ export default function Settings() {
           )}
 
           {activeTab === 'catalogo' && <CatalogSection />}
+          {activeTab === 'impresoras' && <PrinterSettings />}
 
           {activeTab === 'terminos' && (
             <TermsSection

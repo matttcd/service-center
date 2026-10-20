@@ -124,13 +124,13 @@ function pruneBackups(preserve) {
   }
 }
 
-export async function restoreBackup(name) {
+export async function restoreBackup(name, { key = BACKUP_ENCRYPTION_KEY } = {}) {
   if (restoring) throw new Error('Ya hay una restauración en curso.')
   if (!isValidBackupName(name)) throw new Error('Nombre de copia inválido.')
   const full = path.join(BACKUP_DIR, name)
   if (!fs.existsSync(full)) throw new Error('Copia no encontrada.')
   // Autentica y descifra ANTES de ejecutar cualquier operación sobre la base.
-  const data = decryptBackup(fs.readFileSync(full), BACKUP_ENCRYPTION_KEY)
+  const data = decryptBackup(fs.readFileSync(full), key)
   const env = { ...process.env, ...postgresConnection(process.env.DATABASE_URL) }
   const bin = findPgBinary('pg_restore')
   restoring = true

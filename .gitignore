@@ -28,6 +28,7 @@ session-*.md
 session-*.json
 tools/
 test-results/
+release/
 
 # PDFs generados por los scripts de prueba de medición/solapamiento
 test-*.pdf

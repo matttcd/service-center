@@ -93,7 +93,7 @@ def _send_via_tcp(zpl):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(10)
         sock.connect((PRINT_BRIDGE_HOST, PRINT_BRIDGE_PORT))
-        payload = json.dumps({'zpl': zpl, 'token': os.environ.get('PRINT_BRIDGE_TOKEN', '')}).encode('utf-8')
+        payload = json.dumps({'zpl': zpl, 'printer': os.environ.get('LABEL_PRINTER_NAME', ''), 'token': os.environ.get('PRINT_BRIDGE_TOKEN', '')}).encode('utf-8')
         sock.sendall(struct.pack('>I', len(payload)))
         sock.sendall(payload)
         raw_len = sock.recv(4)
@@ -151,7 +151,10 @@ def main():
     parser.add_argument('--model', default='')
     parser.add_argument('--customer', default='')
     parser.add_argument('--date', default='')
+    parser.add_argument('--printer', default='')
     args = parser.parse_args()
+    if args.printer:
+        os.environ['LABEL_PRINTER_NAME'] = args.printer
 
     zpl = generate_zpl(
         args.order,

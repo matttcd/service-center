@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+@font-face { font-family: "Inter"; src: url('./assets/fonts/Inter-Regular.ttf') format('truetype'); font-weight: 400 600; font-display: swap; }
+@font-face { font-family: "Inter"; src: url('./assets/fonts/Inter-Bold.ttf') format('truetype'); font-weight: 700 900; font-display: swap; }
+
 /* Configura el modo oscuro mediante la clase .dark en el html */
 @custom-variant dark (&:where(.dark, .dark *));
 

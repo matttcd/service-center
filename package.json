@@ -1,12 +1,14 @@
 {
   "name": "service-center",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:server": "cd server && cross-env PORT=4000 node index.js",
     "build": "vite build",
+    "build:windows": "node scripts/windows/build.mjs",
+    "test:windows": "node scripts/windows/verify-package.mjs",
     "lint": "oxlint",
     "test": "vitest run",
     "test:integration": "node --test tests/integration/workflow.mjs",
