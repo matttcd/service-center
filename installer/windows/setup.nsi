@@ -381,6 +381,8 @@ Section "Instalar"
   CreateShortcut "$SMPROGRAMS\Service Center\Carpeta de datos y respaldos.lnk" "$DataDir"
   ; Explorer es x64: sysnative solo existe para el proceso NSIS de 32 bits.
   CreateShortcut "$SMPROGRAMS\Service Center\Recuperar una copia.lnk" "$WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" '-NoExit -NoProfile -ExecutionPolicy Bypass -File "$ReleaseDir\installer\windows\restore.ps1" -DataDir "$DataDir"'
+  CreateShortcut "$SMPROGRAMS\Service Center\Recuperar administrador.lnk" "$WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" '-STA -NoProfile -ExecutionPolicy Bypass -File "$ReleaseDir\installer\windows\recover-admin.ps1" -DataDir "$DataDir"'
+  CreateShortcut "$SMPROGRAMS\Service Center\Desinstalar Service Center.lnk" "$INSTDIR\Uninstall.exe"
   Goto end
   optionsFailed:
     Delete $OptionsFile
@@ -414,6 +416,8 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\Service Center\Abrir Service Center.url"
   Delete "$SMPROGRAMS\Service Center\Carpeta de datos y respaldos.lnk"
   Delete "$SMPROGRAMS\Service Center\Recuperar una copia.lnk"
+  Delete "$SMPROGRAMS\Service Center\Recuperar administrador.lnk"
+  Delete "$SMPROGRAMS\Service Center\Desinstalar Service Center.lnk"
   RMDir "$SMPROGRAMS\Service Center"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ServiceCenter"
   ; Se conserva Software\ServiceCenter para reinstalar con los mismos datos.

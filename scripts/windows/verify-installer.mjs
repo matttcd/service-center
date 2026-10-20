@@ -72,10 +72,17 @@ try {
   const script = `function Get-CimInstance {}\nfunction Get-NetFirewallRule {}\nfunction Remove-NetFirewallRule {}\n& ${quote(path.join(root, 'installer/windows/uninstall.ps1'))} -AppDir ${quote(appDir)} -DataDir ${quote(dataDir)}`
   const checkFile = path.join(directory, 'uninstall-check.ps1')
   fs.writeFileSync(checkFile, '\uFEFF' + script, 'utf8')
+  fs.writeFileSync(path.join(appDir, 'escape.txt'), 'Conservar fuera de la version')
+  fs.writeFileSync(manifestFile, JSON.stringify({ releaseId: 'test-release', platform: 'win32-x64', files: [{ path: 'program.txt' }, { path: '../../escape.txt' }] }))
+  const rejected = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', checkFile], { windowsHide: true, encoding: 'utf8' })
+  assert.equal(rejected.status, 1, 'No se deben retirar archivos de un manifiesto que escapa del programa.')
+  assert.equal(fs.readFileSync(path.join(version, 'program.txt'), 'utf8'), 'Retirar programa')
+  fs.writeFileSync(manifestFile, manifest)
   execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', checkFile], { windowsHide: true, stdio: 'pipe' })
   assert.equal(fs.existsSync(version), false)
   assert.equal(fs.readFileSync(path.join(dataDir, 'empresa.txt'), 'utf8'), 'Conservar datos')
   assert.equal(fs.readFileSync(path.join(appDir, 'ajeno.txt'), 'utf8'), 'Conservar')
+  assert.equal(fs.readFileSync(path.join(appDir, 'escape.txt'), 'utf8'), 'Conservar fuera de la version')
   assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'installation.json'), 'utf8')).status, 'uninstalled')
   console.log('✓ Asistente: cuentas Windows, JSON Unicode, reintento de instalación interrumpida, rutas y conservación de archivos ajenos (registro/servicios simulados).')
 } finally {

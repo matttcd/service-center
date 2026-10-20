@@ -32,6 +32,14 @@ Si cambia la dirección del servidor, ejecutar el instalador para reparar la con
 
 ## Datos, respaldos y recuperación
 
+### Recuperar la contraseña del administrador
+
+En la PC servidora, abrir **Inicio → Service Center → Recuperar administrador** y aceptar la elevación de Windows. Elegir la nueva contraseña, repetirla y pulsar **Restablecer**. No hace falta recordar la anterior; sí se necesitan permisos administrativos de Windows. Cancelar no modifica nada. La herramienta comprueba el acceso, registra la recuperación en auditoría e invalida las sesiones anteriores del administrador. Reinicia brevemente la aplicación para liberar también los bloqueos por intentos fallidos desde otras PC del local.
+
+La recuperación funciona sin Internet, con los servicios del sistema en ejecución. No restablece contraseñas de Windows ni cambia las de otros usuarios. Si se informa que la clave cambió pero la comprobación falló, conservar la nueva clave y revisar los servicios antes de repetir. Esta opción está disponible desde el instalador 1.1.2.
+
+### Respaldos
+
 La carpeta de datos contiene `postgres\`, `config\service.json`, certificados privados, logs y respaldos. Sus ACL restringen el acceso; la cuenta del servicio solo lee la configuración. Guardar por separado la clave `BACKUP_ENCRYPTION_KEY` de `config\service.json`: sin ella no puede verificarse una copia cifrada.
 
 Las copias automáticas se conservan en `app-data\backups` y se exportan a `backups-exported`. Ambas carpetas predeterminadas siguen en la misma PC: para proteger frente a su pérdida, copiar las exportadas a otro disco/equipo y guardar la clave por separado. Puede configurarse `BACKUP_EXPORT_DIR` en `service.json` con un destino accesible para el servicio y reiniciarlo desde Servicios de Windows.
@@ -55,6 +63,8 @@ Los registros están en `logs\`, y el progreso de instalación en `installation.
 Si una migración impide arrancar la aplicación, la herramienta de recuperación también admite el servicio detenido, con PostgreSQL en ejecución. Restaurar la copia previa con su clave y volver a ejecutar el instalador de la versión conocida. Se mantiene detenido el servidor hasta reparar y comprobar su salud; no se reintenta automáticamente una migración fallida.
 
 Desinstalar retira los servicios, la regla de firewall y los archivos del programa incluidos en sus manifiestos. Conserva base, secretos, respaldos, CA y cuenta Windows para permitir la recuperación. No borra datos empresariales automáticamente.
+
+Abrir **Inicio → Service Center → Desinstalar Service Center** (desde 1.1.2), o **Configuración de Windows → Aplicaciones → Aplicaciones instaladas → Service Center → Desinstalar**. Aceptar el permiso administrativo y confirmar en el asistente. Para volver a usar los datos, reinstalar conservando las mismas carpetas y la misma cuenta de servicio. Antes de retirar una PC, exportar sus copias cifradas y guardar la clave por separado.
 
 ## Construir y verificar
 

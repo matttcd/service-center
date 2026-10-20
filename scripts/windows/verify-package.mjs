@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import assert from 'node:assert/strict'
 import { root, sha256 } from './download.mjs'
 import { decryptBackup } from '../../server/backup-crypto.js'
+import { verifyAdminRecovery } from './verify-admin-recovery.mjs'
 
 assert.equal(process.platform, 'win32')
 execFileSync(process.execPath, [path.join(root, 'scripts/windows/verify-installer.mjs')], { windowsHide: true, stdio: 'inherit' })
@@ -136,6 +137,7 @@ try {
   const recovered = await fetch('http://127.0.0.1:8181/api/orders', { headers }).then((r) => r.json())
   assert.ok(recovered.total > 0)
   console.log('✓ Recuperación de una copia con clave de otra instalación y conservación de la clave del destino.')
+  await verifyAdminRecovery({ payload, env: hostEnv, settings, envFile, restartServer: async () => { await stopServer(); await startServer('service_center_verify_restore') } })
   await stopServer()
   await startServer('service_center_verify_ui')
   await run(bundledNode, ['tests/integration/browser.mjs'], { ...hostEnv, VERIFY_URL: 'http://127.0.0.1:8181', PUPPETEER_EXECUTABLE_PATH: process.env.SC_BROWSER || 'C:/Program Files/Google/Chrome/Application/chrome.exe' })
