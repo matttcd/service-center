@@ -2,16 +2,16 @@
 // TechnicianSelect: dropdown propio para elegir el técnico encargado.
 // No usa <select> nativo (su lista se dibuja blanca en modo oscuro).
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, Wrench } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
-import ConfirmModal from './ConfirmModal.jsx'
 
 export default function TechnicianSelect({ order, value, onChange, onChanged }) {
   const { technicians, assignTechnician } = useData()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [alertModal, setAlertModal] = useState(null)
+  const setAlertModal = useNotify('error')
   const boxRef = useRef(null)
 
   // value/onChange presentes => modo controlado (asignación diferida, sin llamar
@@ -102,14 +102,7 @@ export default function TechnicianSelect({ order, value, onChange, onChanged }) 
         </div>
       )}
     </div>
-    <ConfirmModal
-      open={!!alertModal}
-      onClose={() => setAlertModal(null)}
-      onConfirm={() => setAlertModal(null)}
-      title="Aviso"
-      message={alertModal}
-      type="alert"
-    />
+
     </>
   )
 }

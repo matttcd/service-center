@@ -1,3 +1,4 @@
+import { useNotify } from '../context/notifications.js'
 import { useState, useEffect, useRef } from 'react'
 import { X, User, Users, Printer, CheckCircle2, Loader2 } from 'lucide-react'
 import { loadSession } from '../utils/storage.js'
@@ -8,7 +9,7 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
   const [pickupBy, setPickupBy] = useState('client')
   const [pickupName, setPickupName] = useState('')
   const [pickupDni, setPickupDni] = useState('')
-  const [error, setError] = useState('')
+  const setError = useNotify('error')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [printing, setPrinting] = useState(false)
@@ -37,7 +38,7 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
       stack -= 1
       window.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [open, setError])
 
   if (!open) return null
 
@@ -135,8 +136,6 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
               </div>
             )}
 
-            {error && <p className="mt-3 text-sm font-medium text-red-500">{error}</p>}
-
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
                 Cancelar
@@ -149,7 +148,6 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
           </>
         ) : (
           <>
-            {error && <p role="alert" className="mb-3 text-sm text-red-600">{error}</p>}
             <div className="flex flex-col items-center text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/15">
                 <CheckCircle2 size={24} className="text-emerald-600 dark:text-emerald-400" />

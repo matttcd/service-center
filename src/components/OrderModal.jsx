@@ -2,6 +2,7 @@
 // OrderModal: orden completa con acciones rápidas del técnico.
 // Reutilizado por el Taller y la página de Terminados.
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -41,8 +42,6 @@ import { nextStatus, nextStatusLabel } from '../../shared/fsm.js'
 
 const FIX_FALLBACK = ['Cambio de pantalla', 'Cambio de módulo', 'Cambio de batería', 'Pin de carga', 'Micrófono', 'Parlante', 'Botón de encendido', 'Flex', 'Software', 'Limpieza']
 
-
-
 function initials(name) {
   return String(name || '')
     .trim()
@@ -73,7 +72,7 @@ export default function OrderModal({ order, onClose }) {
   const [priceText, setPriceText] = useState(order?.price ? String(order.price) : '')
   const [techValue, setTechValue] = useState(order?.assignedTo || '')
   const [busy, setBusy] = useState(false)
-  const [alertModal, setAlertModal] = useState(null)
+  const setAlertModal = useNotify('error')
   const [confirmNotify, setConfirmNotify] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
@@ -641,14 +640,7 @@ export default function OrderModal({ order, onClose }) {
         </div>
       </div>
     </Modal>
-    <ConfirmModal
-      open={!!alertModal}
-      onClose={() => setAlertModal(null)}
-      onConfirm={() => setAlertModal(null)}
-      title="Aviso"
-      message={alertModal}
-      type="alert"
-    />
+
     <ConfirmModal
       open={confirmNotify}
       onClose={() => setConfirmNotify(false)}

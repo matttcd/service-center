@@ -1,6 +1,7 @@
 // ============================================
 // Login: elegí tu perfil y entrá con tu contraseña
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { LogIn, AlertCircle, Loader2, ShieldCheck, Shield, Wrench, RefreshCw, ChevronDown } from 'lucide-react'
@@ -20,7 +21,7 @@ export default function Login() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const setError = useNotify('error')
   const [submitting, setSubmitting] = useState(false)
   const menuRef = useRef(null)
 
@@ -266,13 +267,6 @@ export default function Login() {
                   required
                 />
               </div>
-
-              {error && (
-                <p className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
-                  <AlertCircle size={16} />
-                  {error}
-                </p>
-              )}
 
               <button
                 type="submit"

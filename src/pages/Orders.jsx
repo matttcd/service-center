@@ -2,6 +2,7 @@
 // Orders: listado de órdenes de servicio en tabla
 // (estilo planilla, con ordenamiento, filtros y paginación)
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Search, ArrowUp, ArrowDown, ChevronUp, ChevronDown, ChevronsUpDown, X, FileSpreadsheet } from 'lucide-react'
@@ -64,7 +65,7 @@ export default function Orders() {
 
   const [formOpen, setFormOpen] = useState(false)
   const [printing, setPrinting] = useState(null)
-  const [notice, setNotice] = useState(null)
+  const setNotice = useNotify('success')
   const [exporting, setExporting] = useState(false)
   const canCreate = ['recepcion', 'admin'].includes(currentUser?.role)
 
@@ -234,14 +235,6 @@ export default function Orders() {
           )}
         </div>
       </div>
-
-      {notice && (
-        <p className={`rounded-lg px-4 py-2 text-sm ${notice.error
-          ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400'
-          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'}`}>
-          {notice.text}
-        </p>
-      )}
 
       {/* Filtros */}
       <Card className="p-4">

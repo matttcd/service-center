@@ -1,3 +1,4 @@
+import { useNotify } from '../context/notifications.js'
 import { useCallback, useEffect, useState } from 'react'
 import { RotateCcw, Trash2, Loader2 } from 'lucide-react'
 import { api } from '../utils/api.js'
@@ -12,8 +13,8 @@ export default function Trash() {
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ orders: [], customers: [], orderCount: 0, customerCount: 0, limit: 50 })
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const setError = useNotify('error')
+  const setNotice = useNotify('success')
   const [target, setTarget] = useState(null)
   const [busy, setBusy] = useState(false)
   const load = useCallback(async () => {
@@ -21,7 +22,7 @@ export default function Trash() {
     try { setData(await api(`/trash?page=${page}`)); setError('') }
     catch (err) { setError(err.message) }
     finally { setLoading(false) }
-  }, [page])
+  }, [page, setError])
   useEffect(() => { load() }, [load, ordersRevision])
   const total = tab === 'orders' ? data.orderCount : data.customerCount
   const pages = Math.max(1, Math.ceil(total / data.limit))
@@ -43,8 +44,6 @@ export default function Trash() {
       <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Papelera</h1>
       <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">Recuperá clientes u órdenes eliminados por error. Se conservan durante 30 días y vuelven con su historial.</p>
     </div>
-    {error && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-200"><p>{error}</p><button onClick={load} className="font-semibold underline">Reintentar</button></div>}
-    {notice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{notice}</p>}
     <div className="flex gap-2" aria-label="Tipo de elemento">
       {[['orders', 'Órdenes', data.orderCount], ['customers', 'Clientes', data.customerCount]].map(([key, label, count]) => <button key={key} aria-pressed={tab === key} onClick={() => { setTab(key); setPage(1); setNotice('') }} className={`rounded-lg px-4 py-2 text-sm font-semibold ${tab === key ? 'bg-primary-600 text-white' : 'border border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-300'}`}>{label} ({count})</button>)}
     </div>

@@ -1,6 +1,7 @@
 // ============================================
 // UserForm: crear un nuevo usuario (solo admin)
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useState, useEffect } from 'react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
@@ -10,7 +11,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
   const [form, setForm] = useState({ name: '', password: '', role: 'recepcion' })
   const [snapshot, setSnapshot] = useState('')
   const [confirming, setConfirming] = useState(false)
-  const [error, setError] = useState('')
+  const setError = useNotify('error')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -20,7 +21,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
     setForm(base)
     setError('')
     setConfirming(false)
-  }, [open])
+  }, [open, setError])
 
   const dirty = JSON.stringify(form) !== snapshot
 
@@ -96,12 +97,6 @@ export default function UserForm({ open, onClose, onSubmit }) {
             <option value="admin">Administrador</option>
           </select>
         </div>
-
-        {error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
-            {error}
-          </p>
-        )}
 
         <div className="flex gap-3 pt-1">
           <button

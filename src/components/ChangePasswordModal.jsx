@@ -2,8 +2,9 @@
 // ChangePasswordModal: cambio de contraseña obligatorio
 // (aparece cuando el login detecta una contraseña por defecto)
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useState } from 'react'
-import { KeyRound, AlertCircle } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 import Modal from './Modal.jsx'
 import { api } from '../utils/api.js'
 
@@ -15,7 +16,7 @@ export default function ChangePasswordModal({ open, onDone, required = true, onC
   const [current, setCurrent] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [error, setError] = useState('')
+  const setError = useNotify('error')
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async (e) => {
@@ -78,13 +79,6 @@ export default function ChangePasswordModal({ open, onDone, required = true, onC
               className={inputCls}
             />
           </div>
-
-          {error && (
-            <p className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
-              <AlertCircle size={16} />
-              {error}
-            </p>
-          )}
 
           <button
             type="submit"

@@ -3,6 +3,7 @@
 //   - Opción B: impresión silenciosa en la PC local (elige impresora vía bridge).
 //   - Opción A: impresión desde el navegador (cualquier impresora del dispositivo).
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, Printer, Monitor, RotateCw, AlertTriangle } from 'lucide-react'
 import Modal from './Modal.jsx'
@@ -14,7 +15,7 @@ export default function PrintOrderPanel({ open, order, onClose }) {
   const [selected, setSelected] = useState('')
   const [loadingPrinters, setLoadingPrinters] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState(null)
+  const setNotice = useNotify('success')
   const [pdfReady, setPdfReady] = useState(false)
   const [pdfError, setPdfError] = useState(null)
   const [printerError, setPrinterError] = useState(null)
@@ -68,7 +69,7 @@ export default function PrintOrderPanel({ open, order, onClose }) {
         pdfBlobUrlRef.current = null
       }
     }
-  }, [open, order, retry])
+  }, [open, order, retry, setNotice])
 
   const handleRetry = () => {
     setPdfReady(false)
@@ -213,17 +214,6 @@ export default function PrintOrderPanel({ open, order, onClose }) {
           Se abre una pestaña con el comprobante. Desde el visor podés imprimirlo o guardarlo.
         </p>
 
-        {notice && (
-          <p
-            className={`rounded-lg px-3 py-2 text-sm font-medium ${
-              notice.type === 'success'
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-                : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300'
-            }`}
-          >
-            {notice.msg}
-          </p>
-        )}
           </>
         )}
       </div>

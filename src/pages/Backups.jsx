@@ -1,8 +1,9 @@
 // ============================================
 // Backups: copias de seguridad y rollback (admin)
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useCallback, useEffect, useState } from 'react'
-import { Database, Plus, RotateCcw, AlertTriangle, CheckCircle2, Download } from 'lucide-react'
+import { Database, Plus, RotateCcw, AlertTriangle, Download } from 'lucide-react'
 import { api } from '../utils/api.js'
 import { loadSession } from '../utils/storage.js'
 import { useData } from '../context/DataContext.jsx'
@@ -22,7 +23,7 @@ export default function Backups() {
   const [creating, setCreating] = useState(false)
   const [toRestore, setToRestore] = useState(null)
   const [restoring, setRestoring] = useState(false)
-  const [notice, setNotice] = useState(null)
+  const setNotice = useNotify('success')
   const [health, setHealth] = useState(null)
 
   const load = useCallback(async () => {
@@ -36,7 +37,7 @@ export default function Backups() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [setNotice])
 
   useEffect(() => {
     load()
@@ -121,19 +122,6 @@ export default function Backups() {
         {(health.lastError || health.exportError) && <p role="alert" className="mt-2 text-red-700 dark:text-red-300">{health.lastError || health.exportError}</p>}
         {health.lastSuccessAt && Date.now() - new Date(health.lastSuccessAt).getTime() > 36 * 3600000 && <p role="alert" className="mt-2 font-semibold text-amber-700 dark:text-amber-300">La última copia tiene más de 36 horas. Creá una copia ahora y revisá las copias automáticas.</p>}
       </Card>}
-
-      {notice && (
-        <p
-          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-            notice.type === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-              : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
-          }`}
-        >
-          {notice.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-          {notice.text}
-        </p>
-      )}
 
       {loading ? (
         <Card className="p-6 text-center text-sm text-slate-400">Cargando copias…</Card>

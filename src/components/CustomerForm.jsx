@@ -1,6 +1,7 @@
 // ============================================
 // CustomerForm: alta o edición de cliente
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useState, useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import Modal from './Modal.jsx'
@@ -20,8 +21,9 @@ export default function CustomerForm({ open, onClose, onSubmit, initial, serverE
   const [snapshot, setSnapshot] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [showPhone3, setShowPhone3] = useState(false)
-  const [error, setError] = useState('')
+  const setError = useNotify('error')
   const [saving, setSaving] = useState(false)
+  useEffect(() => { if (open && serverError) setError(serverError) }, [open, serverError, setError])
 
   useEffect(() => {
     if (!open) return
@@ -195,12 +197,6 @@ export default function CustomerForm({ open, onClose, onSubmit, initial, serverE
             className={inputCls}
           />
         </div>
-
-        {(error || serverError) && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
-            {error || serverError}
-          </p>
-        )}
 
         <div className="flex gap-3 pt-1">
           <button

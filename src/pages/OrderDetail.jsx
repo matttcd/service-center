@@ -2,7 +2,8 @@
 // OrderDetail: detalle completo de una orden, unificado en un solo elemento
 // (mismo esquema visual que el modal del taller y el formulario).
 // ============================================
-import { useEffect, useRef, useState } from 'react'
+import { useNotify } from '../context/notifications.js'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Printer, Trash2, Check, CheckCircle2, FileText,
@@ -61,8 +62,8 @@ export default function OrderDetail() {
   const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote, addSparePart, editSparePart, deleteSparePart, catalogLists } = useData()
   const [printOpen, setPrintOpen] = useState(false)
   const [busy, setBusy] = useState(null)
-  const [notice, setNotice] = useState('')
-  const noticeTimer = useRef(null)
+  const setNotice = useNotify('info')
+
   const [menuOpen, setMenuOpen] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [confirm, setConfirm] = useState(null)
@@ -155,18 +156,14 @@ export default function OrderDetail() {
 
   const status = order.status
 
-  const showNotice = (msg) => {
-    if (noticeTimer.current) clearTimeout(noticeTimer.current)
-    setNotice(msg)
-    if (msg) noticeTimer.current = window.setTimeout(() => setNotice(''), 6000)
-  }
+  const showNotice = (msg, error = false) => setNotice(error ? { type: 'error', text: msg } : typeof msg === 'object' ? msg : { type: 'success', text: msg })
 
   const doStatus = async (next, extras = {}) => {
     setBusy(next)
     setNotice('')
     try {
       const res = await setOrderStatus(order.id, next, extras)
-      if (res.error) { showNotice(res.error); return res }
+      if (res.error) { showNotice(res.error, true); return res }
       if (next === 'entregado') {
         showNotice('Equipo entregado.')
         setLocalOrder(res.order)
@@ -195,7 +192,7 @@ export default function OrderDetail() {
     setBusy('retiro')
     const res = await setOrderStatus(order.id, 'entregado', { retiro: true, pickup })
     if (res.error) {
-      showNotice(res.error)
+      showNotice(res.error, true)
     } else {
       showNotice('Equipo retirado por el cliente.')
       setLocalOrder(res.order)
@@ -215,35 +212,35 @@ export default function OrderDetail() {
       const url = window.URL.createObjectURL(blob)
       window.open(url, '_blank')
     } catch {
-      showNotice('No se pudo generar la constancia de retiro.')
+      showNotice('No se pudo generar la constancia de retiro.', true)
     }
   }
 
   const handleGarantia = async () => {
     setBusy('recibido')
     const res = await setOrderStatus(order.id, 'recibido')
-    showNotice(res.error ? res.error : 'Equipo reingresado por garantía.')
+    showNotice(res.error ? { type: 'error', text: res.error } : 'Equipo reingresado por garantía.')
     setBusy(null)
   }
 
   const handleNotified = async () => {
     setBusy('notified')
     const res = await toggleNotified(order.id, !order.notified)
-    showNotice(res.error ? res.error : order.notified ? 'Cliente desmarcado como avisado.' : 'Cliente marcado como avisado.')
+    showNotice(res.error ? { type: 'error', text: res.error } : order.notified ? 'Cliente desmarcado como avisado.' : 'Cliente marcado como avisado.')
     setBusy(null)
   }
 
   const handleConfirm = async () => {
     setBusy('confirm')
     const res = await confirmOrder(order.id, !order.confirmed)
-    showNotice(res.error ? res.error : order.confirmed ? 'Confirmación desmarcada.' : 'Arreglo confirmado por el cliente.')
+    showNotice(res.error ? { type: 'error', text: res.error } : order.confirmed ? 'Confirmación desmarcada.' : 'Arreglo confirmado por el cliente.')
     setBusy(null)
   }
 
   const handleDelete = async () => {
     const res = await deleteOrder(order.id)
     if (!res.error) navigate('/ordenes')
-    else showNotice(res.error)
+    else showNotice(res.error, true)
   }
 
   // ─── Equipo: abrir/cerrar edición ───
@@ -267,7 +264,7 @@ export default function OrderDetail() {
       deviceType: equipDeviceType === 'Otro' ? titleCase(equipCustomDeviceType.trim()) || 'Otro' : equipDeviceType, brand: titleCase(equipBrand), model: titleCase(equipModel), pin: equipNoPin ? '' : equipPin, noPin: equipNoPin,
       pattern: equipPattern, accessories: equipAccessories, conditions: equipConditions, issue: equipIssue,
     })
-    if (!res.error) { setEditingEquip(false); showNotice('Equipo actualizado.') } else showNotice(res.error)
+    if (!res.error) { setEditingEquip(false); showNotice('Equipo actualizado.') } else showNotice(res.error, true)
     setBusy(null)
   }
 
@@ -280,7 +277,7 @@ export default function OrderDetail() {
   const saveEditRepair = async () => {
     setBusy('repair')
     const res = await updateOrder(order.id, { price: Number(repairPriceText) || 0 })
-    if (!res.error) { setEditingRepair(false); showNotice('Reparación actualizada.') } else showNotice(res.error)
+    if (!res.error) { setEditingRepair(false); showNotice('Reparación actualizada.') } else showNotice(res.error, true)
     setBusy(null)
   }
 
@@ -302,7 +299,7 @@ export default function OrderDetail() {
     const fix = [...fixList, fixCustom.trim()].filter(Boolean).map((f) => titleCase(f)).join(', ')
     setBusy('fix')
     const res = await updateOrder(order.id, { fix })
-    if (!res.error) { setEditingFix(false); showNotice('Tipo de reparación actualizado.') } else showNotice(res.error)
+    if (!res.error) { setEditingFix(false); showNotice('Tipo de reparación actualizado.') } else showNotice(res.error, true)
     setBusy(null)
   }
 
@@ -310,7 +307,7 @@ export default function OrderDetail() {
   const saveNote = async (text) => {
     setBusy('note')
     const res = await updateOrder(order.id, { note: text })
-    if (!res.error) showNotice('Nota guardada.'); else showNotice(res.error)
+    if (!res.error) showNotice('Nota guardada.'); else showNotice(res.error, true)
     setBusy(null)
   }
 
@@ -361,12 +358,6 @@ export default function OrderDetail() {
         Volver
       </button>
 
-      {notice && (
-        <p className="rounded-lg bg-primary-50 px-3 py-2 text-sm text-primary-700 dark:bg-primary-500/10 dark:text-primary-300">
-          {notice}
-        </p>
-      )}
-
       <Card className="overflow-hidden">
         {/* Encabezado */}
         <div className="px-6 py-5">
@@ -399,7 +390,7 @@ export default function OrderDetail() {
               <button
                 onClick={async () => {
                   const res = await printLabel(order.id)
-                  showNotice(res.error ? res.error : 'Etiqueta enviada a la cola de impresión.')
+                  showNotice(res.error ? { type: 'error', text: res.error } : 'Etiqueta enviada a la cola de impresión.')
                 }}
                 className={`${btnGhost} !px-3 !py-1.5 !text-xs`}
               >

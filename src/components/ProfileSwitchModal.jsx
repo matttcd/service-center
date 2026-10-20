@@ -2,9 +2,10 @@
 // ProfileSwitchModal: pide la contraseña para
 // cambiar de perfil desde el sidebar
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, Loader2, LogIn, ShieldCheck, Shield, Wrench } from 'lucide-react'
+import { Loader2, LogIn, ShieldCheck, Shield, Wrench } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import Modal from './Modal.jsx'
 import { ROLE_LABEL } from '../utils/helpers.js'
@@ -19,13 +20,13 @@ export default function ProfileSwitchModal({ profile, onClose }) {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const setError = useNotify('error')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setPassword('')
     setError('')
-  }, [profile?.id])
+  }, [profile?.id, setError])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -90,13 +91,6 @@ export default function ProfileSwitchModal({ profile, onClose }) {
               required
             />
           </div>
-
-          {error && (
-            <p className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
-              <AlertCircle size={16} />
-              {error}
-            </p>
-          )}
 
           <div className="flex items-center justify-end gap-2">
             <button

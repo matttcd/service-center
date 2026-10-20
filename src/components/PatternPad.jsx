@@ -1,7 +1,6 @@
+import { useNotify } from '../context/notifications.js'
 import { useRef, useState } from 'react'
 import { Eraser } from 'lucide-react'
-
-
 
 // ============================================
 // PatternPreview: versión de solo lectura (SVG propio, sin dependencia de pattern-lock-js).
@@ -63,7 +62,7 @@ export default function PatternPad({ value = [], onChange, disabled = false }) {
   const drawing = useRef(null)
   const [draft, setDraft] = useState(null)
   const [pointer, setPointer] = useState(null)
-  const [error, setError] = useState('')
+  const setError = useNotify('error')
   const points = draft ?? value
   const valid = [...new Set(points.filter((n) => Number.isInteger(n) && n >= 0 && n < 9))]
 
@@ -134,7 +133,6 @@ export default function PatternPad({ value = [], onChange, disabled = false }) {
           </g>
         })}
       </svg>
-      {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
       <button type="button" onClick={clear} disabled={!valid.length || disabled}
         className="inline-flex h-7 w-fit items-center gap-1 rounded-full border border-slate-300 px-2 text-xs font-semibold text-slate-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300">
         <Eraser size={12} /> Limpiar

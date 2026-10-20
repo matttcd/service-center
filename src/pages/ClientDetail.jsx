@@ -2,6 +2,7 @@
 // ClientDetail: ficha del cliente, edición y baja
 // + historial de sus órdenes de servicio.
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useState } from 'react'
 import { api } from '../utils/api.js'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -26,7 +27,7 @@ export default function ClientDetail() {
   const [editOpen, setEditOpen] = useState(false)
   const [editError, setEditError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [notice, setNotice] = useState('')
+  const setNotice = useNotify('success')
   const [page, setPage] = useState(1)
   const [history, setHistory] = useState({ orders: [], total: 0 })
   const [historyLoading, setHistoryLoading] = useState(true)
@@ -69,7 +70,6 @@ export default function ClientDetail() {
     setEditError('')
     setEditOpen(false)
     setNotice('Cliente actualizado.')
-    window.setTimeout(() => setNotice(''), 4000)
     return { error: null }
   }
 
@@ -77,8 +77,7 @@ export default function ClientDetail() {
     const res = await deleteCustomer(customer.id)
     setConfirmDelete(false)
     if (res?.error) {
-      setNotice(res.error)
-      window.setTimeout(() => setNotice(''), 4000)
+      setNotice({ type: 'error', text: res.error })
       return
     }
     navigate('/clientes')
@@ -100,12 +99,6 @@ export default function ClientDetail() {
         <ArrowLeft size={16} />
         Volver
       </button>
-
-      {notice && (
-        <p className="rounded-lg bg-primary-50 px-3 py-2 text-sm text-primary-700 dark:bg-primary-500/10 dark:text-primary-300">
-          {notice}
-        </p>
-      )}
 
       {/* Ficha del cliente */}
       <Card className="p-6">

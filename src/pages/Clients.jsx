@@ -2,6 +2,7 @@
 // Clientes: listado en tabla con ordenamiento,
 // búsqueda, filtros y paginación (estilo Órdenes).
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, ArrowUp, ArrowDown, ChevronsUpDown, ChevronUp, ChevronDown, X, FileSpreadsheet } from 'lucide-react'
@@ -21,7 +22,7 @@ export default function Clients() {
   const [searchInput, setSearchInput] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [formError, setFormError] = useState('')
-  const [notice, setNotice] = useState('')
+  const setNotice = useNotify('success')
 
   // Ordenamiento
   const [sortKey, setSortKey] = useState('fullName')
@@ -96,7 +97,6 @@ export default function Clients() {
     setFormError('')
     setFormOpen(false)
     setNotice('Cliente guardado.')
-    window.setTimeout(() => setNotice(''), 4000)
   }
 
   const exportCsv = () => {
@@ -175,12 +175,6 @@ export default function Clients() {
           </button>
         </div>
       </div>
-
-      {notice && (
-        <p className="rounded-lg bg-primary-50 px-3 py-2 text-sm text-primary-700 dark:bg-primary-500/10 dark:text-primary-300">
-          {notice}
-        </p>
-      )}
 
       {/* Filtros */}
       <Card className="p-4">

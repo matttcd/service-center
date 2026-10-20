@@ -9,6 +9,7 @@ import './components/patternlock.css'
 import App from './App.jsx'
 import { DataProvider } from './context/DataContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
+import NotificationProvider from './components/NotificationProvider.jsx'
 import { loadTheme } from './utils/storage.js'
 
 // Aplica el tema guardado antes de renderizar (evita el flash de color).
@@ -17,12 +18,14 @@ if (theme === 'dark') document.documentElement.classList.add('dark')
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <AuthProvider>
-      <DataProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </DataProvider>
-    </AuthProvider>
+    <NotificationProvider>
+      <AuthProvider>
+        <DataProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </DataProvider>
+      </AuthProvider>
+    </NotificationProvider>
   </StrictMode>,
 )

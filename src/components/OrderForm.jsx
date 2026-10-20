@@ -2,6 +2,7 @@
 // OrderForm: alta de una orden de servicio (un solo dispositivo)
 // Marcas/modelos con badges del catálogo + "otro" (búsqueda y alta en BD).
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, ListPlus, X, Smartphone, Tablet, Laptop, Monitor, Gamepad2, Printer, HelpCircle } from 'lucide-react'
 import Modal from './Modal.jsx'
@@ -63,7 +64,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [customFix, setCustomFix] = useState('')
   const [price, setPrice] = useState('')
   const [advance, setAdvance] = useState('')
-  const [error, setError] = useState('')
+  const setError = useNotify('error')
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [filteredCatalog, setFilteredCatalog] = useState(null)
@@ -103,7 +104,7 @@ setIssue('')
     setError('')
     setConfirming(false)
     setFilteredCatalog({ brands: [], models: [] })
-  }, [open])
+  }, [open, setError])
 
   // Fetch de marcas y modelos cuando cambia el tipo de dispositivo.
   useEffect(() => {
@@ -632,12 +633,6 @@ setIssue('')
                 </div>
               </div>
             </div>
-          )}
-
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
-              {error}
-            </p>
           )}
 
           <div className="flex gap-3 pt-1">

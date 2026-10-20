@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useNotify } from '../context/notifications.js'
+import { useCallback, useEffect, useState } from 'react'
 import { Printer, RefreshCw, Save } from 'lucide-react'
 import { api } from '../utils/api.js'
 
@@ -6,8 +7,8 @@ export default function PrinterSettings() {
   const [data, setData] = useState(null)
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState(null)
-  const load = async () => {
+  const setNotice = useNotify('success')
+  const load = useCallback(async () => {
     setBusy(true)
     try {
       const result = await api('/printing/config')
@@ -16,8 +17,8 @@ export default function PrinterSettings() {
       setNotice(result.error ? { error: true, text: result.error } : null)
     } catch (error) { setNotice({ error: true, text: error.message }) }
     finally { setBusy(false) }
-  }
-  useEffect(() => { load() }, [])
+  }, [setNotice])
+  useEffect(() => { load() }, [load])
   const change = (key, value) => setForm((previous) => ({ ...previous, [key]: value }))
   const dirty = JSON.stringify(form) !== JSON.stringify(data?.config)
   const save = async (event) => {
@@ -55,7 +56,6 @@ export default function PrinterSettings() {
       <div><h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white"><Printer size={20} className="text-primary-500" />Impresoras del local</h2><p className="mt-1 text-sm text-slate-500">Elegí dónde enviar las órdenes y las etiquetas desde cualquier equipo del local.</p></div>
       <button type="button" disabled={busy} onClick={load} className={secondary}><RefreshCw size={15} />Actualizar lista</button>
     </div>
-    {notice && <p role={notice.error ? 'alert' : 'status'} className={`rounded-lg p-3 text-sm ${notice.error ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>{notice.text}</p>}
     {!form ? <p className="text-sm text-slate-500">{busy ? 'Buscando impresoras…' : 'Actualizá la lista para reintentar.'}</p> : <form onSubmit={save} className="space-y-6">
       <section className="space-y-3 border-b border-slate-200 pb-6 dark:border-slate-800">
         {picker('orderPrinter', 'Órdenes y comprobantes · A4')}

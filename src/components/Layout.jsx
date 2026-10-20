@@ -1,7 +1,8 @@
 // ============================================
 // Layout: estructura general con sidebar y contenido
 // ============================================
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNotify } from '../context/notifications.js'
 import { Outlet } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import Sidebar from './Sidebar.jsx'
@@ -16,6 +17,12 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { loading, dataError, refresh } = useData()
   const { currentUser, clearMustChangePassword } = useAuth()
+  const notifyError = useNotify('error')
+  useEffect(() => {
+    notifyError(dataError ? `No se pudieron actualizar los datos: ${dataError}` : null, {
+      actionLabel: 'Reintentar', onAction: () => refresh({ immediate: true }),
+    })
+  }, [dataError, refresh, notifyError])
 
   return (
     <div className="min-h-screen">
@@ -39,10 +46,6 @@ export default function Layout() {
       {/* Contenido principal */}
       <main className="px-4 py-6 sm:px-6 lg:ml-64 lg:px-8">
         <div className="mx-auto max-w-6xl">
-          {dataError && <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
-            <p>No se pudieron actualizar los datos: {dataError}</p>
-            <button onClick={() => refresh({ immediate: true })} className="shrink-0 font-semibold underline">Reintentar</button>
-          </div>}
           {loading ? (
             <DashboardSkeleton />
           ) : (

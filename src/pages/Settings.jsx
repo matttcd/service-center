@@ -2,12 +2,12 @@
 // Settings: configuración general (solo admin)
 // Rediseño unificado con pestañas estilo Dashboard
 // ============================================
+import { useNotify } from '../context/notifications.js'
 import { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Save,
   AlertCircle,
-  CheckCircle2,
   Stethoscope,
   Upload,
   Plus,
@@ -71,7 +71,7 @@ function GeneralSection({ config, saveConfig }) {
   const [revisionFee, setRevisionFee] = useState('')
   const [appliedFee, setAppliedFee] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [notice, setNotice] = useState(null)
+  const setNotice = useNotify('success')
 
   useEffect(() => {
     if (!config) return
@@ -119,19 +119,6 @@ function GeneralSection({ config, saveConfig }) {
           Monto fijo a cobrar cuando un cliente no acepta el presupuesto de reparación o desiste luego del diagnóstico en taller.
         </p>
       </div>
-
-      {notice && (
-        <p
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-medium ${
-            notice.type === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-              : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
-          }`}
-        >
-          {notice.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          {notice.text}
-        </p>
-      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
@@ -215,7 +202,7 @@ function OptionsSection({ catalogLists, saveCatalogLists }) {
   const [draft, setDraft] = useState('')
   const [filter, setFilter] = useState('')
   const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState(null)
+  const setMsg = useNotify('success')
 
   const SUB_TABS = [
     { key: 'accessories', label: 'Accesorios', icon: Package, items: catalogLists.accessories || [], desc: 'Accesorios que acompañan al equipo (funda, cargador, tarjeta SIM, etc.).' },
@@ -311,19 +298,6 @@ function OptionsSection({ catalogLists, saveCatalogLists }) {
       <div>
         <p className="text-sm text-slate-500 dark:text-slate-400">{activeSub.desc}</p>
       </div>
-
-      {msg && (
-        <p
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium ${
-            msg.type === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-              : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
-          }`}
-        >
-          {msg.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          {msg.text}
-        </p>
-      )}
 
       {/* Buscador interno si hay más de 6 opciones */}
       {list.length > 6 && (
@@ -424,7 +398,7 @@ function OptionsSection({ catalogLists, saveCatalogLists }) {
 function CatalogSection() {
   const [importText, setImportText] = useState('')
   const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState(null)
+  const setImportResult = useNotify('success')
 
   const parsedModels = useMemo(() => parseBulkModels(importText), [importText])
   const linesCount = useMemo(() => {
@@ -521,19 +495,6 @@ function CatalogSection() {
         </div>
       </div>
 
-      {importResult && (
-        <p
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-medium ${
-            importResult.type === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-              : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
-          }`}
-        >
-          {importResult.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          {importResult.text}
-        </p>
-      )}
-
       <div>
         <button
           type="button"
@@ -556,7 +517,7 @@ function TermsSection({ catalogLists, saveCatalogLists }) {
   const [text, setText] = useState('')
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState(null)
+  const setMsg = useNotify('success')
   const [showPreview, setShowPreview] = useState(false)
 
   useEffect(() => {
@@ -631,19 +592,6 @@ function TermsSection({ catalogLists, saveCatalogLists }) {
           </button>
         </div>
       </div>
-
-      {msg && (
-        <p
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm font-medium ${
-            msg.type === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-              : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
-          }`}
-        >
-          {msg.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          {msg.text}
-        </p>
-      )}
 
       {/* Barra de estado de caracteres y cláusulas */}
       <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-800/40">
@@ -740,7 +688,7 @@ function TechniciansSection({ catalogLists, saveCatalogLists }) {
   const [draft, setDraft] = useState('')
   const [filter, setFilter] = useState('')
   const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState(null)
+  const setMsg = useNotify('success')
 
   useEffect(() => {
     setList(catalogLists.externalTechnicians || [])
@@ -800,19 +748,6 @@ function TechniciansSection({ catalogLists, saveCatalogLists }) {
           Talleres especializados disponibles para derivación de reparaciones fuera de nuestro laboratorio principal.
         </p>
       </div>
-
-      {msg && (
-        <p
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium ${
-            msg.type === 'ok'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
-              : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
-          }`}
-        >
-          {msg.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          {msg.text}
-        </p>
-      )}
 
       {/* Buscador si hay más de 6 */}
       {list.length > 6 && (
