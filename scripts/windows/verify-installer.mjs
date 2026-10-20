@@ -11,14 +11,33 @@ const appDir = path.join(directory, 'Programa á')
 const dataDir = path.join(directory, 'Datos ñ')
 const optionsFile = path.join(directory, 'options.json')
 const options = { appDir, dataDir, adminPassword: 'Prueba "ñ" \\ contraseña', hostName: 'local', httpsPort: '443' }
-function preflight(expected) {
+const quote = (value) => "'" + value.replaceAll("'", "''") + "'"
+function preflight(expected, registered = false) {
   fs.writeFileSync(optionsFile, '\uFEFF' + JSON.stringify(options), 'utf16le')
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'installer/windows/preflight.ps1'), '-OptionsFile', optionsFile], { windowsHide: true, encoding: 'utf8' })
+  let script = path.join(root, 'installer/windows/preflight.ps1')
+  let args = ['-OptionsFile', optionsFile]
+  if (registered) {
+    const wrapper = `function Get-ItemProperty { [pscustomobject]@{AppDir=${quote(appDir)};DataDir=${quote(dataDir)}} }\n& ${quote(script)} -OptionsFile ${quote(optionsFile)}\nexit $LASTEXITCODE`
+    script = path.join(directory, 'registered-preflight.ps1')
+    fs.writeFileSync(script, '\uFEFF' + wrapper)
+    args = []
+  }
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args], { windowsHide: true, encoding: 'utf8' })
   assert.equal(result.status, expected, result.stdout + result.stderr)
 }
 try {
   preflight(0)
   assert.equal(fs.existsSync(appDir), false, 'El preflight no crea carpetas.')
+  options.serviceAccount = 'Admin'
+  options.servicePassword = 'Prueba Windows'
+  preflight(1)
+  options.serviceAccount = 'TALLER\\impresion'
+  options.servicePassword = ''
+  preflight(1)
+  options.servicePassword = 'Prueba Windows'
+  preflight(0)
+  options.serviceAccount = ''
+  options.servicePassword = ''
   options.dataDir = appDir
   preflight(1)
   options.dataDir = path.join(appDir, 'datos')
@@ -27,15 +46,28 @@ try {
   fs.mkdirSync(appDir)
   fs.writeFileSync(path.join(appDir, 'ajeno.txt'), 'Conservar')
   preflight(1)
-  fs.mkdirSync(dataDir)
-  fs.writeFileSync(path.join(dataDir, 'empresa.txt'), 'Conservar datos')
   const version = path.join(appDir, 'versions/test-release')
   fs.mkdirSync(version, { recursive: true })
   fs.writeFileSync(path.join(version, 'program.txt'), 'Retirar programa')
   fs.writeFileSync(path.join(version, 'manifest.json'), JSON.stringify({ releaseId: 'test-release', platform: 'win32-x64', files: [{ path: 'program.txt' }] }))
+  preflight(1, true) // Un registro no autoriza adoptar archivos ajenos.
+  fs.unlinkSync(path.join(appDir, 'ajeno.txt'))
+  preflight(1) // Sin registro tampoco se adopta una carpeta con manifiesto.
+  preflight(0, true) // Reintento de la instalación interrumpida 1.1.0.
+  fs.writeFileSync(path.join(version, 'ajeno.txt'), 'Conservar')
+  preflight(1, true)
+  fs.unlinkSync(path.join(version, 'ajeno.txt'))
+  const manifestFile = path.join(version, 'manifest.json')
+  const manifest = fs.readFileSync(manifestFile)
+  fs.writeFileSync(manifestFile, JSON.stringify({ releaseId: 'test-release', platform: 'win32-x64', files: [{ path: '../../escape.txt' }] }))
+  preflight(1, true)
+  fs.writeFileSync(manifestFile, manifest)
+  fs.writeFileSync(path.join(appDir, 'ajeno.txt'), 'Conservar')
+  fs.mkdirSync(dataDir)
+  fs.writeFileSync(path.join(dataDir, 'empresa.txt'), 'Conservar datos')
+  preflight(1, true)
   fs.writeFileSync(path.join(dataDir, 'installation.json'), JSON.stringify({ appDir, dataDir, status: 'ready' }))
   preflight(0)
-  const quote = (value) => "'" + value.replaceAll("'", "''") + "'"
   // Las funciones reemplazan solo las operaciones sobre servicios/firewall.
   const script = `function Get-CimInstance {}\nfunction Get-NetFirewallRule {}\nfunction Remove-NetFirewallRule {}\n& ${quote(path.join(root, 'installer/windows/uninstall.ps1'))} -AppDir ${quote(appDir)} -DataDir ${quote(dataDir)}`
   const checkFile = path.join(directory, 'uninstall-check.ps1')
@@ -45,7 +77,7 @@ try {
   assert.equal(fs.readFileSync(path.join(dataDir, 'empresa.txt'), 'utf8'), 'Conservar datos')
   assert.equal(fs.readFileSync(path.join(appDir, 'ajeno.txt'), 'utf8'), 'Conservar')
   assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'installation.json'), 'utf8')).status, 'uninstalled')
-  console.log('✓ Asistente: JSON Unicode, validación de rutas y desinstalación conservando datos/archivos ajenos (servicios simulados).')
+  console.log('✓ Asistente: cuentas Windows, JSON Unicode, reintento de instalación interrumpida, rutas y conservación de archivos ajenos (registro/servicios simulados).')
 } finally {
   const resolved = path.resolve(directory)
   if (path.dirname(resolved) === path.join(root, 'tools') && path.basename(resolved).startsWith('windows-installer-check-')) fs.rmSync(resolved, { recursive: true, force: true })

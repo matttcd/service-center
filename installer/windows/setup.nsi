@@ -44,6 +44,8 @@ Var JsonHandle
 Var PowerShell
 Var OldApp
 Var ReleaseDir
+Var AccountCheckbox
+Var UseCustomAccount
 
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
@@ -95,6 +97,9 @@ Function .onInit
     ReadRegStr $HttpsPort HKLM "Software\ServiceCenter" "HttpsPort"
   ${EndIf}
   ReadRegStr $Account HKLM "Software\ServiceCenter" "CustomServiceAccount"
+  ; Un intento fallido anterior no debe convertir una entrada inválida en default.
+  IfFileExists "$DataDir\installation.json" +2 0
+    StrCpy $Account ""
   InitPluginsDir
   StrCpy $OptionsFile "$PLUGINSDIR\options.json"
 FunctionEnd
@@ -155,27 +160,65 @@ Function NetworkLeave
 FunctionEnd
 
 Function AccountPage
-  !insertmacro MUI_HEADER_TEXT "Cuenta de impresión" "Dejá vacío para crear una cuenta de servicio sin privilegios."
+  !insertmacro MUI_HEADER_TEXT "Cuenta de impresión" "Se creará automáticamente una cuenta de servicio sin privilegios."
   nsDialogs::Create 1018
   Pop $Dialog
-  ${NSD_CreateLabel} 0 0 100% 33u "Para colas compartidas con autenticación, podés usar una cuenta Windows existente sin permisos de administrador y con acceso a esas impresoras."
+  ${NSD_CreateCheckbox} 0 0 100% 16u "Usar otra cuenta de Windows (opcional)"
+  Pop $AccountCheckbox
+  ${If} $Account != ""
+    ${NSD_Check} $AccountCheckbox
+  ${EndIf}
+  IfFileExists "$DataDir\installation.json" 0 +2
+    EnableWindow $AccountCheckbox 0
+  ${NSD_OnClick} $AccountCheckbox AccountToggle
+  ${NSD_CreateLabel} 0 22u 100% 30u "Activá esta opción solo para una cuenta Windows con acceso a impresoras compartidas. No es el Administrador de la aplicación."
   Pop $0
-  ${NSD_CreateLabel} 0 40u 100% 14u "Cuenta opcional (EQUIPO\usuario o DOMINIO\usuario):"
+  ${NSD_CreateLabel} 0 57u 100% 14u "Cuenta existente (EQUIPO\usuario o DOMINIO\usuario):"
   Pop $0
-  ${NSD_CreateText} 0 57u 100% 14u "$Account"
+  ${NSD_CreateText} 0 74u 100% 14u "$Account"
   Pop $Field1
-  ${NSD_CreateLabel} 0 80u 100% 14u "Contraseña de esa cuenta:"
+  ${NSD_CreateLabel} 0 96u 100% 14u "Contraseña de esa cuenta Windows:"
   Pop $0
-  ${NSD_CreatePassword} 0 97u 100% 14u "$AccountPassword"
+  ${NSD_CreatePassword} 0 113u 100% 14u "$AccountPassword"
   Pop $Field2
+  Call AccountFields
   nsDialogs::Show
 FunctionEnd
+Function AccountToggle
+  Pop $0
+  Call AccountFields
+FunctionEnd
+Function AccountFields
+  ${NSD_GetState} $AccountCheckbox $UseCustomAccount
+  EnableWindow $Field1 $UseCustomAccount
+  EnableWindow $Field2 $UseCustomAccount
+FunctionEnd
 Function AccountLeave
+  ${NSD_GetState} $AccountCheckbox $UseCustomAccount
+  ${If} $UseCustomAccount == 0
+    StrCpy $Account ""
+    StrCpy $AccountPassword ""
+    Return
+  ${EndIf}
   ${NSD_GetText} $Field1 $Account
   ${NSD_GetText} $Field2 $AccountPassword
-  ${If} $Account != ""
-  ${AndIf} $AccountPassword == ""
-    MessageBox MB_ICONSTOP "Ingresá la contraseña de la cuenta Windows."
+  StrCpy $0 0
+  StrCpy $1 0
+  loopAccount:
+    StrCpy $2 $Account 1 $0
+    StrCmp $2 "" accountChecked
+    StrCmp $2 "\" 0 +2
+      IntOp $1 $1 + 1
+    IntOp $0 $0 + 1
+    Goto loopAccount
+  accountChecked:
+  StrCpy $2 $Account 1
+  StrCpy $3 $Account 1 -1
+  ${If} $1 != 1
+  ${OrIf} $2 == "\"
+  ${OrIf} $3 == "\"
+  ${OrIf} $AccountPassword == ""
+    MessageBox MB_ICONSTOP "Usá EQUIPO\usuario o DOMINIO\usuario y su contraseña de Windows. Para crear una cuenta automáticamente, desactivá esta opción."
     Abort
   ${EndIf}
 FunctionEnd
