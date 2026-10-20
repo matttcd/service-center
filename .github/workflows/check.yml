@@ -1,0 +1,29 @@
+name: Verificación
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix server
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+      - run: npm run check
+      - run: python3 tests/server/print_bridge_test.py
+      - run: npm audit --audit-level=high && npm audit --prefix server --audit-level=high
+      - run: docker compose -p service-center-verify -f docker-compose.verify.yml up -d --build --wait --wait-timeout 240
+      - run: npm run test:integration
+      - if: failure()
+        run: docker compose -p service-center-verify -f docker-compose.verify.yml logs --tail=100
+      - if: always()
+        run: docker compose -p service-center-verify -f docker-compose.verify.yml down

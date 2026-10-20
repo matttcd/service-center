@@ -12,8 +12,25 @@ dist
 dist-ssr
 *.local
 
-# Datos de la base compartida (db.json + backups) no se versionan
+# Variables de entorno (secretos JWT, etc.) no se versionan
+.env
+*.env
+
+# Datos de la base compartida y copias de seguridad de PostgreSQL
 server/data/
+backups/
+*.dump
+
+# Archivos de Python (impresión de etiquetas) y sesiones de trabajo
+__pycache__/
+*.pyc
+session-*.md
+session-*.json
+tools/
+test-results/
+
+# PDFs generados por los scripts de prueba de medición/solapamiento
+test-*.pdf
 
 # Editor directories and files
 .vscode/*
@@ -25,3 +42,4 @@ server/data/
 *.njsproj
 *.sln
 *.sw?
+nul

@@ -5,12 +5,17 @@ import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import Sidebar from './Sidebar.jsx'
+import DashboardSkeleton from './DashboardSkeleton.jsx'
+import ChangePasswordModal from './ChangePasswordModal.jsx'
 import { useData } from '../context/DataContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import { BRAND_NAME } from '../utils/brand.js'
+import logoUrl from '../assets/gringologo-modified.png'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { loading } = useData()
+  const { loading, dataError, refresh } = useData()
+  const { currentUser, clearMustChangePassword } = useAuth()
 
   return (
     <div className="min-h-screen">
@@ -26,9 +31,7 @@ export default function Layout() {
           <Menu size={20} />
         </button>
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-400 text-primary-600">
-            <span className="text-lg font-black leading-none">G</span>
-          </div>
+          <img src={logoUrl} alt="Logo" className="h-7 w-7 rounded-full object-contain" />
           <span className="text-sm font-bold text-slate-900 dark:text-white">{BRAND_NAME}</span>
         </div>
       </header>
@@ -36,16 +39,23 @@ export default function Layout() {
       {/* Contenido principal */}
       <main className="px-4 py-6 sm:px-6 lg:ml-64 lg:px-8">
         <div className="mx-auto max-w-6xl">
+          {dataError && <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
+            <p>No se pudieron actualizar los datos: {dataError}</p>
+            <button onClick={() => refresh({ immediate: true })} className="shrink-0 font-semibold underline">Reintentar</button>
+          </div>}
           {loading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-400">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-primary-600 dark:border-slate-700 dark:border-t-primary-500" />
-              <p className="text-sm">Cargando datos...</p>
-            </div>
+            <DashboardSkeleton />
           ) : (
-            <Outlet />
+            <div className="animate-fade-in">
+              <Outlet />
+            </div>
           )}
         </div>
       </main>
+
+      {currentUser?.mustChangePassword && (
+        <ChangePasswordModal open onDone={clearMustChangePassword} />
+      )}
     </div>
   )
 }

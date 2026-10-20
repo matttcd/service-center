@@ -1,6 +1,12 @@
 // ============================================
 // Funciones auxiliares: fechas, moneda, estados
 // ============================================
+import { businessDate } from '../../shared/dates.js'
+
+// Normalización de texto (fuente única en ../../shared/text.js)
+export { titleCase, sentenceCase, normalizeList } from '../../shared/text.js'
+// Estados de una orden (fuente única en ../../shared/fsm.js)
+export { ORDER_STATUSES, ORDER_STATUS_LABEL } from '../../shared/fsm.js'
 
 // Genera un id único.
 export function uid() {
@@ -10,33 +16,6 @@ export function uid() {
 
 function pad(n) {
   return String(n).padStart(2, '0')
-}
-
-// Palabras que se mantienen en MAYÚSCULAS aunque el resto se normalice.
-const KEEP_UPPER = new Set([
-  'TV', 'HD', 'HDMI', 'LED', 'LCD', 'OLED', 'QLED', '4K', '8K', '2K',
-  'USB', 'LG', 'HP', 'PS5', 'PS4', 'PS3', 'XBOX', 'LTE', '4G', '5G',
-  'GPS', 'DVR', 'AV', 'JVC', 'UPS', 'SSD', 'RAM', 'CPU', 'GPU', '3000F',
-  'SAMSUNG', 'XIAOMI', 'MOTOROLA', 'APPLE', 'HUAWEI', 'LENOVO', 'NOKIA',
-  'REALME', 'REDMI', 'GALAXY',
-])
-
-// Marcas/casos especiales que quieren capitalización exacta.
-const SPECIAL = { IPHONE: 'iPhone', IOS: 'iOS' }
-
-// Pone la primera letra de cada palabra en mayúscula y el resto en minúscula.
-export function titleCase(s) {
-  return String(s || '')
-    .trim()
-    .split(/\s+/)
-    .map((w) => {
-      if (!w) return w
-      const up = w.toUpperCase()
-      if (SPECIAL[up]) return SPECIAL[up]
-      if (KEEP_UPPER.has(up)) return up
-      return w[0].toUpperCase() + w.slice(1).toLowerCase()
-    })
-    .join(' ')
 }
 
 // Convierte una Date a formato ISO local (YYYY-MM-DD).
@@ -50,9 +29,20 @@ export function todayISO() {
 }
 
 // Parsea una fecha ISO a Date local (sin zona horaria).
+// Acepta YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss.sssZ
 export function parseISO(iso) {
-  const [y, m, d] = iso.split('-').map(Number)
+  const str = String(iso).slice(0, 10)
+  const [y, m, d] = str.split('-').map(Number)
   return new Date(y, m - 1, d)
+}
+
+// Convierte un ISO (fecha sola o timestamp completo) a milisegundos.
+// Las fechas solas (YYYY-MM-DD) se interpretan en hora local.
+export function toTime(iso) {
+  if (!iso) return 0
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return parseISO(iso).getTime()
+  const t = new Date(iso).getTime()
+  return Number.isFinite(t) ? t : 0
 }
 
 // Suma días a una fecha ISO y devuelve otra fecha ISO.
@@ -74,7 +64,7 @@ export function formatMoney(n) {
 // Formatea una fecha ISO (YYYY-MM-DD) a DD/MM/YYYY.
 export function formatDate(iso) {
   if (!iso) return '—'
-  const d = parseISO(iso)
+  const d = parseISO(businessDate(iso))
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
 }
 
@@ -85,53 +75,43 @@ export function formatDateTime(iso) {
   return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+// Tiempo relativo ("hace 2h", "ayer", "hace 3 días").
+export function timeAgo(iso) {
+  if (!iso) return ''
+  const now = Date.now()
+  const diff = now - toTime(iso)
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'ahora'
+  if (mins < 60) return `hace ${mins}m`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `hace ${hrs}h`
+  const days = Math.floor(hrs / 24)
+  if (days === 1) return 'ayer'
+  if (days < 30) return `hace ${days}d`
+  const months = Math.floor(days / 30)
+  return `hace ${months}m`
+}
+
+export function timeSinceStatus(order, targetStatus) {
+  const entry = [...(order.history || [])].reverse().find((h) => h.status === targetStatus)
+  return timeAgo(entry?.at || order.createdAt)
+}
+
 export function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
-// ---------- Estados de los equipos ----------
-export const ITEM_STATUSES = ['recibido', 'en_reparacion', 'terminado', 'entregado']
-
-export const ITEM_STATUS_LABEL = {
-  recibido: 'Recibido',
-  en_reparacion: 'En reparación',
-  terminado: 'Listo para retirar',
-  entregado: 'Entregado',
-}
-
-// Tono del badge según el estado del equipo.
-export function itemStatusTone(status) {
-  const map = {
-    recibido: 'slate',
-    en_reparacion: 'primary',
-    terminado: 'green',
-    entregado: 'slate',
-  }
-  return map[status] || 'slate'
-}
-
-// Estado de la orden derivado de sus equipos.
-export function orderStatus(order) {
-  const items = order.items || []
-  if (items.length && items.every((i) => i.status === 'entregado')) return 'entregada'
-  if (items.some((i) => i.status === 'terminado')) return 'lista'
-  if (items.some((i) => i.status === 'en_reparacion')) return 'en_reparacion'
-  return 'recibida'
-}
-
-export const ORDER_STATUS_LABEL = {
-  recibida: 'Recibida',
-  en_reparacion: 'En reparación',
-  lista: 'Lista para retirar',
-  entregada: 'Entregada',
-}
-
+// Tono del badge según el estado.
 export function orderStatusTone(status) {
   const map = {
-    recibida: 'slate',
+    recibido: 'slate',
+    en_revision: 'primary',
+    presupuesto: 'yellow',
     en_reparacion: 'primary',
-    lista: 'green',
-    entregada: 'slate',
+    falta_repuestos: 'orange',
+    terminado: 'green',
+    entregado: 'slate',
+    en_tercero: 'amber',
   }
   return map[status] || 'slate'
 }
@@ -140,5 +120,54 @@ export function orderStatusTone(status) {
 export const ROLE_LABEL = {
   admin: 'Administrador',
   tecnico: 'Técnico',
-  mostrador: 'Mostrador',
+  recepcion: 'Recepción',
+}
+
+// Reordena un elemento dentro de un array de forma inmutable.
+export function moveArrayItem(list, from, to) {
+  if (!Array.isArray(list)) return []
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length || from === to) {
+    return [...list]
+  }
+  const next = [...list]
+  const [item] = next.splice(from, 1)
+  next.splice(to, 0, item)
+  return next
+}
+
+// Calcula los caracteres totales de un listado de términos legales.
+export function calculateTermsTotal(terms) {
+  if (!Array.isArray(terms)) return 0
+  return terms.join('').length
+}
+
+// Parsea texto multilinea a una lista de marcas y modelos para el catálogo.
+export function parseBulkModels(text) {
+  if (!text || typeof text !== 'string') return []
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
+  return lines.map((line) => {
+    const sep = line.includes(',') ? ',' : line.includes('\t') ? '\t' : ' '
+    const [brand, ...rest] = line.split(sep)
+    return {
+      brand: (brand || '').trim(),
+      name: rest.join(' ').trim(),
+    }
+  }).filter((m) => m.brand && m.name)
+}
+
+// Convierte un texto unificado a un array de cláusulas legales para almacenamiento.
+export function termsTextToClauses(rawText) {
+  if (!rawText || typeof rawText !== 'string') return []
+  const blocks = rawText.includes('\n\n')
+    ? rawText.split(/\n\s*\n/)
+    : rawText.split('\n')
+  return blocks
+    .map((b) => b.trim().replace(/^(\d+[.\-)]|[•\-*])\s*/, '').trim())
+    .filter(Boolean)
+}
+
+// Convierte un array de cláusulas a texto unificado para edición fluida.
+export function clausesToTermsText(clauses) {
+  if (!Array.isArray(clauses)) return ''
+  return clauses.filter(Boolean).join('\n\n')
 }

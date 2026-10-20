@@ -1,6 +1,8 @@
 // ============================================
-// Funciones auxiliares del servidor
+// Funciones auxiliares del servidor (fechas e ids).
+// La normalización de texto vive en ../shared/text.js
 // ============================================
+export { titleCase, sentenceCase, normalizeList } from '../shared/text.js'
 
 // Genera un id único.
 export function uid() {
@@ -10,33 +12,6 @@ export function uid() {
 
 function pad(n) {
   return String(n).padStart(2, '0')
-}
-
-// Palabras que se mantienen en MAYÚSCULAS aunque el resto se normalice.
-const KEEP_UPPER = new Set([
-  'TV', 'HD', 'HDMI', 'LED', 'LCD', 'OLED', 'QLED', '4K', '8K', '2K',
-  'USB', 'LG', 'HP', 'PS5', 'PS4', 'PS3', 'XBOX', 'LTE', '4G', '5G',
-  'GPS', 'DVR', 'AV', 'JVC', 'UPS', 'SSD', 'RAM', 'CPU', 'GPU', '3000F',
-  'SAMSUNG', 'XIAOMI', 'MOTOROLA', 'APPLE', 'HUAWEI', 'LENOVO', 'NOKIA',
-  'REALME', 'REDMI', 'SAMSUNG', 'GALAXY',
-])
-
-// Marcas/casos especiales que quieren capitalización exacta.
-const SPECIAL = { IPHONE: 'iPhone', IOS: 'iOS', 'GALAXY A': 'Galaxy A' }
-
-// Pone la primera letra de cada palabra en mayúscula y el resto en minúscula.
-export function titleCase(s) {
-  return String(s || '')
-    .trim()
-    .split(/\s+/)
-    .map((w) => {
-      if (!w) return w
-      const up = w.toUpperCase()
-      if (SPECIAL[up]) return SPECIAL[up]
-      if (KEEP_UPPER.has(up)) return up
-      return w[0].toUpperCase() + w.slice(1).toLowerCase()
-    })
-    .join(' ')
 }
 
 // Convierte una Date a formato ISO local (YYYY-MM-DD).

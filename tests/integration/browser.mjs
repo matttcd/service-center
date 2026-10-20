@@ -1,0 +1,172 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
+const require = createRequire(new URL('../../server/index.js', import.meta.url))
+const { default: puppeteer } = await import(pathToFileURL(require.resolve('puppeteer')).href)
+
+const base = process.env.VERIFY_URL || 'http://127.0.0.1:8181'
+assert.match(base, /^http:\/\/(localhost|127\.0\.0\.1):8181$/)
+const health = await fetch(`${base}/api/health`).then((r) => r.json())
+assert.equal(health.verification, 'service-center-isolated-tests')
+const output = path.resolve('test-results')
+fs.mkdirSync(output, { recursive: true })
+const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || [
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  '/usr/bin/chromium',
+].find((file) => fs.existsSync(file))
+const browser = await puppeteer.launch({ executablePath, headless: true, args: ['--no-sandbox'] })
+const page = await browser.newPage()
+const errors = []
+page.on('pageerror', (error) => errors.push(error.message))
+page.setDefaultTimeout(15000)
+await page.setViewport({ width: 1440, height: 1080 })
+const text = (value) => page.waitForFunction((expected) => document.body.innerText.includes(expected), {}, value)
+const button = async (label) => {
+  await page.waitForFunction((expected) => [...document.querySelectorAll('button')].some((node) => node.textContent.trim() === expected && !node.disabled), {}, label)
+  await page.evaluate((expected) => {
+    const node = [...document.querySelectorAll('button')].filter((element) => element.textContent.trim() === expected && !element.disabled && element.getClientRects().length).at(-1)
+    node.scrollIntoView({ block: 'center' })
+    node.click()
+  }, label)
+}
+let orderId
+try {
+  await page.goto(base, { waitUntil: 'networkidle2' })
+  await page.waitForSelector('input[type="password"]')
+  await page.type('input[type="password"]', 'admin123')
+  await page.click('button[type="submit"]')
+  await page.waitForSelector('input[autocomplete="new-password"]')
+  await page.type('input[autocomplete="current-password"]', 'admin123')
+  const newPasswords = await page.$$('input[autocomplete="new-password"]')
+  for (const input of newPasswords) await input.type('Browser-verification-2026')
+  await button('Cambiar contraseña')
+  await page.waitForSelector('input[autocomplete="new-password"]', { hidden: true })
+  await text('Resumen del día')
+  console.log('✓ Navegador: primer ingreso y cambio obligatorio de contraseña.')
+  await button('Nueva orden')
+  await page.type('input[placeholder="Nombre completo *"]', 'Cliente Navegador')
+  await page.type('input[placeholder="DNI"]', '33445566')
+  await page.type('input[placeholder="Teléfono"]', '3704000000')
+  await page.click('button[title="Celular"]')
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some((node) => node.textContent.trim() === 'Otra'))
+  const hasSamsung = await page.evaluate(() => [...document.querySelectorAll('button')].some((node) => node.textContent.trim() === 'Samsung'))
+  if (!hasSamsung) {
+    await button('Otra')
+    await page.type('input[placeholder="Buscar..."]', 'Samsung')
+  }
+  await button('Samsung')
+  await page.waitForFunction(() => {
+    const label = [...document.querySelectorAll('label')].find((node) => node.textContent === 'Modelo')
+    return label && [...label.parentElement.querySelectorAll('button')].some((node) => node.textContent.trim() !== 'Otro')
+  })
+  await page.evaluate(() => {
+    const label = [...document.querySelectorAll('label')].find((node) => node.textContent === 'Modelo')
+    const choices = [...label.parentElement.querySelectorAll('button')]
+    choices.find((node) => node.textContent.trim() !== 'Otro').click()
+    const simple = [...document.querySelectorAll('label')].find((node) => node.textContent.includes('Servicio simple'))
+    simple.querySelector('input').click()
+  })
+  await page.type('input[placeholder="Costo del arreglo"]', '15000')
+  await page.type('input[placeholder="Opcional"]', '5000')
+  await button('Limpieza')
+  const pad = await page.$('svg[aria-label="Patrón de desbloqueo"]')
+  await pad.scrollIntoView()
+  const rect = await pad.boundingBox()
+  await page.mouse.move(rect.x + 30, rect.y + 30)
+  await page.mouse.down()
+  await page.mouse.move(rect.x + 150, rect.y + 30, { steps: 10 })
+  await page.mouse.move(rect.x + 150, rect.y + 150, { steps: 10 })
+  await page.mouse.up()
+  const saved = page.waitForResponse((response) => response.url().endsWith('/api/orders') && response.request().method() === 'POST')
+  await button('Guardar')
+  const result = await (await saved).json()
+  assert.ok(result.order?.id, JSON.stringify(result))
+  assert.deepEqual(result.order.pattern, [0, 1, 2, 5, 8])
+  assert.equal(result.order.advance, 5000)
+  orderId = result.order.id
+  await text('Imprimir orden de servicio')
+  const popupPromise = new Promise((resolve) => page.once('popup', resolve))
+  await button('Abrir PDF para imprimir')
+  const popup = await popupPromise
+  await popup.waitForFunction(() => location.href.startsWith('blob:'))
+  await popup.close()
+  await page.click('[role="dialog"] button[aria-label="Cerrar"]')
+  console.log('✓ Navegador: alta de cliente y orden con seña y patrón táctil.')
+  await page.goto(`${base}/ordenes/${orderId}`, { waitUntil: 'networkidle2' })
+  await text('Cliente Navegador')
+  await button('Terminar')
+  await button('Confirmar')
+  await button('Avisar al cliente')
+  await button('Confirmar')
+  await button('Entregar al cliente')
+  await button('Confirmar entrega')
+  await text('Equipo entregado')
+  await button('Cerrar')
+  await page.waitForFunction(() => document.body.innerText.includes('Reingresar por garantía'))
+  const session = await page.evaluate(() => JSON.parse(localStorage.getItem('service_session_v1')))
+  const delivered = await fetch(`${base}/api/orders/${orderId}`, { headers: { Authorization: `Bearer ${session.token}` } }).then((r) => r.json())
+  assert.equal(delivered.order.status, 'entregado')
+  assert.equal(delivered.order.pickupBy, 'client')
+  await page.screenshot({ path: path.join(output, 'order-delivered-desktop.png'), fullPage: true })
+  console.log('✓ Navegador: terminar, avisar y entregar; estado persistido en PostgreSQL.')
+  await button('Reingresar por garantía')
+  await button('Confirmar')
+  await text('Equipo reingresado por garantía.')
+  await page.waitForFunction(() => !document.body.innerText.includes('Reingresar por garantía'))
+  await page.reload({ waitUntil: 'networkidle2' })
+  await text('Cliente Navegador')
+  assert.equal((await fetch(`${base}/api/orders/${orderId}`, { headers: { Authorization: `Bearer ${session.token}` } }).then((r) => r.json())).order.status, 'recibido')
+  await page.setViewport({ width: 390, height: 844 })
+  await page.waitForFunction(() => document.querySelector('aside').getBoundingClientRect().right <= 1)
+  await page.screenshot({ path: path.join(output, 'order-mobile.png'), fullPage: true })
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2)
+  assert.equal(overflow, false, 'La página tiene desbordamiento horizontal en móvil.')
+  assert.deepEqual(errors, [], 'Errores JavaScript en el navegador.')
+  console.log('✓ Navegador: garantía, recarga persistente y vista móvil sin desbordamiento.')
+  await page.setViewport({ width: 1440, height: 1080 })
+  const api = async (route, method = 'GET', body) => {
+    const response = await fetch(`${base}/api${route}`, { method, headers: { Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+    const result = await response.json()
+    assert.equal(response.status, 200, JSON.stringify(result))
+    return result
+  }
+  await Promise.all(Array.from({ length: 27 }, (_, index) => api('/orders', 'POST', { customerId: result.order.customerId, deviceType: 'Celular', brand: 'Samsung', model: 'Galaxy A15', issue: `Exportación ${index}`, diagnosisType: 'revision' })))
+  await page.goto(`${base}/ordenes`, { waitUntil: 'networkidle2' })
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some((node) => node.textContent.trim() === 'Exportar CSV' && !node.disabled))
+  await page.evaluate(() => {
+    const original = URL.createObjectURL.bind(URL)
+    URL.createObjectURL = (blob) => { if (blob.type.startsWith('text/csv')) blob.text().then((value) => { window.exportedCsv = value }); return original(blob) }
+  })
+  await button('Exportar CSV')
+  await page.waitForFunction(() => typeof window.exportedCsv === 'string')
+  const csv = await page.evaluate(() => window.exportedCsv)
+  assert.equal(csv.trim().split('\r\n').length, 29, 'CSV debe incluir las 28 órdenes y su encabezado.')
+  console.log('✓ Navegador: exportación CSV incluye órdenes fuera de la primera página.')
+  await api(`/orders/${orderId}`, 'DELETE')
+  await page.goto(`${base}/papelera`, { waitUntil: 'networkidle2' })
+  await text(result.order.orderNumber)
+  await page.screenshot({ path: path.join(output, 'trash-desktop.png'), fullPage: true })
+  await button('Restaurar')
+  await text('Restaurar elemento')
+  await button('Restaurar')
+  await text('Orden restaurada con su historial.')
+  assert.equal((await api(`/orders/${orderId}`)).order.id, orderId)
+  console.log('✓ Navegador: recuperación de una orden desde la papelera.')
+  await button('Cambiar mi contraseña')
+  await page.type('input[autocomplete="current-password"]', 'Browser-verification-2026')
+  for (const input of await page.$$('input[autocomplete="new-password"]')) await input.type('Browser-updated-2026')
+  await button('Cambiar contraseña')
+  await page.waitForSelector('input[autocomplete="new-password"]', { hidden: true })
+  await page.reload({ waitUntil: 'networkidle2' })
+  await text('Papelera')
+  assert.deepEqual(errors, [], 'Errores JavaScript en el navegador.')
+  console.log('✓ Navegador: cambio voluntario de contraseña y sesión vigente tras recargar.')
+} catch (err) {
+  await page.screenshot({ path: path.join(output, 'browser-failure.png'), fullPage: true }).catch(() => {})
+  throw err
+} finally {
+  await browser.close()
+}

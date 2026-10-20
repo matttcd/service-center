@@ -2,8 +2,9 @@
 // Backups: copias de seguridad y rollback (admin)
 // ============================================
 import { useCallback, useEffect, useState } from 'react'
-import { Database, Plus, RotateCcw, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Database, Plus, RotateCcw, AlertTriangle, CheckCircle2, Download } from 'lucide-react'
 import { api } from '../utils/api.js'
+import { loadSession } from '../utils/storage.js'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
 import Modal from '../components/Modal.jsx'
@@ -22,12 +23,14 @@ export default function Backups() {
   const [toRestore, setToRestore] = useState(null)
   const [restoring, setRestoring] = useState(false)
   const [notice, setNotice] = useState(null)
+  const [health, setHealth] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await api('/backups')
       setBackups(res.backups || [])
+      setHealth(res.status || null)
     } catch (err) {
       setNotice({ type: 'error', text: err.message })
     } finally {
@@ -37,14 +40,16 @@ export default function Backups() {
 
   useEffect(() => {
     load()
+    const timer = setInterval(load, 60000)
+    return () => clearInterval(timer)
   }, [load])
 
   const createNow = async () => {
     setCreating(true)
     setNotice(null)
     try {
-      await api('/backups', { method: 'POST' })
-      setNotice({ type: 'ok', text: 'Copia de seguridad creada.' })
+      const result = await api('/backups', { method: 'POST' })
+      setNotice(result.status?.exportError ? { type: 'error', text: result.status.exportError } : { type: 'ok', text: 'Copia de seguridad creada.' })
       await load()
     } catch (err) {
       setNotice({ type: 'error', text: err.message })
@@ -54,7 +59,7 @@ export default function Backups() {
   }
 
   const confirmRestore = async () => {
-    if (!toRestore) return
+    if (!toRestore || restoring) return
     setRestoring(true)
     setNotice(null)
     try {
@@ -67,6 +72,27 @@ export default function Backups() {
       setNotice({ type: 'error', text: err.message })
     } finally {
       setRestoring(false)
+    }
+  }
+
+  const downloadBackup = async (b) => {
+    try {
+      const token = loadSession()?.token
+      const res = await fetch(`/api/backups/${encodeURIComponent(b.name)}/download`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) throw new Error('No se pudo descargar la copia de seguridad.')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = b.name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setNotice({ type: 'error', text: err.message })
     }
   }
 
@@ -88,6 +114,13 @@ export default function Backups() {
           {creating ? 'Creando…' : 'Crear copia ahora'}
         </button>
       </div>
+
+      {health && <Card className="p-4 text-sm text-slate-600 dark:text-slate-300">
+        <p className="font-semibold text-slate-900 dark:text-white">Última copia: {health.lastSuccessAt ? fmtDate(health.lastSuccessAt) : 'todavía no hay una copia verificada'}</p>
+        <p className="mt-1">{health.exportConfigured ? 'Copia adicional automática activada.' : 'El destino de copia adicional todavía no está configurado.'}</p>
+        {(health.lastError || health.exportError) && <p role="alert" className="mt-2 text-red-700 dark:text-red-300">{health.lastError || health.exportError}</p>}
+        {health.lastSuccessAt && Date.now() - new Date(health.lastSuccessAt).getTime() > 36 * 3600000 && <p role="alert" className="mt-2 font-semibold text-amber-700 dark:text-amber-300">La última copia tiene más de 36 horas. Creá una copia ahora y revisá las copias automáticas.</p>}
+      </Card>}
 
       {notice && (
         <p
@@ -128,14 +161,25 @@ export default function Backups() {
                     <p className="text-xs text-slate-400">{fmtSize(b.size)}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setToRestore(b)}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-accent-200 px-3 py-2 text-sm font-semibold text-accent-600 transition hover:bg-accent-50 dark:border-accent-500/30 dark:hover:bg-accent-500/10"
-                >
-                  <RotateCcw size={15} />
-                  Restaurar
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => downloadBackup(b)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    title="Descargar copia a esta PC"
+                  >
+                    <Download size={15} />
+                    Descargar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setToRestore(b)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-accent-200 px-3 py-2 text-sm font-semibold text-accent-600 transition hover:bg-accent-50 dark:border-accent-500/30 dark:hover:bg-accent-500/10"
+                  >
+                    <RotateCcw size={15} />
+                    Restaurar
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -143,7 +187,7 @@ export default function Backups() {
       )}
 
       {/* Confirmación de restauración */}
-      <Modal open={!!toRestore} onClose={() => setToRestore(null)} title="Restaurar copia de seguridad">
+      <Modal open={!!toRestore} onClose={() => { if (!restoring) setToRestore(null) }} title="Restaurar copia de seguridad">
         {toRestore && (
           <div className="space-y-4">
             <p className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -151,13 +195,14 @@ export default function Backups() {
               <span className="flex-1">
                 ¿Seguro que querés restaurar la copia del{' '}
                 <span className="whitespace-nowrap font-semibold">{fmtDate(toRestore.mtime)}</span>? Se
-                reemplazarán los clientes, planes, cuotas y pagos actuales. Antes de restaurar se
+                reemplazarán las órdenes de servicio actuales. Antes de restaurar se
                 crea una copia de seguridad del estado actual para poder deshacer.
               </span>
             </p>
             <div className="flex gap-3">
               <button
                 type="button"
+                disabled={restoring}
                 onClick={() => setToRestore(null)}
                 className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >

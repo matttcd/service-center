@@ -10,6 +10,7 @@ import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import UserForm from '../components/UserForm.jsx'
 import Modal from '../components/Modal.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
 
 // Etiquetas legibles para la auditoría.
 const actionLabel = {
@@ -18,6 +19,7 @@ const actionLabel = {
   delete: 'Baja',
   status: 'Estado',
   toggle: 'Estado usuario',
+  password_change: 'Contraseña',
   seed: 'Inicialización',
   restore: 'Restauración',
   whatsapp: 'WhatsApp',
@@ -42,6 +44,7 @@ export default function Users() {
   const [logPage, setLogPage] = useState(1)
   const [logPages, setLogPages] = useState(1)
   const [confirmToggle, setConfirmToggle] = useState(null)
+  const [alertModal, setAlertModal] = useState(null)
 
   // Carga el historial de auditoría paginado (solo admin llega a esta página).
   const loadLogs = useCallback(async (page) => {
@@ -89,7 +92,6 @@ export default function Users() {
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
                 <th className="px-5 py-3 font-semibold">Usuario</th>
-                <th className="px-4 py-3 font-semibold">Email</th>
                 <th className="px-4 py-3 font-semibold">Rol</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
                 <th className="px-4 py-3 font-semibold text-right">Acción</th>
@@ -122,7 +124,6 @@ export default function Users() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{u.email}</td>
                     <td className="px-4 py-3">
                       {u.role === 'admin' ? (
                         <Badge tone="primary">
@@ -201,10 +202,11 @@ export default function Users() {
               </button>
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const { id } = confirmToggle
                   setConfirmToggle(null)
-                  toggleUserActive(id)
+                  const res = await toggleUserActive(id)
+                  if (res?.error) setAlertModal(res.error)
                 }}
                 className={`flex-1 rounded-lg px-4 py-2.5 font-semibold text-white transition ${
                   confirmToggle.active
@@ -292,6 +294,14 @@ export default function Users() {
           </>
         )}
       </Card>
+      <ConfirmModal
+        open={!!alertModal}
+        onClose={() => setAlertModal(null)}
+        onConfirm={() => setAlertModal(null)}
+        title="Aviso"
+        message={alertModal}
+        type="alert"
+      />
     </div>
   )
 }

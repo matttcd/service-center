@@ -1,5 +1,6 @@
 # Excluye del contexto de build (mantiene las imágenes livianas)
 node_modules
+**/node_modules
 dist
 server/data
 data
@@ -7,3 +8,13 @@ data
 .git
 .gitignore
 .DS_Store
+.env
+**/.env
+*.env
+backups
+**/backups
+*.dump
+.codex
+.agents
+tools
+test-results

@@ -67,6 +67,10 @@ body {
   @apply bg-slate-950 text-slate-100;
 }
 
+/* PatternPad: números de paso */
+:root { --pattern-number-fill: #000; }
+.dark { --pattern-number-fill: #fff; }
+
 /* Scrollbar sutil */
 ::-webkit-scrollbar {
   width: 8px;
@@ -79,54 +83,15 @@ body {
   background: transparent;
 }
 
-/* ============================================
-   Impresión: Orden de servicio (OrderPrint)
-   Al imprimir solo se muestra el área #order-print,
-   a color claro aunque la app esté en modo oscuro.
-   ============================================ */
-@media print {
-  @page {
-    size: A4;
-    margin: 12mm;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
   }
+  to {
+    opacity: 1;
+  }
+}
 
-  body.printing-order * {
-    visibility: hidden;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  body.printing-order #order-print,
-  body.printing-order #order-print * {
-    visibility: visible;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  body.printing-order #order-print {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    color: #0f172a !important;
-    background: #ffffff !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-  }
-  body.printing-order #order-print .order-print-hide,
-  body.printing-order .order-print-hide {
-    display: none !important;
-  }
-
-  /* Asegura que los bordes de Tailwind v4 se impriman como líneas sólidas
-     y que las separaciones de filas se vean bien en papel. */
-  body.printing-order #order-print * {
-    --tw-border-style: solid;
-  }
-  body.printing-order #order-print table tr {
-    border-bottom-color: #cbd5e1 !important;
-  }
-  body.printing-order #order-print table {
-    page-break-inside: auto;
-  }
-  body.printing-order #order-print table tr {
-    page-break-inside: avoid;
-  }
+.animate-fade-in {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

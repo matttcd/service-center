@@ -2,6 +2,7 @@
 // Cliente HTTP para la API REST
 // ============================================
 import { loadSession } from './storage.js'
+import { SESSION_EXPIRED_EVENT } from './sessionEvents.js'
 
 // Llama a un endpoint de la API con el token de sesión.
 export async function api(path, { method = 'GET', body } = {}) {
@@ -29,8 +30,12 @@ export async function api(path, { method = 'GET', body } = {}) {
   }
 
   if (!res.ok) {
+    if (res.status === 401 && session?.token && session.token === loadSession()?.token && path !== '/auth/login' && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+    }
     const err = new Error(data.error || `Error ${res.status}`)
     err.status = res.status
+    err.code = data.code
     throw err
   }
   return data
