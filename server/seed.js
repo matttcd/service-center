@@ -810,90 +810,92 @@ export function buildSeed() {
 
 // Si la base está vacía, crea el admin, el catálogo y las listas por defecto.
 export async function seedIfEmpty() {
-  const userCount = await prisma.user.count()
-  if (userCount > 0) return
+  return prisma.$transaction(async (db) => {
+    const userCount = await db.user.count()
+    if (userCount > 0) return
 
-  const hash = (p) => bcrypt.hashSync(p, 10)
-  const admin = await prisma.user.create({
-    data: {
-      name: 'Administrador',
-      email: 'admin@local.com',
-      password: hash('admin123'),
-      role: 'admin',
-      active: true,
-    },
-  })
-
-  // Plugins y tablas base antes de insertar marcas/modelos.
-  await prisma.catalogBrand.createMany({
-    data: CATALOG
-      .map((e) => e.brand)
-      .filter((v, i, a) => a.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i)
-      .map((name) => ({ name })),
-    skipDuplicates: true,
-  })
-
-  const seen = new Set()
-  const models = []
-  for (const entry of CATALOG) {
-    for (const name of entry.models) {
-      if (!name) continue
-      const key = `${entry.brand.toLowerCase()}::${name.toLowerCase()}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      models.push({ brand: entry.brand, name, deviceType: entry.deviceType || 'Sin categorizar' })
-    }
-  }
-  await prisma.catalogModel.createMany({
-    data: models,
-    skipDuplicates: true,
-  })
-
-  await prisma.catalogAccessory.createMany({
-    data: DEFAULT_LISTS.accessories.map((name) => ({ name })),
-    skipDuplicates: true,
-  })
-  await prisma.catalogCondition.createMany({
-    data: DEFAULT_LISTS.conditions.map((name) => ({ name })),
-    skipDuplicates: true,
-  })
-  await prisma.catalogFix.createMany({
-    data: DEFAULT_LISTS.fixes.map((name) => ({ name })),
-    skipDuplicates: true,
-  })
-
-  await prisma.config.upsert({
-    where: { key: 'main' },
-    update: {},
-    create: {
-      key: 'main',
-      value: {
-        revisionFee: 5000,
-        whatsapp: {
-          instanceId: '',
-          apiToken: '',
-          local: 'El Gringo Celulares',
-          messageTemplate: 'Hola {cliente}, tu {dispositivo} (Orden {orden}) quedó listo para retirar en {local}.',
-        },
-        terms: DEFAULT_LISTS.terms,
+    const hash = (p) => bcrypt.hashSync(p, 10)
+    const admin = await db.user.create({
+      data: {
+        name: 'Administrador',
+        email: 'admin@local.com',
+        password: hash(process.env.INITIAL_ADMIN_PASSWORD || 'admin123'),
+        role: 'admin',
+        active: true,
       },
-    },
-  })
+    })
 
-  await prisma.orderCounter.upsert({
-    where: { key: 'order' },
-    update: {},
-    create: { key: 'order', value: 0 },
-  })
+    // Plugins y tablas base antes de insertar marcas/modelos.
+    await db.catalogBrand.createMany({
+      data: CATALOG
+        .map((e) => e.brand)
+        .filter((v, i, a) => a.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i)
+        .map((name) => ({ name })),
+      skipDuplicates: true,
+    })
 
-  await prisma.auditLog.create({
-    data: {
-      userId: admin.id,
-      action: 'seed',
-      table: 'db',
-      recordId: null,
-      details: 'Inicialización del sistema de servicio técnico',
-      timestamp: new Date(),
-    },
-  })
+    const seen = new Set()
+    const models = []
+    for (const entry of CATALOG) {
+      for (const name of entry.models) {
+        if (!name) continue
+        const key = `${entry.brand.toLowerCase()}::${name.toLowerCase()}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        models.push({ brand: entry.brand, name, deviceType: entry.deviceType || 'Sin categorizar' })
+      }
+    }
+    await db.catalogModel.createMany({
+      data: models,
+      skipDuplicates: true,
+    })
+
+    await db.catalogAccessory.createMany({
+      data: DEFAULT_LISTS.accessories.map((name) => ({ name })),
+      skipDuplicates: true,
+    })
+    await db.catalogCondition.createMany({
+      data: DEFAULT_LISTS.conditions.map((name) => ({ name })),
+      skipDuplicates: true,
+    })
+    await db.catalogFix.createMany({
+      data: DEFAULT_LISTS.fixes.map((name) => ({ name })),
+      skipDuplicates: true,
+    })
+
+    await db.config.upsert({
+      where: { key: 'main' },
+      update: {},
+      create: {
+        key: 'main',
+        value: {
+          revisionFee: 5000,
+          whatsapp: {
+            instanceId: '',
+            apiToken: '',
+            local: 'El Gringo Celulares',
+            messageTemplate: 'Hola {cliente}, tu {dispositivo} (Orden {orden}) quedó listo para retirar en {local}.',
+          },
+          terms: DEFAULT_LISTS.terms,
+        },
+      },
+    })
+
+    await db.orderCounter.upsert({
+      where: { key: 'order' },
+      update: {},
+      create: { key: 'order', value: 0 },
+    })
+
+    await db.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: 'seed',
+        table: 'db',
+        recordId: null,
+        details: 'Inicialización del sistema de servicio técnico',
+        timestamp: new Date(),
+      },
+    })
+  }, { timeout: 30000 })
 }

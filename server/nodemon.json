@@ -1,5 +1,0 @@
-{
-  "watch": ["*.js", "pdf/"],
-  "ignore": ["data/**"],
-  "extensions": ["js"]
-}

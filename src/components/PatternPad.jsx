@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRef, useState } from 'react'
 import { Eraser } from 'lucide-react'
-import PatternLock from 'pattern-lock-js'
+
+
 
 // ============================================
 // PatternPreview: versión de solo lectura (SVG propio, sin dependencia de pattern-lock-js).
@@ -57,185 +58,87 @@ export function PatternPreview({ value, size = 120, className = '' }) {
   )
 }
 
-// ============================================
-// PatternPad: grilla 3x3 interactiva usando pattern-lock-js.
-// El library trabaja con enteros 1-indexed (ej: 1456987).
-// Convertimos a array 0-indexed (ej: [0,3,5,6,7]) para mantener la API.
-// ============================================
-
-const LOCK_SIZE = 180
-
-const DOT_COORDS_100 = [
-  [20, 20], [50, 20], [80, 20],
-  [20, 50], [50, 50], [80, 50],
-  [20, 80], [50, 80], [80, 80],
-]
-
-function findDotIndex(cx, cy) {
-  const x = Number(cx)
-  const y = Number(cy)
-  for (let i = 0; i < DOT_COORDS_100.length; i++) {
-    if (DOT_COORDS_100[i][0] === x && DOT_COORDS_100[i][1] === y) return i
-  }
-  return -1
-}
-
+// Selector SVG con Pointer Events: mouse, lápiz y pantalla táctil.
 export default function PatternPad({ value = [], onChange, disabled = false }) {
-  const svgRef = useRef(null)
-  const lockRef = useRef(null)
-  const [currentPattern, setCurrentPattern] = useState([])
-  const [activeSteps, setActiveSteps] = useState([])
+  const drawing = useRef(null)
+  const [draft, setDraft] = useState(null)
+  const [pointer, setPointer] = useState(null)
+  const [error, setError] = useState('')
+  const points = draft ?? value
+  const valid = [...new Set(points.filter((n) => Number.isInteger(n) && n >= 0 && n < 9))]
 
-  const intToArray = useCallback((num) => {
-    if (!num || isNaN(num)) return []
-    return String(num).split('').map((d) => parseInt(d, 10) - 1).filter((n) => n >= 0 && n < 9)
-  }, [])
-
-  useEffect(() => {
-    if (!svgRef.current) return
-
-    const lock = new PatternLock(svgRef.current, {
-      onPattern(pattern) {
-        const arr = intToArray(pattern)
-        setCurrentPattern(arr)
-        onChange(arr)
-      },
-      vibrate: true,
-    })
-    lockRef.current = lock
-
-    const activesGroup = svgRef.current.querySelector('g.lock-actives')
-
-    const observer = new MutationObserver((mutations) => {
-      let added = 0
-      let removed = 0
-      for (const m of mutations) {
-        for (const n of m.addedNodes) {
-          if (n.tagName === 'circle') added++
-        }
-        for (const n of m.removedNodes) {
-          if (n.tagName === 'circle') removed++
-        }
-      }
-      if (added > 0 && removed === 0) {
-        const circles = activesGroup.querySelectorAll('circle')
-        const last = circles[circles.length - 1]
-        if (last) {
-          const dotIdx = findDotIndex(last.getAttribute('cx'), last.getAttribute('cy'))
-          if (dotIdx >= 0) {
-            setActiveSteps((prev) => [...prev, { dotIdx, step: prev.length + 1 }])
-          }
-        }
-      }
-      if (removed > 0) {
-        setActiveSteps([])
-      }
-    })
-
-    observer.observe(activesGroup, { childList: true })
-
-    return () => {
-      observer.disconnect()
-      lockRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!value.length && lockRef.current) {
-      lockRef.current.clear()
-      setCurrentPattern([])
-      setActiveSteps([])
-    }
-  }, [value])
-
-  const handleClear = () => {
-    if (lockRef.current) lockRef.current.clear()
-    setCurrentPattern([])
-    setActiveSteps([])
-    onChange([])
+  const position = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return { x: (event.clientX - rect.left) * 180 / rect.width, y: (event.clientY - rect.top) * 180 / rect.height }
   }
+  const hit = ({ x, y }) => DOT_COORDS.findIndex(([cx, cy]) => Math.hypot(x - cx, y - cy) < 23)
+  const add = (index) => {
+    const path = drawing.current
+    if (index < 0 || path.includes(index)) return
+    if (path.length) {
+      const last = path.at(-1)
+      const midX = ((last % 3) + (index % 3)) / 2
+      const midY = (Math.floor(last / 3) + Math.floor(index / 3)) / 2
+      const middle = midY * 3 + midX
+      if (Number.isInteger(midX) && Number.isInteger(midY) && !path.includes(middle)) path.push(middle)
+    }
+    path.push(index)
+    setDraft([...path])
+  }
+  const start = (event) => {
+    if (disabled || (event.pointerType === 'mouse' && event.button !== 0)) return
+    const pos = position(event)
+    const index = hit(pos)
+    if (index < 0) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    drawing.current = []
+    setError('')
+    add(index)
+    setPointer(pos)
+  }
+  const move = (event) => {
+    if (!drawing.current) return
+    const pos = position(event)
+    add(hit(pos))
+    setPointer(pos)
+  }
+  const finish = () => {
+    if (!drawing.current) return
+    const next = [...drawing.current]
+    drawing.current = null
+    setDraft(null)
+    setPointer(null)
+    if (next.length < 3) {
+      setError('Usá al menos 3 puntos.')
+      onChange([])
+    } else onChange(next)
+  }
+  const cancel = () => { drawing.current = null; setDraft(null); setPointer(null) }
+  const clear = () => { cancel(); setError(''); onChange([]) }
 
   return (
     <div className="flex flex-col gap-1">
-      <div style={{ position: 'relative', width: LOCK_SIZE, height: LOCK_SIZE }}>
-        {disabled ? (
-          <svg viewBox="0 0 100 100" width={LOCK_SIZE} height={LOCK_SIZE} className="cursor-not-allowed rounded-2xl border border-slate-300 dark:border-slate-700" style={{ touchAction: 'none', opacity: 0.5 }}>
-            <g>
-              <circle cx="20" cy="20" r="2" className="fill-slate-300 dark:fill-slate-600" />
-              <circle cx="50" cy="20" r="2" className="fill-slate-300 dark:fill-slate-600" />
-              <circle cx="80" cy="20" r="2" className="fill-slate-300 dark:fill-slate-600" />
-              <circle cx="20" cy="50" r="2" className="fill-slate-300 dark:fill-slate-600" />
-              <circle cx="50" cy="50" r="2" className="fill-slate-300 dark:fill-slate-600" />
-              <circle cx="80" cy="50" r="2" className="fill-slate-300 dark:fill-slate-600" />
-              <circle cx="20" cy="80" r="2" className="fill-slate-300 dark:fill-slate-600" />
-              <circle cx="50" cy="80" r="2" className="fill-slate-300 dark:fill-slate-600" />
-              <circle cx="80" cy="80" r="2" className="fill-slate-300 dark:fill-slate-600" />
-            </g>
-          </svg>
-        ) : (
-          <svg
-            ref={svgRef}
-            className="patternlock"
-            viewBox="0 0 100 100"
-            style={{ width: LOCK_SIZE, height: LOCK_SIZE, cursor: 'crosshair', touchAction: 'none' }}
-          >
-            <g className="lock-actives" />
-            <g className="lock-lines" />
-            <g className="lock-dots">
-              <circle cx="20" cy="20" r="2" />
-              <circle cx="50" cy="20" r="2" />
-              <circle cx="80" cy="20" r="2" />
-              <circle cx="20" cy="50" r="2" />
-              <circle cx="50" cy="50" r="2" />
-              <circle cx="80" cy="50" r="2" />
-              <circle cx="20" cy="80" r="2" />
-              <circle cx="50" cy="80" r="2" />
-              <circle cx="80" cy="80" r="2" />
-            </g>
-          </svg>
-        )}
-        {!disabled && activeSteps.length > 0 && (
-          <svg
-            viewBox="0 0 100 100"
-            width={LOCK_SIZE}
-            height={LOCK_SIZE}
-            style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
-          >
-            {activeSteps.map(({ dotIdx, step }) => {
-              const [cx, cy] = DOT_COORDS_100[dotIdx]
-              return (
-                <text
-                  key={step}
-                  x={cx}
-                  y={cy - 9}
-                  textAnchor="middle"
-                  fontSize="6.5"
-                  fontWeight="bold"
-                  fill="var(--pattern-number-fill)"
-                  stroke="var(--color-primary-700, #1e40af)"
-                  strokeWidth="0.5"
-                  paintOrder="stroke"
-                  style={{ userSelect: 'none' }}
-                >
-                  {step}
-                </text>
-              )
-            })}
-          </svg>
-        )}
-      </div>
-      <div className="flex items-center justify-start gap-1.5">
-        <button
-          type="button"
-          onClick={handleClear}
-          disabled={!currentPattern.length || disabled}
-          title="Borrar el patrón"
-          className="inline-flex h-7 items-center justify-center gap-1 rounded-full border border-slate-300 px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          <Eraser size={12} />
-          Limpiar
-        </button>
-      </div>
+      <svg width="180" height="180" viewBox="0 0 180 180" aria-label="Patrón de desbloqueo"
+        className={`rounded-xl border border-slate-300 dark:border-slate-700 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-crosshair'}`}
+        style={{ touchAction: 'none' }} onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel}>
+        <g stroke="currentColor" strokeWidth="5" strokeLinecap="round" className="text-primary-600 dark:text-primary-400">
+          {valid.slice(1).map((point, i) => <line key={i} x1={DOT_COORDS[valid[i]][0]} y1={DOT_COORDS[valid[i]][1]} x2={DOT_COORDS[point][0]} y2={DOT_COORDS[point][1]} />)}
+          {pointer && valid.length > 0 && <line opacity="0.4" x1={DOT_COORDS[valid.at(-1)][0]} y1={DOT_COORDS[valid.at(-1)][1]} x2={pointer.x} y2={pointer.y} />}
+        </g>
+        {DOT_COORDS.map(([cx, cy], index) => {
+          const step = valid.indexOf(index)
+          return <g key={index}>
+            <circle cx={cx} cy={cy} r="10" className={step >= 0 ? 'fill-primary-600 dark:fill-primary-400' : 'fill-slate-400 dark:fill-slate-500'} />
+            {step >= 0 && <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="bold" fill="white">{step + 1}</text>}
+          </g>
+        })}
+      </svg>
+      {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+      <button type="button" onClick={clear} disabled={!valid.length || disabled}
+        className="inline-flex h-7 w-fit items-center gap-1 rounded-full border border-slate-300 px-2 text-xs font-semibold text-slate-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300">
+        <Eraser size={12} /> Limpiar
+      </button>
     </div>
   )
 }

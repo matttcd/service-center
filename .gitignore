@@ -27,6 +27,7 @@ __pycache__/
 session-*.md
 session-*.json
 tools/
+test-results/
 
 # PDFs generados por los scripts de prueba de medición/solapamiento
 test-*.pdf

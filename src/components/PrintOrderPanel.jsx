@@ -18,10 +18,13 @@ export default function PrintOrderPanel({ open, order, onClose }) {
   const [pdfReady, setPdfReady] = useState(false)
   const [pdfError, setPdfError] = useState(null)
   const [printerError, setPrinterError] = useState(null)
+  const [retry, setRetry] = useState(0)
   const pdfBlobUrlRef = useRef(null)
 
   useEffect(() => {
     if (!open || !order) return
+    let active = true
+    const controller = new AbortController()
     setPdfReady(false)
     setPdfError(null)
     setNotice(null)
@@ -32,57 +35,47 @@ export default function PrintOrderPanel({ open, order, onClose }) {
     const headers = {}
     if (session?.token) headers.Authorization = `Bearer ${session.token}`
 
-    const fetchPdf = fetch(`/api/orders/${order.id}/pdf`, { headers })
+    const fetchPdf = fetch(`/api/orders/${order.id}/pdf`, { headers, signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
           throw new Error(data.error || `Error ${res.status}`)
         }
         const blob = await res.blob()
+        if (!active) return
         pdfBlobUrlRef.current = URL.createObjectURL(blob)
         setPdfReady(true)
       })
-      .catch((e) => setPdfError(e.message || 'No se pudo generar el PDF.'))
+      .catch((e) => { if (active) setPdfError(e.message || 'No se pudo generar el PDF.') })
 
     const fetchPrinters = listPrinters()
       .then(({ printers: list, error }) => {
+        if (!active) return
         setPrinters(list)
         setSelected('')
         if (error) setPrinterError(error)
       })
-      .catch(() => setPrinterError('No se encontraron impresoras.'))
-      .finally(() => setLoadingPrinters(false))
+      .catch(() => { if (active) setPrinterError('No se encontraron impresoras.') })
+      .finally(() => { if (active) setLoadingPrinters(false) })
 
     Promise.allSettled([fetchPdf, fetchPrinters])
 
     return () => {
+      active = false
+      controller.abort()
       if (pdfBlobUrlRef.current) {
         URL.revokeObjectURL(pdfBlobUrlRef.current)
         pdfBlobUrlRef.current = null
       }
     }
-  }, [open, order])
+  }, [open, order, retry])
 
   const handleRetry = () => {
     setPdfReady(false)
     setPdfError(null)
     setNotice(null)
 
-    const session = loadSession()
-    const headers = {}
-    if (session?.token) headers.Authorization = `Bearer ${session.token}`
-
-    fetch(`/api/orders/${order.id}/pdf`, { headers })
-      .then(async (res) => {
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.error || `Error ${res.status}`)
-        }
-        const blob = await res.blob()
-        pdfBlobUrlRef.current = URL.createObjectURL(blob)
-        setPdfReady(true)
-      })
-      .catch((e) => setPdfError(e.message || 'No se pudo generar el PDF.'))
+    setRetry((value) => value + 1)
   }
 
   const handleClose = () => {
@@ -116,21 +109,12 @@ export default function PrintOrderPanel({ open, order, onClose }) {
     setNotice(null)
     try {
       const url = pdfBlobUrlRef.current
-      const w = window.open('', '_blank')
+      const w = window.open(url, '_blank')
       if (!w) {
         throw new Error('Bloqueador de pop-ups activo. Permití ventanas emergentes.')
       }
-      w.document.open()
-      w.document.write(
-        `<!doctype html><html><head><title>Imprimir orden</title>` +
-        `<style>@media print { body { margin: 0; } }</style></head>` +
-        `<body style="margin:0"><iframe src="${url}" style="width:100%;height:100vh;border:0"></iframe>` +
-        `<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};` +
-        `window.addEventListener('afterprint',function(){window.close();});</script>` +
-        `</body></html>`
-      )
-      w.document.close()
-      setNotice({ type: 'success', msg: 'Abriendo diálogo de impresión del navegador…' })
+      w.opener = null
+      setNotice({ type: 'success', msg: 'PDF abierto. Usá el botón de impresión del visor para elegir tu impresora.' })
     } catch (e) {
       setNotice({ type: 'error', msg: e.message || 'No se pudo abrir la impresión.' })
     } finally {
@@ -223,10 +207,10 @@ export default function PrintOrderPanel({ open, order, onClose }) {
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-400 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 disabled:opacity-60 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
         >
           <Monitor size={16} />
-          Imprimir desde este dispositivo…
+          Abrir PDF para imprimir
         </button>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Usa el diálogo del navegador para elegir cualquier impresora conectada a tu PC o celular.
+          Se abre una pestaña con el comprobante. Desde el visor podés imprimirlo o guardarlo.
         </p>
 
         {notice && (

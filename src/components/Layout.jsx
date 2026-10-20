@@ -14,7 +14,7 @@ import logoUrl from '../assets/gringologo-modified.png'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { loading } = useData()
+  const { loading, dataError, refresh } = useData()
   const { currentUser, clearMustChangePassword } = useAuth()
 
   return (
@@ -39,6 +39,10 @@ export default function Layout() {
       {/* Contenido principal */}
       <main className="px-4 py-6 sm:px-6 lg:ml-64 lg:px-8">
         <div className="mx-auto max-w-6xl">
+          {dataError && <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
+            <p>No se pudieron actualizar los datos: {dataError}</p>
+            <button onClick={() => refresh({ immediate: true })} className="shrink-0 font-semibold underline">Reintentar</button>
+          </div>}
           {loading ? (
             <DashboardSkeleton />
           ) : (

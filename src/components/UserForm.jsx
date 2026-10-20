@@ -41,7 +41,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
     e.preventDefault()
     if (saving) return
     if (!form.name.trim()) return setError('El nombre es obligatorio.')
-    if (form.password.length < 4) return setError('La contraseña debe tener al menos 4 caracteres.')
+    if (form.password.length < 8) return setError('La contraseña debe tener al menos 8 caracteres.')
     setSaving(true)
     const res = await onSubmit({ ...form, name: titleCase(form.name) })
     setSaving(false)

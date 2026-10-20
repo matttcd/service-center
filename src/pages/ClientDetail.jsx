@@ -2,7 +2,8 @@
 // ClientDetail: ficha del cliente, edición y baja
 // + historial de sus órdenes de servicio.
 // ============================================
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { api } from '../utils/api.js'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil, Trash2, Mail, Phone, MapPin, AlertTriangle, ClipboardList } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
@@ -16,7 +17,7 @@ import { formatDate, ORDER_STATUS_LABEL, orderStatusTone } from '../utils/helper
 export default function ClientDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { customers, orders, updateCustomer, deleteCustomer } = useData()
+  const { customers, ordersRevision, updateCustomer, deleteCustomer } = useData()
   const { currentUser } = useAuth()
   const isAdmin = currentUser?.role === 'admin'
 
@@ -26,6 +27,21 @@ export default function ClientDetail() {
   const [editError, setEditError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [notice, setNotice] = useState('')
+  const [page, setPage] = useState(1)
+  const [history, setHistory] = useState({ orders: [], total: 0 })
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [historyError, setHistoryError] = useState('')
+  const pageSize = 50
+  useEffect(() => { setPage(1) }, [id])
+  useEffect(() => {
+    let active = true
+    setHistoryLoading(true)
+    api(`/orders?customerId=${encodeURIComponent(id)}&limit=${pageSize}&offset=${(page - 1) * pageSize}`)
+      .then((result) => { if (active) { setHistory(result); setHistoryError('') } })
+      .catch((err) => { if (active) setHistoryError(err.message) })
+      .finally(() => { if (active) setHistoryLoading(false) })
+    return () => { active = false }
+  }, [id, page, ordersRevision])
 
   if (!customer) {
     return (
@@ -42,9 +58,7 @@ export default function ClientDetail() {
     )
   }
 
-  const customerOrders = orders
-    .filter((o) => o.customerId === customer.id)
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  const customerOrders = history.orders
 
   const handleSaveCustomer = async (form) => {
     const res = await updateCustomer(customer.id, form)
@@ -151,10 +165,11 @@ export default function ClientDetail() {
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
           <ClipboardList size={18} />
           Órdenes de servicio
-          <span className="text-sm font-normal text-slate-400">({customerOrders.length})</span>
+          <span className="text-sm font-normal text-slate-400">({history.total})</span>
         </h2>
 
-        {customerOrders.length === 0 ? (
+        {historyError && <p role="alert" className="mb-3 text-sm text-red-600">No se pudo cargar el historial: {historyError}</p>}
+        {historyLoading ? <p className="py-6 text-sm text-slate-500">Cargando historial…</p> : customerOrders.length === 0 ? (
           <Card>
             <p className="px-5 py-10 text-center text-sm text-slate-400">
               Este cliente todavía no tiene órdenes de servicio.
@@ -187,6 +202,12 @@ export default function ClientDetail() {
           </Card>
         )}
       </div>
+
+      {history.total > pageSize && <div className="flex items-center justify-between text-sm">
+        <button disabled={page === 1 || historyLoading} onClick={() => setPage((value) => value - 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Anterior</button>
+        <span>Página {page} de {Math.ceil(history.total / pageSize)}</span>
+        <button disabled={page * pageSize >= history.total || historyLoading} onClick={() => setPage((value) => value + 1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Siguiente</button>
+      </div>}
 
       {/* Edición */}
       <CustomerForm

@@ -23,10 +23,13 @@ import {
   AlertCircle,
   ShieldCheck,
   Shield,
+  Trash2,
+  KeyRound,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../utils/api.js'
 import ProfileSwitchModal from './ProfileSwitchModal.jsx'
+import ChangePasswordModal from './ChangePasswordModal.jsx'
 import { BRAND_NAME, BRAND_SUBTITLE } from '../utils/brand.js'
 import logoUrl from '../assets/gringologo-modified.png'
 import { ROLE_LABEL } from '../utils/helpers.js'
@@ -38,7 +41,7 @@ function RoleIcon({ role }) {
 }
 
 export default function Sidebar({ open, onClose }) {
-  const { currentUser, logout } = useAuth()
+  const { currentUser, logout, clearMustChangePassword } = useAuth()
   const role = currentUser?.role
   const isAdmin = role === 'admin'
   const isTech = role === 'tecnico' || isAdmin
@@ -48,6 +51,7 @@ export default function Sidebar({ open, onClose }) {
   const [loadingProfiles, setLoadingProfiles] = useState(false)
   const [switchTarget, setSwitchTarget] = useState(null)
   const menuRef = useRef(null)
+  const [passwordOpen, setPasswordOpen] = useState(false)
 
   const loadProfiles = async () => {
     setLoadError('')
@@ -107,6 +111,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/metricas', label: 'Métricas', icon: BarChart3, end: false },
         { to: '/usuarios', label: 'Usuarios', icon: UserCog, end: false },
         { to: '/backups', label: 'Copias de seguridad', icon: Database, end: false },
+        { to: '/papelera', label: 'Papelera', icon: Trash2, end: false },
         { to: '/configuracion', label: 'Configuración', icon: Settings, end: false },
       ]
     : isTech
@@ -167,7 +172,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         {/* Navegación */}
-        <nav className="flex-1 space-y-1 px-3">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3">
           {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} onClick={onClose} className={linkCls}>
               <Icon size={18} />
@@ -283,10 +288,12 @@ export default function Sidebar({ open, onClose }) {
               Salir
             </button>
           </div>
+          <button onClick={() => setPasswordOpen(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"><KeyRound size={14} />Cambiar mi contraseña</button>
         </div>
       </aside>
 
       <ProfileSwitchModal profile={switchTarget} onClose={() => setSwitchTarget(null)} />
+      {passwordOpen && <ChangePasswordModal open required={false} onClose={() => setPasswordOpen(false)} onDone={(token) => { clearMustChangePassword(token); setPasswordOpen(false) }} />}
     </>
   )
 }

@@ -9,7 +9,7 @@ import { X } from 'lucide-react'
 // así los modales anidados (ej. picker de marca/modelo) no cierran el de afuera.
 let modalStack = 0
 
-export default function Modal({ open, onClose, title, children, maxWidth = 'max-w-lg', zIndex = 'z-50' }) {
+export default function Modal({ open, onClose, title, children, maxWidth = 'max-w-lg', zIndex = 'z-50', dismissible = true }) {
   // Cierra con la tecla Escape.
   useEffect(() => {
     if (!open) return
@@ -17,7 +17,7 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
     if (modalStack === 1) document.body.style.overflow = 'hidden'
     const myDepth = modalStack
     const onKey = (e) => {
-      if (e.key === 'Escape' && modalStack === myDepth) onClose()
+      if (dismissible && e.key === 'Escape' && modalStack === myDepth) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => {
@@ -25,7 +25,7 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
       if (modalStack === 0) document.body.style.overflow = ''
       window.removeEventListener('keydown', onKey)
     }
-  }, [open, onClose])
+  }, [open, onClose, dismissible])
 
   if (!open || typeof document === 'undefined') return null
 
@@ -34,7 +34,7 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
       {/* Overlay */}
       <div
         className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={dismissible ? onClose : undefined}
         aria-hidden="true"
       />
       {/* Panel */}
@@ -45,13 +45,13 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex flex-wrap items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
-          <button
+          {dismissible && <button
             onClick={onClose}
             className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
             aria-label="Cerrar"
           >
             <X size={20} />
-          </button>
+          </button>}
         </div>
         <div className="flex-1 overflow-y-auto">
           {children}

@@ -13,11 +13,14 @@ import OrderForm from '../components/OrderForm.jsx'
 import PrintOrderPanel from '../components/PrintOrderPanel.jsx'
 import { ORDER_STATUS_LABEL, orderStatusTone, formatDate, formatMoney, titleCase } from '../utils/helpers.js'
 import { DEVICE_TYPES } from '../../shared/fsm.js'
+import { csvCell } from '../../shared/csv.js'
+import { api } from '../utils/api.js'
+import { orderQuery } from '../utils/orderQuery.js'
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
 export default function Orders() {
-  const { loadOrders, customers, printLabel, ordersRevision } = useData()
+  const { loadOrders, customers, catalog, printLabel, ordersRevision } = useData()
   const { currentUser } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -51,20 +54,23 @@ export default function Orders() {
 
   // Carga paginada desde el servidor (no todo el histórico en memoria).
   useEffect(() => {
+    let active = true
     const offset = (page - 1) * pageSize
     loadOrders({ status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotConfirmed, limit: pageSize, offset })
-      .then(setPageData)
+      .then((result) => { if (active) setPageData(result) })
+    return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadOrders, status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotConfirmed, page, pageSize, ordersRevision])
 
   const [formOpen, setFormOpen] = useState(false)
   const [printing, setPrinting] = useState(null)
   const [notice, setNotice] = useState(null)
+  const [exporting, setExporting] = useState(false)
   const canCreate = ['recepcion', 'admin'].includes(currentUser?.role)
 
   const brands = useMemo(
-    () => [...new Set(pageData.orders.map((o) => o.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es-AR')),
-    [pageData.orders],
+    () => [...new Set([...(catalog.brands || []).map((brand) => brand.name), ...pageData.orders.map((o) => o.brand)].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es-AR')),
+    [pageData.orders, catalog.brands],
   )
 
   // Los filtros ya se aplican en el servidor; acá solo tenemos la página actual.
@@ -131,36 +137,50 @@ export default function Orders() {
     window.setTimeout(() => setNotice(null), 6000)
   }
 
-  const exportCsv = () => {
-    if (!sortedOrders.length) return
-    const headers = ['Nº Orden', 'Fecha', 'Cliente', 'Tipo', 'Marca', 'Modelo', 'Problema', 'Reparación', 'Precio', 'Adelanto', 'Saldo', 'Estado', 'Técnico']
-    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
-    const rows = sortedOrders.map((o) => [
-      escape(o.orderNumber),
-      escape(formatDate(o.createdAt)),
-      escape(o.customerName),
-      escape(o.deviceType),
-      escape(o.brand),
-      escape(o.model),
-      escape(o.issue),
-      escape(o.fix),
-      o.price || 0,
-      o.advance || 0,
-      Math.max(0, (o.price || 0) - (o.advance || 0)),
-      escape(ORDER_STATUS_LABEL[o.status] || o.status),
-      escape(o.assignedToName || '—'),
-    ].join(','))
+  const exportCsv = async () => {
+    if (!pageData.total || exporting) return
+    setExporting(true)
+    try {
+      const all = []
+      let total = 0
+      do {
+        const params = orderQuery({ status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotConfirmed, limit: 1000, offset: all.length })
+        const result = await api(`/orders?${params}`)
+        total = result.total
+        if (total > 100000) throw new Error('Aplicá filtros para exportar hasta 100.000 órdenes por archivo.')
+        if (!result.orders.length && all.length < total) throw new Error('El listado cambió durante la exportación. Volvé a intentarlo.')
+        all.push(...result.orders)
+      } while (all.length < total)
+      const headers = ['Nº Orden', 'Fecha', 'Cliente', 'Tipo', 'Marca', 'Modelo', 'Problema', 'Reparación', 'Precio', 'Adelanto', 'Saldo', 'Estado', 'Técnico']
+      const escape = csvCell
+      const rows = all.map((o) => [
+        escape(o.orderNumber),
+        escape(formatDate(o.createdAt)),
+        escape(o.customerName),
+        escape(o.deviceType),
+        escape(o.brand),
+        escape(o.model),
+        escape(o.issue),
+        escape(o.fix),
+        o.price || 0,
+        o.advance || 0,
+        Math.max(0, Math.round(((o.price || 0) - (o.advance || 0)) * 100) / 100),
+        escape(ORDER_STATUS_LABEL[o.status] || o.status),
+        escape(o.assignedToName || '—'),
+      ].join(','))
 
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `ordenes_${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n')
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `ordenes_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) { setNotice({ text: err.message, error: true }) }
+    finally { setExporting(false) }
   }
 
   const inputCls =
@@ -196,12 +216,12 @@ export default function Orders() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={exportCsv}
-            disabled={pageData.orders.length === 0}
+            disabled={pageData.total === 0 || exporting}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            title="Exportar listado a Excel / CSV"
+            title="Exportar todas las órdenes que coinciden con los filtros"
           >
             <FileSpreadsheet size={16} className="text-emerald-600 dark:text-emerald-400" />
-            Exportar CSV
+            {exporting ? 'Exportando…' : 'Exportar CSV'}
           </button>
           {canCreate && (
             <button

@@ -1,19 +1,8 @@
 // ============================================
 // Capa de acceso a datos con Prisma (PostgreSQL)
 // ============================================
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import dotenv from 'dotenv'
+import './env.js'
 import { PrismaClient } from '@prisma/client'
-
-// Carga el DATABASE_URL desde .env antes de instanciar Prisma.
-// (Necesario aquí: los imports de ESM suben antes que cualquier otro código,
-// por eso db.js debe resolver su propia configuración.)
-const __file = fileURLToPath(import.meta.url)
-const __serverDir = path.dirname(__file)
-const __rootDir = path.resolve(__serverDir, '..')
-dotenv.config({ path: path.join(__rootDir, '.env') })
-dotenv.config({ path: path.join(__serverDir, '.env') })
 
 export const prisma = new PrismaClient()
 

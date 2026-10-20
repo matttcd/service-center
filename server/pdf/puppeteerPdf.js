@@ -25,6 +25,12 @@ async function getBrowser() {
       headless: true,
       executablePath,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    }).then((browser) => {
+      browser.once('disconnected', () => { browserPromise = null })
+      return browser
+    }).catch((err) => {
+      browserPromise = null
+      throw err
     })
   }
   return browserPromise
@@ -34,6 +40,14 @@ export async function htmlToPdf(html) {
   const browser = await getBrowser()
   const page = await browser.newPage()
   try {
+    // Los comprobantes son autocontenidos. Bloquea JS y accesos a red/archivos
+    // desde términos editables antes de renderizar el HTML.
+    await page.setJavaScriptEnabled(false)
+    await page.setRequestInterception(true)
+    page.on('request', (request) => {
+      if (request.url().startsWith('data:') || request.url() === 'about:blank') request.continue()
+      else request.abort()
+    })
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 15000 })
     const raw = await page.pdf({
       format: 'A4',

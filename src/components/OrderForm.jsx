@@ -8,7 +8,7 @@ import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
 import PatternPad from './PatternPad.jsx'
 import { useData } from '../context/DataContext.jsx'
-import { titleCase, sentenceCase } from '../utils/helpers.js'
+import { titleCase, sentenceCase, uid } from '../utils/helpers.js'
 import {
   BRAND_BADGE_COUNT,
   MODEL_BADGE_COUNT,
@@ -67,6 +67,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [filteredCatalog, setFilteredCatalog] = useState(null)
+  const [requestId, setRequestId] = useState(uid)
 
   const accessoryOptions = catalogLists?.accessories?.length ? catalogLists.accessories : ACCESSORY_FALLBACK
   const conditionOptions = catalogLists?.conditions?.length ? catalogLists.conditions : CONDITION_FALLBACK
@@ -92,6 +93,8 @@ export default function OrderForm({ open, onClose, onCreated }) {
 setPattern([])
     setDiagnosisType('visible')
     setIsSimpleService(false)
+    setIsExternal(false)
+    setRequestId(uid())
 setIssue('')
     setFixes([])
     setCustomFix('')
@@ -240,7 +243,7 @@ setIssue('')
       addFromPicker(res.brand.name)
     } else {
       if (!brand) return setError('Elegí primero la marca.')
-      const res = await addCatalogModel(brand, v)
+      const res = await addCatalogModel(brand, v, deviceType === 'Otro' ? customDeviceType.trim() || 'Otro' : deviceType)
       if (res.error) return setError(res.error)
       addFromPicker(res.model.name)
     }
@@ -272,9 +275,11 @@ setIssue('')
         })
         if (res.error) throw new Error(res.error)
         cid = res.id
+        setSelectedCustomerId(cid)
       }
       const accList = [...accessories, customAccessory.trim()].filter(Boolean)
       const res = await addOrder({
+        requestId,
         customerId: cid,
         deviceType: deviceType === 'Otro' ? titleCase(customDeviceType.trim()) || 'Otro' : deviceType,
         brand,
@@ -451,6 +456,10 @@ setIssue('')
             )}
 
             {/* Modelo */}
+            {deviceType === 'Otro' && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div><label className={labelCls}>Marca</label><input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Marca (o Sin marca)" className={inputCls} /></div>
+              <div><label className={labelCls}>Modelo</label><input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Modelo o identificación del equipo" className={inputCls} /></div>
+            </div>}
             {deviceType !== 'Otro' && (
             <div>
               <label className={labelCls}>Modelo</label>

@@ -6,6 +6,9 @@ import { api } from '../utils/api.js'
 import { useAuth } from './AuthContext.jsx'
 import { loadSession } from '../utils/storage.js'
 import { todayISO, toTime } from '../utils/helpers.js'
+import { createRefreshQueue } from '../utils/refreshQueue.js'
+import { businessDate } from '../../shared/dates.js'
+import { orderQuery } from '../utils/orderQuery.js'
 
 const DataContext = createContext(null)
 
@@ -27,20 +30,26 @@ export function DataProvider({ children }) {
   const [adminMetrics, setAdminMetrics] = useState(null)
   const [adminMetricsError, setAdminMetricsError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [dataError, setDataError] = useState('')
   const [ordersRevision, setOrdersRevision] = useState(0)
   const [ordersPage, setOrdersPage] = useState({ orders: [], total: 0 })
   const [ordersLoading, setOrdersLoading] = useState(false)
   const today = todayISO()
 
-  const refreshTimer = useRef(null)
+  const refreshSequence = useRef(0)
+  const invalidateRefresh = useCallback(() => { refreshSequence.current++ }, [])
 
   const doRefresh = useCallback(async ({ silent = false } = {}) => {
+    const requestToken = loadSession()?.token
+    const sequence = ++refreshSequence.current
     if (!silent) setLoading(true)
     try {
       const [res, act] = await Promise.all([
         api('/bootstrap'),
         api(`/actividad?page=1&limit=${ACTIVIDAD_PAGE_SIZE}`).catch(() => null),
       ])
+      if (requestToken !== loadSession()?.token || sequence !== refreshSequence.current) return
+      setDataError('')
       setData({
         customers: res.customers || [],
         orders: res.orders || [],
@@ -60,9 +69,11 @@ export function DataProvider({ children }) {
         setActividadError('No se pudieron cargar los movimientos.')
       }
     } catch (err) {
+      if (requestToken !== loadSession()?.token || sequence !== refreshSequence.current) return
       if (err.status === 401) logout()
+      else if (err.code !== 'PASSWORD_CHANGE_REQUIRED') setDataError(err.message)
     } finally {
-      if (!silent) setLoading(false)
+      if (requestToken === loadSession()?.token && sequence === refreshSequence.current) setLoading(false)
     }
     // Avisa a la vista de órdenes para que reconsulte su página paginada.
     setOrdersRevision((v) => v + 1)
@@ -71,18 +82,8 @@ export function DataProvider({ children }) {
   // Debounce: una mutación y el evento SSE disparan refresh casi al mismo
   // tiempo; colapsamos ambos en una sola descarga de bootstrap. En la carga inicial
   // pasamos immediate: true para no retrasar la interfaz innecesariamente.
-  const refresh = useCallback((opts = {}) => {
-    if (opts.immediate) {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current)
-      refreshTimer.current = null
-      return doRefresh(opts)
-    }
-    if (refreshTimer.current) clearTimeout(refreshTimer.current)
-    refreshTimer.current = setTimeout(() => {
-      refreshTimer.current = null
-      doRefresh(opts)
-    }, 120)
-  }, [doRefresh])
+  const refreshQueue = useMemo(() => createRefreshQueue(doRefresh), [doRefresh])
+  const refresh = useCallback((opts = {}) => refreshQueue.schedule(opts), [refreshQueue])
 
   const loadAdminMetrics = useCallback(async () => {
     try {
@@ -95,6 +96,10 @@ export function DataProvider({ children }) {
   }, [])
 
   useEffect(() => {
+    if (currentUser?.mustChangePassword) {
+      setLoading(false)
+      return
+    }
     if (!currentUser) {
       setData({ customers: [], orders: [], users: [], technicians: [], config: null, catalog: { brands: [], models: [] } })
       setActividad([])
@@ -102,6 +107,7 @@ export function DataProvider({ children }) {
       setAdminMetrics(null)
       setAdminMetricsError('')
       setLoading(false)
+      setDataError('')
       return
     }
     refresh({ immediate: true })
@@ -124,8 +130,12 @@ export function DataProvider({ children }) {
       // token expirado: validamos contra la API (refresh hace logout en 401).
       if (connected) refresh({ silent: true })
     }
-    return () => es.close()
-  }, [currentUser, refresh, loadAdminMetrics])
+    return () => {
+      es.close()
+      refreshQueue.cancel()
+      invalidateRefresh()
+    }
+  }, [currentUser, refresh, refreshQueue, loadAdminMetrics, invalidateRefresh])
 
   // Ejecuta una mutación y refresca en silencio. Si el refresh falla no se
   // reporta como error: la mutación ya se aplicó (el SSE la sincroniza).
@@ -143,18 +153,7 @@ export function DataProvider({ children }) {
   // Carga la vista paginada de órdenes (histórico) desde el servidor,
   // en lugar de traer todo el dataset en cada bootstrap.
   const loadOrders = useCallback(async (filters = {}) => {
-    const params = new URLSearchParams()
-    if (filters.status && filters.status !== 'all') params.set('status', filters.status)
-    if (filters.q) params.set('q', filters.q)
-    if (filters.from) params.set('from', filters.from)
-    if (filters.to) params.set('to', filters.to)
-    if (filters.brand && filters.brand !== 'all') params.set('brand', filters.brand)
-    if (filters.deviceType && filters.deviceType !== 'all') params.set('deviceType', filters.deviceType)
-    if (filters.onlyNotNotified) params.set('onlyNotNotified', '1')
-    if (filters.onlyNotified) params.set('onlyNotified', '1')
-    if (filters.onlyNotConfirmed) params.set('onlyNotConfirmed', '1')
-    if (filters.limit) params.set('limit', String(filters.limit))
-    if (filters.offset != null) params.set('offset', String(filters.offset))
+    const params = orderQuery(filters)
     setOrdersLoading(true)
     try {
       const res = await api(`/orders?${params.toString()}`)
@@ -193,9 +192,9 @@ export function DataProvider({ children }) {
       return { error: err.message }
     }
   }
-  const addCatalogModel = async (brand, name) => {
+  const addCatalogModel = async (brand, name, deviceType) => {
     try {
-      const res = await api('/catalog/models', { method: 'POST', body: { brand, name } })
+      const res = await api('/catalog/models', { method: 'POST', body: { brand, name, deviceType } })
       await refresh({ silent: true })
       return { error: null, model: res.model }
     } catch (err) {
@@ -345,13 +344,14 @@ export function DataProvider({ children }) {
         byStatus('presupuesto').filter((o) => !o.price),
       ),
       ingresaronHoyOrders: data.orders.filter(
-        (o) => o.createdAt && o.createdAt.slice(0, 10) === today,
+        (o) => businessDate(o.createdAt) === today,
       ),
     }
   }, [data.orders, today])
 
   const value = {
     loading,
+    dataError,
     today,
     refresh,
     customers: data.customers,

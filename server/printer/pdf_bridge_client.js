@@ -14,7 +14,7 @@ function sendPayload(payload) {
       socket = new net.Socket()
       socket.setTimeout(10000)
       socket.connect(getBridgePort(), getBridgeHost(), () => {
-        const data = Buffer.from(JSON.stringify(payload), 'utf-8')
+        const data = Buffer.from(JSON.stringify({ ...payload, token: process.env.PRINT_BRIDGE_TOKEN }), 'utf-8')
         const lenBuf = Buffer.alloc(4)
         lenBuf.writeUInt32BE(data.length, 0)
         socket.write(lenBuf)

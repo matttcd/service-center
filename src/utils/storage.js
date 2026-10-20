@@ -2,7 +2,7 @@
 // Utilidades de persistencia local (token, sesión y tema)
 // ============================================
 
-const SESSION_KEY = 'service_session_v1'
+export const SESSION_KEY = 'service_session_v1'
 const THEME_KEY = 'service_theme_v1'
 const LAST_PROFILE_KEY = 'service_last_profile_v1'
 

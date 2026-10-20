@@ -5,15 +5,11 @@
 // ============================================
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import dotenv from 'dotenv'
-import { execFile } from 'node:child_process'
+import './env.js'
+
 import fs from 'node:fs'
 
 const __file = fileURLToPath(import.meta.url)
-const __serverDir = path.dirname(__file)
-const __rootDir = path.resolve(__serverDir, '..')
-dotenv.config({ path: path.join(__rootDir, '.env') })
-dotenv.config({ path: path.join(__serverDir, '.env') })
 
 import express from 'express'
 import cors from 'cors'
@@ -25,17 +21,27 @@ import { prisma, onDataChange, notifyChange } from './db.js'
 import { todayISO, titleCase, uid, addDays, daysBetween, toISODate, sentenceCase, normalizeList } from './helpers.js'
 import { printZplLabel } from './printer.js'
 import { printPdfToBridge, listBridgePrinters } from './printer/pdf_bridge_client.js'
+import { publicUser, usesDefaultPassword, isValidBackupName, createLoginLimiter, sessionVersion, passwordError } from './security.js'
 import { ORDER_STATUSES, allowedTransitions } from '../shared/fsm.js'
 import { buildOrderHtml } from './pdf/orderTemplate.js'
 import { buildPickupHtml } from './pdf/pickupTemplate.js'
 import { htmlToPdf } from './pdf/puppeteerPdf.js'
 import { seedIfEmpty, DEFAULT_LISTS } from './seed.js'
+import { backupKey } from './backup-crypto.js'
+import { BACKUP_DIR, BACKUP_ENCRYPTION_KEY, createBackup, listBackups, restoreBackup, scheduleBackups, getBackupStatus, isRestoring } from './backups.js'
+import { money, orderDateRange, unlockPattern } from './validation.js'
+import { registerTrashRoutes } from './trash.js'
+import { businessDate } from '../shared/dates.js'
+import { orderRequest, previousOrderRequest } from './order-request.js'
+import { logError } from './logging.js'
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__serverDir, 'data')
-const BACKUP_DIR = path.join(DATA_DIR, 'backups')
+
+
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
+export { app }
 const PORT = process.env.PORT || 4000
 
 // El secreto JWT no debe quedar hardcodeado en producción: se exige por env.
@@ -45,69 +51,103 @@ if (!JWT_SECRET) {
   console.error('Falta la variable de entorno JWT_SECRET. Definila antes de iniciar el servidor.')
   process.exit(1)
 }
+if (NODE_ENV === 'production' && JWT_SECRET.length < 32) throw new Error('JWT_SECRET debe tener al menos 32 caracteres.')
+
+const signSession = (user, mustChangePassword = false) => jwt.sign({
+  id: user.id, version: sessionVersion(user, JWT_SECRET), mustChangePassword,
+}, JWT_SECRET, { expiresIn: '12h', algorithm: 'HS256' })
 
 // Límite de intentos de login por IP+cuenta (anti fuerza bruta).
-const MAX_LOGIN_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS || 5)
-const LOGIN_WINDOW_MS = 15 * 60 * 1000
-const loginAttempts = new Map()
-const DEFAULT_PASSWORDS = ['admin123']
-function checkLoginLimit(key) {
-  const now = Date.now()
-  if (loginAttempts.size > 10000) {
-    for (const [k, r] of loginAttempts) {
-      if (now >= r.resetAt) loginAttempts.delete(k)
-    }
+const loginLimiter = createLoginLimiter({
+  maxAttempts: Number(process.env.MAX_LOGIN_ATTEMPTS || 5),
+  windowMs: 15 * 60 * 1000,
+})
+const checkLoginLimit = (key) => loginLimiter.check(key)
+const noteLoginFailure = (key) => loginLimiter.note(key)
+
+// Evita que un error de un handler async deje la request colgada (Express 4 no
+// captura promesas rechazadas): todo rechazo va al middleware de errores.
+// No envuelve los handlers de error (4 argumentos) para no alterar su firma.
+const asyncWrap = (fn) => (req, res, next) => {
+  try {
+    const result = fn(req, res, next)
+    if (result && typeof result.then === 'function') result.catch(next)
+  } catch (err) {
+    next(err)
   }
-  const rec = loginAttempts.get(key)
-  if (rec && rec.count >= MAX_LOGIN_ATTEMPTS && now < rec.resetAt) return true
-  return false
 }
-function noteLoginFailure(key) {
-  const now = Date.now()
-  const rec = loginAttempts.get(key)
-  if (rec && now < rec.resetAt) rec.count += 1
-  else loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
+for (const method of ['get', 'post', 'put', 'delete', 'patch', 'use']) {
+  const original = app[method].bind(app)
+  app[method] = (...args) => original(...args.map((a) => (typeof a === 'function' && a.length <= 3 ? asyncWrap(a) : a)))
 }
 
-app.use(cors())
-app.use(express.json())
+// Detrás de nginx (contenedor), la IP real llega en X-Forwarded-For.
+app.set('trust proxy', 1)
+
+app.disable('x-powered-by')
+app.use(cors({ origin: false }))
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  if (NODE_ENV === 'production') {
+    res.setHeader('X-Frame-Options', 'DENY')
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
+  }
+  if (req.path.startsWith('/api')) res.setHeader('Cache-Control', 'no-store')
+  next()
+})
+app.use(express.json({ limit: '1mb' }))
+app.use('/api', (req, res, next) => {
+  if (isRestoring() && req.path !== '/health') return res.status(503).json({ error: 'Se está restaurando una copia. Esperá unos segundos y volvé a intentar.', code: 'MAINTENANCE' })
+  next()
+})
 
 // Inicializa la base: si está vacía, aplica el seed (admin + catálogo).
-await seedIfEmpty()
+app.get('/api/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    res.json({ status: 'ok', verification: process.env.VERIFICATION_INSTANCE || undefined })
+  } catch {
+    res.status(503).json({ status: 'unavailable' })
+  }
+})
 
 // Helper: aplica una mutación y notifica a los clientes SSE.
-async function commit(mutateFn) {
-  const result = await mutateFn()
+// mutateFn recibe el cliente de Prisma/transacción a usar.
+async function commit(mutateFn, { useTransaction = false } = {}) {
+  const result = useTransaction
+    ? await prisma.$transaction((tx) => mutateFn(tx))
+    : await mutateFn(prisma)
   notifyChange()
   return result
 }
 
-// Devuelve un usuario sin datos sensibles.
-const publicUser = (u) => ({
-  id: u.id,
-  name: u.name,
-  email: u.email,
-  role: u.role,
-  active: u.active,
-})
-
-// Registra una entrada de auditoría.
-async function audit(action, table, recordId, userId, details) {
-  await prisma.auditLog.create({
-    data: { action, table, recordId, userId, details, timestamp: new Date() },
-  })
+// En transacciones, una auditoría fallida revierte también el cambio de negocio.
+// Fuera de ellas, no se informa como fallida una operación ya persistida.
+async function audit(action, table, recordId, userId, details, client = prisma) {
+  try {
+    await client.auditLog.create({
+      data: { action, table, recordId, userId, details, timestamp: new Date() },
+    })
+  } catch (e) {
+    if (client !== prisma) throw e
+    logError('No se pudo registrar la auditoría:', e)
+  }
 }
+
+// Campos seguros de un usuario para incrustar en respuestas (nunca el hash).
+const userRef = { select: { id: true, name: true, email: true, role: true, active: true } }
 
 // Mapea filas de la relación history/notes a los campos anidados que espera el front con JOINs directos.
 const orderInclude = {
   customer: true,
-  assigned: true,
-  received: true,
-  repaired: true,
-  delivered: true,
-  notifiedUser: true,
-  confirmedUser: true,
-  history: { orderBy: { at: 'asc' }, include: { user: true } },
+  assigned: userRef,
+  received: userRef,
+  repaired: userRef,
+  delivered: userRef,
+  notifiedUser: userRef,
+  confirmedUser: userRef,
+  history: { orderBy: { at: 'asc' }, include: { user: userRef } },
   notes: { orderBy: { at: 'asc' } },
   spareParts: { orderBy: { at: 'asc' } },
 }
@@ -177,6 +217,9 @@ app.get('/api/auth/profiles', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   const { email, password, profileId } = req.body || {}
+  if ((email !== undefined && (typeof email !== 'string' || email.length > 254)) || (profileId !== undefined && (typeof profileId !== 'string' || profileId.length > 128)) || typeof password !== 'string' || password.length > 1024) {
+    return res.status(400).json({ error: 'Credenciales inválidas.' })
+  }
   let user = null
   try {
     if (profileId) {
@@ -187,13 +230,13 @@ app.post('/api/auth/login', async (req, res) => {
       })
     }
   } catch {
-    user = null
+    return res.status(503).json({ error: 'La base de datos no está disponible. Intentá nuevamente en unos segundos.' })
   }
-  const rateKey = `${req.ip}:${String(profileId || email || '').toLowerCase()}`
+  const rateKey = `${req.ip}:${user?.id || String(profileId || email || '').trim().toLowerCase()}`
   if (checkLoginLimit(rateKey)) {
     return res.status(429).json({ error: 'Demasiados intentos fallidos. Probá de nuevo en unos minutos.' })
   }
-  if (!user || !bcrypt.compareSync(String(password || ''), user.password)) {
+  if (!user || !await bcrypt.compare(String(password || ''), user.password)) {
     noteLoginFailure(rateKey)
     return res.status(401).json({ error: 'Credenciales inválidas.' })
   }
@@ -201,52 +244,51 @@ app.post('/api/auth/login', async (req, res) => {
     noteLoginFailure(rateKey)
     return res.status(403).json({ error: 'Usuario desactivado. Contactá al administrador.' })
   }
-  loginAttempts.delete(rateKey)
-  const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '12h' })
-  return res.json({ token, user: { ...publicUser(user), mustChangePassword: usesDefaultPassword(user) } })
+  loginLimiter.reset(rateKey)
+  const mustChangePassword = usesDefaultPassword(user)
+  const token = signSession(user, mustChangePassword)
+  return res.json({ token, user: { ...publicUser(user), mustChangePassword } })
 })
-
-function usesDefaultPassword(user) {
-  if (!user?.password) return false
-  return DEFAULT_PASSWORDS.some((p) => bcrypt.compareSync(p, user.password))
-}
 
 app.post('/api/auth/change-password', auth, async (req, res) => {
   const { currentPassword, newPassword } = req.body || {}
   const user = await prisma.user.findUnique({ where: { id: req.user.id } })
   if (!user) return res.status(401).json({ error: 'No autorizado.' })
-  if (!bcrypt.compareSync(String(currentPassword || ''), user.password)) {
+  if (!await bcrypt.compare(String(currentPassword || ''), user.password)) {
     return res.status(400).json({ error: 'La contraseña actual es incorrecta.' })
   }
-  const pw = String(newPassword || '')
-  if (pw.length < 4) {
-    return res.status(400).json({ error: 'La contraseña nueva debe tener al menos 4 caracteres.' })
-  }
-  const hash = bcrypt.hashSync(pw, 10)
+  const validation = passwordError(newPassword)
+  if (validation) return res.status(400).json({ error: validation })
+  const hash = await bcrypt.hash(newPassword, 12)
   try {
     await commit(async () => {
       await prisma.user.update({ where: { id: req.user.id }, data: { password: hash } })
       await audit('password_change', 'users', req.user.id, req.user.id, `Cambio de contraseña (${req.user.name})`)
     })
-    res.json({ ok: true })
+    res.json({ ok: true, token: signSession({ ...user, password: hash }) })
   } catch {
     res.status(500).json({ error: 'Error al cambiar la contraseña.' })
   }
 })
 
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const header = req.headers.authorization || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : null
   if (!token) return res.status(401).json({ error: 'No autorizado.' })
+  let payload
+  try { payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) }
+  catch { return res.status(401).json({ error: 'Sesión expirada.' }) }
   try {
-    const payload = jwt.verify(token, JWT_SECRET)
-    prisma.user.findUnique({ where: { id: payload.id } }).then((u) => {
-      req.user = u || null
-      if (!req.user || !req.user.active) return res.status(401).json({ error: 'No autorizado.' })
-      next()
-    }).catch(() => res.status(401).json({ error: 'No autorizado.' }))
+    req.user = await prisma.user.findUnique({ where: { id: payload.id } })
+    if (!req.user?.active || payload.version !== sessionVersion(req.user, JWT_SECRET)) {
+      return res.status(401).json({ error: 'La sesión ya no es válida. Ingresá nuevamente.' })
+    }
+    if (payload.mustChangePassword && req.path !== '/api/auth/change-password') {
+      return res.status(403).json({ error: 'Cambiá la contraseña inicial para continuar.', code: 'PASSWORD_CHANGE_REQUIRED' })
+    }
+    next()
   } catch {
-    return res.status(401).json({ error: 'Sesión expirada.' })
+    return res.status(503).json({ error: 'La base de datos no está disponible. Intentá nuevamente en unos segundos.' })
   }
 }
 
@@ -278,8 +320,9 @@ app.get('/api/events', async (req, res) => {
   if (!token) return res.status(401).json({ error: 'No autorizado.' })
   let user = null
   try {
-    const payload = jwt.verify(String(token), JWT_SECRET)
+    const payload = jwt.verify(String(token), JWT_SECRET, { algorithms: ['HS256'] })
     user = await prisma.user.findUnique({ where: { id: payload.id } })
+    if (user && (payload.version !== sessionVersion(user, JWT_SECRET) || payload.mustChangePassword)) user = null
   } catch {
     user = null
   }
@@ -363,7 +406,7 @@ app.get('/api/bootstrap', auth, async (req, res) => {
       },
     })
   } catch (e) {
-    console.error('Error en bootstrap:', e)
+    logError('Error en bootstrap:', e)
     res.status(500).json({ error: 'Error del servidor.' })
   }
 })
@@ -401,7 +444,7 @@ app.get('/api/catalog', auth, async (req, res) => {
     const catalog = await loadCatalog(req.query.deviceType)
     res.json({ brands: catalog.brands, models: catalog.models })
   } catch (e) {
-    console.error('Error en /api/catalog:', e)
+    logError('Error en /api/catalog:', e)
     res.status(500).json({ error: 'Error del servidor.' })
   }
 })
@@ -474,8 +517,8 @@ app.post('/api/catalog/models/bulk', auth, async (req, res) => {
   }
 })
 
-async function loadConfigValue(key) {
-  const row = await prisma.config.findUnique({ where: { key } })
+async function loadConfigValue(key, client = prisma) {
+  const row = await client.config.findUnique({ where: { key } })
   return row ? row.value : null
 }
 
@@ -495,7 +538,7 @@ app.put('/api/catalog/lists', auth, async (req, res) => {
   const body = req.body || {}
   const normalize = (v) =>
     Array.isArray(v)
-      ? v.map((s) => titleCase(String(s).trim())).filter(Boolean)
+      ? [...new Set(v.map((s) => titleCase(String(s).trim())).filter(Boolean))]
       : undefined
   const normalizeTerms = (v) =>
     Array.isArray(v)
@@ -516,61 +559,59 @@ app.put('/api/catalog/lists', auth, async (req, res) => {
     return res.status(400).json({ error: `Los términos no pueden superar ${MAX_TERMS_CHARS} caracteres en total.` })
   }
   try {
-    await commit(async () => {
+    await commit(async (db) => {
       if (accessories !== undefined) {
-        await prisma.catalogAccessory.deleteMany()
-        await prisma.catalogAccessory.createMany({ data: accessories.map((name) => ({ name })) })
+        await db.catalogAccessory.deleteMany()
+        await db.catalogAccessory.createMany({ data: accessories.map((name) => ({ name })) })
       }
       if (conditions !== undefined) {
-        await prisma.catalogCondition.deleteMany()
-        await prisma.catalogCondition.createMany({ data: conditions.map((name) => ({ name })) })
+        await db.catalogCondition.deleteMany()
+        await db.catalogCondition.createMany({ data: conditions.map((name) => ({ name })) })
       }
       if (fixes !== undefined) {
-        await prisma.catalogFix.deleteMany()
-        await prisma.catalogFix.createMany({ data: fixes.map((name) => ({ name })) })
+        await db.catalogFix.deleteMany()
+        await db.catalogFix.createMany({ data: fixes.map((name) => ({ name })) })
       }
       if (terms !== undefined) {
-        const current = (await loadConfigValue('main')) || {}
-        await upsertConfig('main', { ...current, terms })
+        const current = (await loadConfigValue('main', db)) || {}
+        await upsertConfig('main', { ...current, terms }, db)
       }
       if (externalTechnicians !== undefined) {
-        const current = (await loadConfigValue('main')) || {}
-        await upsertConfig('main', { ...current, externalTechnicians })
+        const current = (await loadConfigValue('main', db)) || {}
+        await upsertConfig('main', { ...current, externalTechnicians }, db)
       }
-    })
+    }, { useTransaction: true })
     res.json({ ok: true })
   } catch {
     res.status(500).json({ error: 'No se pudo guardar las listas.' })
   }
 })
 
-async function upsertConfig(key, value) {
-  const existing = await prisma.config.findUnique({ where: { key } })
-  if (existing) return prisma.config.update({ where: { key }, data: { value } })
-  return prisma.config.create({ data: { key, value } })
+async function upsertConfig(key, value, client = prisma) {
+  return client.config.upsert({ where: { key }, update: { value }, create: { key, value } })
 }
 
 // Cuenta una marca/modelo en el catálogo (y los crea si faltan).
-async function bumpCatalog(brand, model, deviceType = 'Celular') {
-  await prisma.catalogBrand.upsert({
+async function bumpCatalog(db, brand, model, deviceType = 'Celular') {
+  await db.catalogBrand.upsert({
     where: { name: brand },
     update: { usage: { increment: 1 } },
     create: { name: brand, usage: 1 },
   })
-  const existingModel = await prisma.catalogModel.findUnique({ where: { brand_name_deviceType: { brand, name: model, deviceType } } })
+  const existingModel = await db.catalogModel.findUnique({ where: { brand_name_deviceType: { brand, name: model, deviceType } } })
   if (existingModel) {
-    await prisma.catalogModel.update({ where: { id: existingModel.id }, data: { usage: { increment: 1 } } })
+    await db.catalogModel.update({ where: { id: existingModel.id }, data: { usage: { increment: 1 } } })
   } else {
-    await prisma.catalogModel.create({ data: { brand, name: model, deviceType, usage: 1 } })
+    await db.catalogModel.create({ data: { brand, name: model, deviceType, usage: 1 } })
   }
 }
 
 // Incrementa usage de cada fix en el catálogo.
-async function bumpFixUsage(fixString) {
+async function bumpFixUsage(db, fixString) {
   if (!fixString) return
   const names = String(fixString).split(',').map((s) => s.trim()).filter(Boolean)
   for (const name of names) {
-    await prisma.catalogFix.upsert({
+    await db.catalogFix.upsert({
       where: { name },
       update: { usage: { increment: 1 } },
       create: { name, usage: 1 },
@@ -663,11 +704,11 @@ app.delete('/api/customers/:id', auth, adminOnly, async (req, res) => {
   if (target.deletedAt) return res.status(400).json({ error: 'El cliente ya está eliminado.' })
   try {
     const now = new Date()
-    await commit(async () => {
-      await prisma.order.updateMany({ where: { customerId: req.params.id }, data: { deletedAt: now } })
-      await prisma.customer.update({ where: { id: req.params.id }, data: { deletedAt: now } })
-      await audit('delete', 'customers', req.params.id, req.user.id, `Baja de cliente ${target.fullName}`)
-    })
+    await commit(async (db) => {
+      await db.order.updateMany({ where: { customerId: req.params.id, deletedAt: null }, data: { deletedAt: now } })
+      await db.customer.update({ where: { id: req.params.id }, data: { deletedAt: now } })
+      await audit('delete', 'customers', req.params.id, req.user.id, `Baja de cliente ${target.fullName}`, db)
+    }, { useTransaction: true })
     res.json({ ok: true })
   } catch {
     res.status(500).json({ error: 'Error al eliminar el cliente.' })
@@ -680,6 +721,7 @@ app.post('/api/orders', auth, async (req, res) => {
     return res.status(403).json({ error: 'Solo recepción o administradores pueden crear órdenes.' })
   }
   const body = req.body || {}
+  const request = orderRequest(body, req.user.id)
   const customer = await prisma.customer.findUnique({ where: { id: body.customerId } })
   if (!customer || customer.deletedAt) {
     return res.status(400).json({ error: 'Cliente inexistente o eliminado.' })
@@ -688,28 +730,26 @@ app.post('/api/orders', auth, async (req, res) => {
   const model = titleCase(String(body.model || '').trim())
   if (!brand) return res.status(400).json({ error: 'Elegí la marca del dispositivo.' })
   if (!model) return res.status(400).json({ error: 'Elegí el modelo del dispositivo.' })
-  const validTypes = ['Celular', 'Tablet', 'Notebook / PC', 'Smart TV', 'Consola', 'Impresora', 'Otro']
-  const deviceType = validTypes.includes(body.deviceType) ? body.deviceType : 'Celular'
+  const deviceType = String(body.deviceType || 'Celular').trim().slice(0, 80)
   const diagnosisType = body.diagnosisType === 'revision' ? 'revision' : 'visible'
   const isSimpleService = !!body.isSimpleService
   const isExternal = !!body.isExternal
   const externalTech = isExternal ? titleCase(String(body.externalTech || '').trim()) : ''
-  const price = Math.max(0, Number(body.price) || 0)
-  const advance = Math.max(0, Number(body.advance) || 0)
-  const pattern = Array.isArray(body.pattern)
-    ? body.pattern.filter((n) => Number.isInteger(n) && n >= 0 && n <= 8).slice(0, 9)
-    : []
-  const storedPattern = pattern.length >= 3 ? pattern : []
+  const price = money(body.price, 'El presupuesto')
+  const advance = money(body.advance, 'La seña')
+  const storedPattern = body.noPin ? [] : unlockPattern(body.pattern)
 
   try {
-    const order = await commit(async () => {
-      const counter = await prisma.orderCounter.upsert({
+    const order = await commit(async (db) => {
+      const existing = await previousOrderRequest(db, request, orderInclude)
+      if (existing) return existing
+      const counter = await db.orderCounter.upsert({
         where: { key: 'order' },
         update: { value: { increment: 1 } },
         create: { key: 'order', value: 1 },
       })
       const orderNumber = `OS${pad4(counter.value)}`
-      const created = await prisma.order.create({
+      const created = await db.order.create({
         data: {
           orderNumber,
           customerId: body.customerId,
@@ -718,14 +758,13 @@ app.post('/api/orders', auth, async (req, res) => {
           model,
           accessories: normalizeList(String(body.accessories || '')),
           conditions: normalizeList(String(body.conditions || '')),
-          pin: String(body.pin || ''),
+          pin: body.noPin ? '' : String(body.pin || ''),
           noPin: !!body.noPin,
           pattern: storedPattern,
           diagnosisType,
           isSimpleService,
           isExternal,
           externalTech,
-          ...(isExternal ? { externalSentAt: new Date() } : {}),
           issue: sentenceCase(String(body.issue || '')),
           fix: normalizeList(String(body.fix || '')),
           price,
@@ -739,43 +778,49 @@ app.post('/api/orders', auth, async (req, res) => {
         },
         include: orderInclude,
       })
-      await bumpCatalog(brand, model, deviceType)
-      await bumpFixUsage(body.fix)
+      await bumpCatalog(db, brand, model, deviceType)
+      await bumpFixUsage(db, body.fix)
+      if (request) await db.config.create({ data: { key: request.key, value: { userId: request.userId, hash: request.hash, orderId: created.id } } })
       await audit(
         'create',
         'orders',
         created.id,
         req.user.id,
         `Orden ${orderNumber} · ${brand} ${model} de ${customer.fullName}${diagnosisType === 'revision' ? ' (a revisión)' : ''}`,
+        db,
       )
       return created
-    })
+    }, { useTransaction: true })
     res.json({ ok: true, order: await decorateOrder(order) })
   } catch (e) {
-    console.error('Error creando orden:', e)
-    res.status(500).json({ error: 'Error al crear la orden.' })
+    if (request && e.code === 'P2002') {
+      const existing = await previousOrderRequest(prisma, request, orderInclude)
+      if (existing) return res.json({ ok: true, order: await decorateOrder(existing) })
+    }
+    logError('Error creando orden:', e)
+    res.status(e.status || 500).json({ error: e.status ? e.message : 'Error al crear la orden.' })
   }
 })
 
 app.get('/api/orders', auth, async (req, res) => {
-  const { status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotified, onlyNotConfirmed } = req.query
+  const { status, q, from, to, brand, deviceType, customerId, onlyNotNotified, onlyNotified, onlyNotConfirmed } = req.query
   const query = String(q || '').trim().toLowerCase()
-  const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 0))
-  const offset = Math.max(0, Number(req.query.offset) || 0)
+  const limit = Math.max(1, Math.min(1000, Math.floor(Number(req.query.limit) || 50)))
+  const offset = Math.max(0, Math.floor(Number(req.query.offset) || 0))
 
   const where = { deletedAt: null }
+  if (customerId) where.customerId = String(customerId)
   if (status && status !== 'all') where.status = status
   if (brand && brand !== 'all') where.brand = brand
   if (deviceType && deviceType !== 'all') where.deviceType = deviceType
-  if (from) where.createdAt = { ...(where.createdAt || {}), gte: new Date(from) }
-  if (to) where.createdAt = { ...(where.createdAt || {}), lte: new Date(to) }
+  if (from || to) where.createdAt = orderDateRange(from, to)
   if (onlyNotNotified === '1') {
     where.notified = false
-    where.status = { in: ['presupuesto', 'terminado'] }
+    if (!status || status === 'all') where.status = { in: ['presupuesto', 'terminado'] }
   }
   if (onlyNotified === '1') {
     where.notified = true
-    where.status = { in: ['presupuesto', 'terminado'] }
+    if (!status || status === 'all') where.status = { in: ['presupuesto', 'terminado'] }
   }
   if (onlyNotConfirmed === '1') {
     where.confirmed = false
@@ -839,7 +884,7 @@ app.get('/api/orders/:id/pdf', auth, async (req, res) => {
     res.set('Content-Disposition', `inline; filename="orden-${data.order.orderNumber}.pdf"`)
     res.send(pdfBuffer)
   } catch (err) {
-    console.error('Error generando PDF:', err)
+    logError('Error generando PDF:', err)
     res.status(500).json({ error: 'No se pudo generar el PDF.' })
   }
 })
@@ -850,7 +895,7 @@ app.get('/api/printers', auth, async (req, res) => {
     if (!result.ok) return res.status(502).json({ printers: [], error: result.error })
     res.json({ printers: result.printers })
   } catch (err) {
-    console.error('Error listando impresoras:', err)
+    logError('Error listando impresoras:', err)
     res.status(500).json({ printers: [], error: 'No se pudo obtener la lista de impresoras.' })
   }
 })
@@ -866,12 +911,13 @@ app.post('/api/orders/:id/print', auth, async (req, res) => {
     if (!result.ok) return res.status(502).json({ error: result.error || 'Error de impresión.' })
     res.json({ ok: true })
   } catch (err) {
-    console.error('Error imprimiendo orden:', err)
+    logError('Error imprimiendo orden:', err)
     res.status(500).json({ error: 'No se pudo imprimir la orden.' })
   }
 })
 
 app.post('/api/orders/:id/pickup', auth, async (req, res) => {
+  if (!['recepcion', 'admin'].includes(req.user.role)) return res.status(403).json({ error: 'Solo recepción o administradores pueden registrar el retiro.' })
   const order = await prisma.order.findUnique({ where: { id: req.params.id } })
   if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
   const { pickupBy, pickupName, pickupDni } = req.body || {}
@@ -916,7 +962,7 @@ app.get('/api/orders/:id/pickup-pdf', auth, async (req, res) => {
     res.set('Content-Disposition', `inline; filename="retiro-${order.orderNumber}.pdf"`)
     res.send(pdfBuffer)
   } catch (err) {
-    console.error('Error generando PDF de retiro:', err)
+    logError('Error generando PDF de retiro:', err)
     res.status(500).json({ error: 'No se pudo generar el PDF de retiro.' })
   }
 })
@@ -938,7 +984,7 @@ app.delete('/api/orders/:id', auth, adminOnly, async (req, res) => {
 
 // ---------- Estado de una orden ----------
 app.post('/api/orders/:id/status', auth, async (req, res) => {
-  const { status, retiro, assignedTo, externalTech } = req.body || {}
+  const { status, retiro, assignedTo, externalTech, pickup } = req.body || {}
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
@@ -950,6 +996,13 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   const role = req.user.role
   const isTech = ['tecnico', 'admin'].includes(role)
   const isCounter = ['recepcion', 'admin'].includes(role)
+  if (pickup !== undefined) {
+    if (status !== 'entregado' || !isCounter) return res.status(403).json({ error: 'Solo recepción puede registrar una entrega.' })
+    if (!['client', 'third'].includes(pickup?.pickupBy)) return res.status(400).json({ error: 'Indicá quién retira el equipo.' })
+    if (pickup.pickupBy === 'third' && (!String(pickup.pickupName || '').trim() || !/^\d{6,8}$/.test(String(pickup.pickupDni || '').trim()))) {
+      return res.status(400).json({ error: 'Ingresá el nombre y un DNI válido de quien retira.' })
+    }
+  }
 
   // Se puede asignar el técnico junto con la transición (asignación diferida).
   if (assignedTo !== undefined) {
@@ -984,13 +1037,13 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   if (status === 'en_tercero' && !isCounter) {
     return res.status(403).json({ error: 'Solo recepción (o el admin) puede enviar a técnico externo.' })
   }
-  if (status === 'en_tercero' && (!externalTech || !externalTech.trim())) {
+  if (status === 'en_tercero' && (typeof externalTech !== 'string' || !externalTech.trim())) {
     return res.status(400).json({ error: 'Seleccioná el técnico externo.' })
   }
   if (from === 'en_tercero' && !isCounter) {
     return res.status(403).json({ error: 'Solo recepción (o el admin) puede recibir de técnico externo.' })
   }
-  if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) && !isTech && !(status === 'terminado' && order.isSimpleService)) {
+  if (from !== 'en_tercero' && ['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) && !isTech && !(status === 'terminado' && order.isSimpleService)) {
     return res.status(403).json({ error: 'Solo el técnico (o el admin) puede realizar esta acción.' })
   }
   if (status === 'presupuesto' && !['recepcion', 'admin', 'tecnico'].includes(role)) {
@@ -1004,7 +1057,10 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   }
 
   try {
-    const updated = await commit(async () => {
+    const updated = await commit(async (db) => {
+      // Reserva la versión leída para evitar dos transiciones simultáneas.
+      const locked = await db.order.updateMany({ where: { id: order.id, status: from, deletedAt: null }, data: { status } })
+      if (!locked.count) throw Object.assign(new Error('La orden cambió en otro equipo. Actualizá e intentá nuevamente.'), { status: 409 })
       const previous = order.status
       let note
       if (status === 'entregado' && retiro) note = 'Cliente retiró el equipo'
@@ -1022,16 +1078,26 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
       const data = {
         status,
         ...(assignedTo !== undefined ? { assignedTo: assignedTo || null } : {}),
-        ...(status === 'recibido' && previous === 'entregado' ? { warrantyReturn: true } : {}),
+        ...(status === 'recibido' && previous === 'entregado' ? {
+          warrantyReturn: true, deliveredAt: null, deliveredBy: null,
+          pickupBy: '', pickupName: '', pickupDni: '',
+          notified: false, notifiedAt: null, notifiedBy: null,
+          confirmed: false, confirmedAt: null, confirmedBy: null,
+        } : {}),
         ...(status === 'entregado' ? { warrantyReturn: false } : {}),
         ...(status === 'en_tercero' ? { externalTech, externalSentAt: new Date() } : {}),
-        ...(from === 'en_tercero' ? { externalReturnAt: new Date() } : {}),
-        ...(['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) ? { repairedBy: req.user.id } : {}),
+        ...(from === 'en_tercero' ? { externalReturnAt: new Date(), isExternal: false } : {}),
+        ...(from !== 'en_tercero' && ['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(status) ? { repairedBy: req.user.id } : {}),
         ...(['presupuesto', 'terminado'].includes(status) ? { notified: false, notifiedAt: null, notifiedBy: null } : {}),
         ...(status === 'presupuesto' ? { confirmed: false, confirmedAt: null, confirmedBy: null } : {}),
-        ...(status === 'entregado' && !order.deliveredAt ? { deliveredAt: new Date(), deliveredBy: req.user.id } : {}),
+        ...(status === 'entregado' ? { deliveredAt: new Date(), deliveredBy: req.user.id } : {}),
+        ...(pickup ? {
+          pickupBy: pickup.pickupBy,
+          pickupName: pickup.pickupBy === 'third' ? String(pickup.pickupName).trim() : '',
+          pickupDni: pickup.pickupBy === 'third' ? String(pickup.pickupDni).trim() : '',
+        } : {}),
       }
-      await prisma.order.update({
+      await db.order.update({
         where: { id: req.params.id },
         data: {
           ...data,
@@ -1044,13 +1110,14 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
         order.id,
         req.user.id,
         `${order.orderNumber} · ${order.brand} ${order.model}: estado "${status}"`,
+        db,
       )
-      return prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
-    })
+      return db.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
+    }, { useTransaction: true })
     res.json({ ok: true, order: await decorateOrder(updated) })
   } catch (e) {
-    console.error('Error en cambio de estado:', e)
-    res.status(500).json({ error: 'Error al cambiar el estado.' })
+    logError('Error en cambio de estado:', e)
+    res.status(e.status || 500).json({ error: e.status ? e.message : 'Error al cambiar el estado.' })
   }
 })
 
@@ -1067,6 +1134,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
   const role = req.user.role
   const isAssignedTech = (role === 'tecnico' && order.assignedTo === req.user.id) || role === 'admin'
   const isEmpOrAdmin = ['recepcion', 'admin'].includes(role)
+  if (price !== undefined) money(price, 'El presupuesto')
 
   if (fix !== undefined && !isAssignedTech) {
     return res.status(403).json({ error: 'Solo el técnico encargado puede modificar el tipo de reparación.' })
@@ -1115,7 +1183,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
       return res.status(403).json({ error: 'Solo podés eliminar tus propios repuestos.' })
     }
   }
-  const equipFields = [deviceType, brand, model, pin, noPin, pattern, accessories, conditions]
+  const equipFields = [deviceType, brand, model, pin, noPin, pattern, accessories, conditions, issue, isSimpleService]
   const touchesEquip = equipFields.some((v) => v !== undefined)
   if (touchesEquip && !isEmpOrAdmin) {
     return res.status(403).json({ error: 'Solo recepción o administradores pueden editar los detalles del equipo.' })
@@ -1125,21 +1193,21 @@ app.put('/api/orders/:id', auth, async (req, res) => {
   }
 
   try {
-    await commit(async () => {
+    await commit(async (db) => {
       const budgetChanged =
         (fix !== undefined && normalizeList(String(fix)) !== normalizeList(String(order.fix || ''))) ||
         (price !== undefined && String(Math.max(0, Number(price) || 0)) !== String(order.price || 0))
 
       const updateData = {}
       const historyCreates = []
-      const noteOps = []
 
       if (deviceType !== undefined) updateData.deviceType = String(deviceType)
       if (brand !== undefined) updateData.brand = String(brand)
       if (model !== undefined) updateData.model = String(model)
       if (pin !== undefined) updateData.pin = String(pin)
       if (noPin !== undefined) updateData.noPin = !!noPin
-      if (pattern !== undefined) updateData.pattern = Array.isArray(pattern) ? pattern : []
+      if (pattern !== undefined) updateData.pattern = unlockPattern(pattern)
+      if (noPin === true) { updateData.pin = ''; updateData.pattern = [] }
       if (accessories !== undefined) updateData.accessories = normalizeList(String(accessories))
       if (conditions !== undefined) updateData.conditions = normalizeList(String(conditions))
       if (technicianNotes !== undefined) updateData.technicianNotes = sentenceCase(String(technicianNotes))
@@ -1148,7 +1216,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
 
       const prevPrice = order.price
       if (price !== undefined) {
-        updateData.price = Math.max(0, Number(price) || 0)
+        updateData.price = money(price, 'El presupuesto')
         if (Number(price) !== Number(prevPrice || 0)) {
           historyCreates.push({ status: order.status, at: new Date(), by: req.user.id, note: `Presupuesto: $${Number(price) || 0}` })
         }
@@ -1156,14 +1224,12 @@ app.put('/api/orders/:id', auth, async (req, res) => {
       if (fix !== undefined) {
         updateData.fix = normalizeList(String(fix))
         historyCreates.push({ status: order.status, at: new Date(), by: req.user.id, note: `Arreglo: ${normalizeList(String(fix)) || 'sin definir'}` })
-        await bumpFixUsage(fix)
+        await bumpFixUsage(db, fix)
       }
 
       // Notas vía note (append a notesLog)
       if (note !== undefined && String(note).trim()) {
         const text = sentenceCase(String(note).trim())
-        const id = uid()
-        noteOps.push({ id, by: req.user.id, byName: req.user.name || '—', text })
         updateData.technicianNotes = text
       }
       // Editar notas existentes en notesLog
@@ -1209,42 +1275,38 @@ app.put('/api/orders/:id', auth, async (req, res) => {
         sparePartsToDelete.push(deleteSparePart.id)
       }
 
-      await prisma.order.update({
+      await db.order.update({
         where: { id: order.id },
         data: {
           ...updateData,
           history: historyCreates.length ? { create: historyCreates } : undefined,
-          ...(notesToEdit.length ? {
-            notes: {
-              update: notesToEdit.map((n) => ({ where: { id: n.id }, data: { text: n.text } })),
-            },
-          } : {}),
-          ...(notesToDelete.length ? { notes: { delete: notesToDelete.map((id) => ({ id })) } } : {}),
-          ...(notesToAdd.length ? { notes: { create: notesToAdd } } : {}),
-          ...(sparePartsToAdd.length ? { spareParts: { create: sparePartsToAdd } } : {}),
-          ...(sparePartsToEdit.length ? {
-            spareParts: {
-              update: sparePartsToEdit.map((p) => ({ where: { id: p.id }, data: p.data })),
-            },
-          } : {}),
-          ...(sparePartsToDelete.length ? { spareParts: { delete: sparePartsToDelete.map((id) => ({ id })) } } : {}),
+          notes: {
+            ...(notesToEdit.length ? { update: notesToEdit.map((n) => ({ where: { id: n.id }, data: { text: n.text } })) } : {}),
+            ...(notesToDelete.length ? { delete: notesToDelete.map((id) => ({ id })) } : {}),
+            ...(notesToAdd.length ? { create: notesToAdd } : {}),
+          },
+          spareParts: {
+            ...(sparePartsToAdd.length ? { create: sparePartsToAdd } : {}),
+            ...(sparePartsToEdit.length ? { update: sparePartsToEdit.map((p) => ({ where: { id: p.id }, data: p.data })) } : {}),
+            ...(sparePartsToDelete.length ? { delete: sparePartsToDelete.map((id) => ({ id })) } : {}),
+          },
         },
       })
 
-      if (budgetChanged && order.status === 'presupuesto' && order.confirmed) {
-        await prisma.order.update({
+      if (budgetChanged && order.status === 'presupuesto') {
+        await db.order.update({
           where: { id: order.id },
-          data: { confirmed: false, confirmedAt: null, confirmedBy: null },
+          data: { confirmed: false, confirmedAt: null, confirmedBy: null, notified: false, notifiedAt: null, notifiedBy: null },
         })
       }
       const touched = touchesEquip || fix !== undefined || price !== undefined || technicianNotes !== undefined || note !== undefined || issue !== undefined
       if (touched) {
-        await audit('update', 'orders', order.id, req.user.id, `${order.orderNumber} · ${order.brand} ${order.model}: notas/presupuesto actualizados${budgetChanged && order.status === 'presupuesto' ? ' (confirmación desmarcada)' : ''}`)
+        await audit('update', 'orders', order.id, req.user.id, `${order.orderNumber} · ${order.brand} ${order.model}: notas/presupuesto actualizados${budgetChanged && order.status === 'presupuesto' ? ' (requiere nuevo aviso y aprobación)' : ''}`, db)
       }
-    })
+    }, { useTransaction: true })
     res.json({ ok: true })
   } catch (e) {
-    console.error('Error actualizando orden:', e)
+    logError('Error actualizando orden:', e)
     res.status(500).json({ error: 'Error al actualizar la orden.' })
   }
 })
@@ -1379,9 +1441,8 @@ app.post('/api/config', auth, adminOnly, async (req, res) => {
 app.post('/api/users', auth, adminOnly, async (req, res) => {
   const { name, email, password, role } = req.body || {}
   if (!name || !name.trim()) return res.status(400).json({ error: 'El nombre es obligatorio.' })
-  if (!password || password.length < 4) {
-    return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres.' })
-  }
+  const validation = passwordError(password)
+  if (validation) return res.status(400).json({ error: validation })
   if (!['admin', 'tecnico', 'recepcion'].includes(role)) {
     return res.status(400).json({ error: 'Rol inválido.' })
   }
@@ -1392,7 +1453,7 @@ app.post('/api/users', auth, adminOnly, async (req, res) => {
         data: {
           id,
           name: titleCase(name),
-          email: String(email || '').trim().toLowerCase(),
+          email: String(email || '').trim().toLowerCase() || null,
           password: bcrypt.hashSync(password, 10),
           role,
           active: true,
@@ -1433,7 +1494,7 @@ app.get('/api/audit', auth, adminOnly, async (req, res) => {
     orderBy: { timestamp: 'desc' },
     skip: (page - 1) * limit,
     take: limit,
-    include: { user: true },
+    include: { user: userRef },
   })
   const mapped = logs.map((l) => ({ ...l, userName: l.user?.name || '—' }))
   return res.json({ logs: mapped, total, page, pages: Math.max(1, Math.ceil(total / limit)) })
@@ -1448,7 +1509,7 @@ app.get('/api/actividad', auth, async (req, res) => {
     orderBy: { timestamp: 'desc' },
     skip: (page - 1) * limit,
     take: limit,
-    include: { user: true },
+    include: { user: userRef },
   })
   const mapped = logs.map((l) => ({ ...l, userName: l.user?.name || '—' }))
   return res.json({ logs: mapped, total, page, pages: Math.max(1, Math.ceil(total / limit)) })
@@ -1462,8 +1523,8 @@ app.get('/api/metrics', auth, adminOnly, async (req, res) => {
   const startOfWeek = toISODate(new Date(now().getFullYear(), now().getMonth(), now().getDate() - ((now().getDay() + 6) % 7)))
   const startOfMonth = toISODate(new Date(now().getFullYear(), now().getMonth(), 1))
   const sumPrice = (list) => list.reduce((acc, o) => acc + (Number(o.price) || 0), 0)
-  const dateOf = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v || '').slice(0, 10))
-  const createdAtDate = (o) => (o.createdAt instanceof Date ? o.createdAt.toISOString().slice(0, 10) : String(o.createdAt || '').slice(0, 10))
+  const dateOf = businessDate
+  const createdAtDate = (o) => businessDate(o.createdAt)
 
   const income = {
     today: sumPrice(orders.filter((o) => dateOf(o.deliveredAt) === today)),
@@ -1537,164 +1598,13 @@ app.get('/api/metrics', auth, adminOnly, async (req, res) => {
   })
 })
 
-// ---------- Copias de seguridad (solo admin) ----------
-// Localiza el ejecutable de PostgreSQL (pg_dump / pg_restore) en PATH o en rutas estándar de Windows.
-function findPgBinary(binName) {
-  const exe = process.platform === 'win32' ? `${binName}.exe` : binName
-  if (process.platform === 'win32') {
-    const versions = ['18', '17', '16', '15', '14', '13', '12']
-    const roots = [
-      process.env['ProgramFiles'] || 'C:\\Program Files',
-      process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
-    ]
-    for (const root of roots) {
-      for (const ver of versions) {
-        const full = path.join(root, 'PostgreSQL', ver, 'bin', exe)
-        if (fs.existsSync(full)) return full
-      }
-    }
-  }
-  return binName
-}
-
-function runPgDump() {
-  const url = process.env.DATABASE_URL
-    ? process.env.DATABASE_URL.replace(/[?&]schema=[^&]*/g, '')
-    : ''
-  const bin = findPgBinary('pg_dump')
-  return new Promise((resolve, reject) => {
-    // 1. Intenta ejecutar pg_dump directamente (ej: en host con PostgreSQL o contenedor con postgresql-client)
-    execFile(bin, ['--dbname', url, '--format=custom'], { maxBuffer: 1024 * 1024 * 50, encoding: 'buffer' }, (err, stdout) => {
-      if (!err && stdout && stdout.length > 0) {
-        return resolve(stdout)
-      }
-      // 2. Si pg_dump directo falla, fallback a docker exec sobre el contenedor postgres
-      const dockerUrl = url.replace(/localhost:5432/, 'postgres:5432')
-      const args = ['exec', 'service-center-db', 'pg_dump', '--dbname', dockerUrl, '--format=custom']
-      execFile('docker', args, { maxBuffer: 1024 * 1024 * 50, encoding: 'buffer' }, (dockerErr, dockerStdout) => {
-        if (dockerErr) return reject(err || dockerErr)
-        resolve(dockerStdout)
-      })
-    })
-  })
-}
-
-async function createBackup() {
-  const dir = BACKUP_DIR
-  fs.mkdirSync(dir, { recursive: true })
-  const name = `db-${Date.now()}.dump`
-  try {
-    const buffer = await runPgDump()
-    fs.writeFileSync(path.join(dir, name), buffer)
-    pruneBackups()
-    return name
-  } catch (e) {
-    console.error('Error creando backup:', e)
-    return null
-  }
-}
-
-function listBackups() {
-  try {
-    return fs
-      .readdirSync(BACKUP_DIR)
-      .filter((f) => /^db-[0-9]+\.dump$/.test(f))
-      .map((name) => {
-        const st = fs.statSync(path.join(BACKUP_DIR, name))
-        return { name, size: st.size, mtime: st.mtime.toISOString() }
-      })
-      .sort((a, b) => b.mtime.localeCompare(a.mtime))
-  } catch {
-    return []
-  }
-}
-
-const MAX_BACKUPS = Number(process.env.MAX_BACKUPS || 30)
-function pruneBackups() {
-  const files = listBackups().map((b) => b.name).sort()
-  while (files.length > MAX_BACKUPS) {
-    const toRemove = files.shift()
-    try {
-      fs.unlinkSync(path.join(BACKUP_DIR, toRemove))
-    } catch {
-      // ignora errores
-    }
-  }
-}
-
-async function restoreBackup(name) {
-  if (!/^db-[0-9]+\.dump$/.test(name)) throw new Error('Nombre de copia inválido.')
-  const full = path.join(BACKUP_DIR, name)
-  if (!fs.existsSync(full)) throw new Error('Copia no encontrada.')
-  const url = process.env.DATABASE_URL
-  const bin = findPgBinary('pg_restore')
-  await new Promise((resolve, reject) => {
-    // 1. Intenta ejecutar pg_restore directamente
-    const child = execFile(bin, ['--dbname', url, '--clean', '--if-exists', '--no-owner', '--no-privileges', full], (err) => {
-      if (!err) return resolve()
-      // 2. Si pg_restore no está en PATH, fallback a docker exec usando stdin
-      const dockerUrl = url.replace(/localhost:5432/, 'postgres:5432')
-      const args = ['exec', '-i', 'service-center-db', 'pg_restore', '--dbname', dockerUrl, '--clean', '--if-exists', '--no-owner', '--no-privileges']
-      const dockerChild = execFile('docker', args, (dockerErr) => {
-        if (dockerErr) return reject(new Error(`No se pudo restaurar la copia: ${err?.message || dockerErr.message}`))
-        resolve()
-      })
-      if (dockerChild.stdin) {
-        fs.createReadStream(full).pipe(dockerChild.stdin)
-      }
-    })
-    child.on('error', () => {
-      // En caso de que falle por spawn error, el callback de execFile maneja el fallback
-    })
-  })
-  notifyChange()
-  return true
-}
-
-// Copias de seguridad automáticas
-const BACKUP_HOUR = Number(process.env.BACKUP_HOUR ?? 3)
-const PAPELERA_RETENTION_DAYS = Number(process.env.PAPELERA_RETENTION_DAYS ?? 30)
-
-function scheduleBackups() {
-  const run = async () => {
-    try {
-      const name = await createBackup()
-      if (name) console.log(`Copia de seguridad creada: ${name}`)
-    } catch (e) {
-      console.error('No se pudo crear la copia de seguridad:', e)
-    }
-    try {
-      const cutoff = new Date(Date.now() - PAPELERA_RETENTION_DAYS * 86400000)
-      await prisma.$transaction([
-        prisma.order.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
-        prisma.customer.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
-      ])
-      console.log(`Papelera: purgados registros antiguos.`)
-    } catch (e) {
-      console.error('No se pudo purgar la papelera:', e)
-    }
-  }
-  const arm = () => {
-    const now = new Date()
-    const next = new Date(now)
-    next.setHours(BACKUP_HOUR, 0, 0, 0)
-    if (next <= now) next.setDate(next.getDate() + 1)
-    setTimeout(() => {
-      run()
-      arm()
-    }, next - now)
-  }
-  run()
-  arm()
-}
-
 app.get('/api/backups', auth, adminOnly, (req, res) => {
-  res.json({ backups: listBackups() })
+  res.json({ backups: listBackups(), status: getBackupStatus() })
 })
 
 app.get('/api/backups/:name/download', auth, adminOnly, (req, res) => {
   const name = decodeURIComponent(req.params.name)
-  if (!/^db-[0-9]+\.dump$/.test(name)) return res.status(400).json({ error: 'Nombre de copia inválido.' })
+  if (!isValidBackupName(name)) return res.status(400).json({ error: 'Nombre de copia inválido.' })
   const full = path.join(BACKUP_DIR, name)
   if (!fs.existsSync(full)) return res.status(404).json({ error: 'Copia no encontrada.' })
   res.download(full, name)
@@ -1704,7 +1614,7 @@ app.post('/api/backups', auth, adminOnly, async (req, res) => {
   try {
     const name = await createBackup()
     if (!name) return res.status(400).json({ error: 'No se pudo crear la copia de seguridad.' })
-    res.json({ ok: true, name })
+    res.json({ ok: true, name, status: getBackupStatus() })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -1715,13 +1625,16 @@ app.post('/api/backups/:name/restore', auth, adminOnly, async (req, res) => {
     const name = decodeURIComponent(req.params.name)
     const found = listBackups().find((b) => b.name === name)
     if (!found) return res.status(404).json({ error: 'Copia no encontrada.' })
-    await createBackup()
+    const safetyBackup = await createBackup({ preserve: name })
+    if (!safetyBackup) return res.status(503).json({ error: 'No se pudo respaldar el estado actual. Se canceló la restauración.' })
     await restoreBackup(name)
     res.json({ ok: true })
   } catch (e) {
     res.status(400).json({ error: e.message })
   }
 })
+
+registerTrashRoutes(app, { prisma, auth, adminOnly, commit, audit })
 
 // ---------- 404 para la API ----------
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }))
@@ -1737,23 +1650,36 @@ if (fs.existsSync(dist)) {
 }
 
 // ---------- Manejador de errores ----------
-app.use((err, req, res, _next) => {
-  console.error(err)
-  res.status(500).json({ error: 'Error interno del servidor.' })
+app.use((err, req, res, next) => {
+  logError('Error en la API:', err)
+  if (res.headersSent) return next(err)
+  const status = [400, 409, 413].includes(err.status) ? err.status : 500
+  res.status(status).json({ error: status === 400 ? 'Solicitud inválida.' : status === 409 ? err.message : status === 413 ? 'La solicitud es demasiado grande.' : 'Error interno del servidor.' })
 })
 
 // Arranca backups automáticos en background.
-scheduleBackups()
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor de servicio técnico corriendo en http://0.0.0.0:${PORT}`)
-})
-
-process.on('SIGINT', async () => {
-  const { closeBrowser } = await import('./pdf/puppeteerPdf.js')
-  await closeBrowser()
-  try {
+export async function startServer() {
+  if (NODE_ENV === 'production') backupKey(BACKUP_ENCRYPTION_KEY)
+  await seedIfEmpty()
+  scheduleBackups()
+  const host = process.env.HOST || '0.0.0.0'
+  const server = app.listen(PORT, host, () => {
+    console.log(`Servidor de servicio técnico corriendo en http://${host}:${PORT}`)
+  })
+  const shutdown = async () => {
+    server.close()
+    for (const client of eventClients) client.end()
+    const { closeBrowser } = await import('./pdf/puppeteerPdf.js')
+    await closeBrowser()
     await prisma.$disconnect()
-  } catch {}
-  process.exit(0)
-})
+    process.exit(0)
+  }
+  process.once('SIGINT', shutdown)
+  process.once('SIGTERM', shutdown)
+  if (process.env.VERIFICATION_INSTANCE && process.send) {
+    process.on('message', (message) => { if (message === 'verification-shutdown') shutdown() })
+  }
+  return server
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === __file) await startServer()

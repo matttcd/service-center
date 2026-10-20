@@ -9,13 +9,18 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "test:integration": "node --test tests/integration/workflow.mjs",
+    "test:local": "npm run build && node scripts/verify-local.mjs",
+    "test:browser": "npm run build && node scripts/verify-local.mjs --ui",
+    "check": "npm run lint && npm test && npm run build",
+    "setup:env": "node scripts/setup-env.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "backup": "node scripts/backup.mjs",
     "test:watch": "vitest",
     "preview": "vite preview"
   },
   "dependencies": {
-    "jquery": "^4.0.0",
     "lucide-react": "^1.31.0",
-    "pattern-lock-js": "^1.0.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2"
@@ -26,6 +31,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
     "cross-env": "^10.1.0",
+    "embedded-postgres": "16.14.0-beta.17",
     "oxlint": "^1.75.0",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.0",

@@ -1,43 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { createLoginLimiter as makeLimiter, publicUser as sanitizePublicUser } from '../../server/security.js'
 
-// Implementación de referencia de la lógica anti fuerza bruta de server/index.js
+// Adaptador de nombres del test; ejecuta el limitador real de producción.
 function createLoginLimiter(maxAttempts = 5, windowMs = 15 * 60 * 1000) {
-  const attempts = new Map()
-
-  function checkLoginLimit(key, now = Date.now()) {
-    const rec = attempts.get(key)
-    if (rec && rec.count >= maxAttempts && now < rec.resetAt) {
-      return true // Bloqueado
-    }
-    return false
-  }
-
-  function noteLoginFailure(key, now = Date.now()) {
-    const rec = attempts.get(key)
-    if (rec && now < rec.resetAt) {
-      rec.count += 1
-    } else {
-      attempts.set(key, { count: 1, resetAt: now + windowMs })
-    }
-  }
-
-  function resetLoginLimit(key) {
-    attempts.delete(key)
-  }
-
-  return { checkLoginLimit, noteLoginFailure, resetLoginLimit }
-}
-
-// Sanitización de usuario público (espejo de publicUser en server/index.js)
-function sanitizePublicUser(user) {
-  if (!user) return null
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    active: user.active !== false,
-  }
+  const limiter = makeLimiter({ maxAttempts, windowMs })
+  return { checkLoginLimit: limiter.check, noteLoginFailure: limiter.note, resetLoginLimit: limiter.reset }
 }
 
 // Lógica de rotación de copias de seguridad (espejo de pruneBackups)

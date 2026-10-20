@@ -11,7 +11,7 @@ const inputCls =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
 const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300'
 
-export default function ChangePasswordModal({ open, onDone }) {
+export default function ChangePasswordModal({ open, onDone, required = true, onClose = () => {} }) {
   const [current, setCurrent] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -23,13 +23,13 @@ export default function ChangePasswordModal({ open, onDone }) {
     if (saving) return
     setError('')
     if (!current) return setError('Ingresá tu contraseña actual.')
-    if (password.length < 4) return setError('La contraseña nueva debe tener al menos 4 caracteres.')
+    if (password.length < 8) return setError('La contraseña nueva debe tener al menos 8 caracteres.')
     if (password !== confirm) return setError('Las contraseñas nuevas no coinciden.')
     setSaving(true)
     try {
-      await api('/auth/change-password', { method: 'POST', body: { current, password } })
+      const result = await api('/auth/change-password', { method: 'POST', body: { currentPassword: current, newPassword: password } })
       setSaving(false)
-      onDone()
+      onDone(result.token)
     } catch (err) {
       setSaving(false)
       setError(err.message)
@@ -37,11 +37,11 @@ export default function ChangePasswordModal({ open, onDone }) {
   }
 
   return (
-    <Modal open={open} onClose={() => {}} title="Cambiar contraseña" maxWidth="max-w-md">
+    <Modal open={open} onClose={onClose} dismissible={!required && !saving} title="Cambiar contraseña" maxWidth="max-w-md">
       <div className="space-y-4">
         <p className="flex items-start gap-2 text-sm text-slate-500 dark:text-slate-400">
           <KeyRound size={16} className="mt-0.5 shrink-0 text-primary-500" />
-          Estás usando una contraseña por defecto. Cambiala para poder seguir trabajando con el sistema.
+          {required ? 'Estás usando una contraseña por defecto. Cambiala para poder seguir trabajando con el sistema.' : 'Ingresá tu contraseña actual y elegí una nueva. Las sesiones anteriores dejarán de ser válidas.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -63,7 +63,7 @@ export default function ChangePasswordModal({ open, onDone }) {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mínimo 4 caracteres"
+              placeholder="Mínimo 8 caracteres"
               className={inputCls}
             />
           </div>

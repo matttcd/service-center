@@ -67,7 +67,7 @@ function QueueRow({ items, emptyText }) {
 }
 
 export default function Dashboard() {
-  const { pendingBudgetOrders, externosOrders, porAvisarOrders, faltaRepuestosOrders, ingresaronHoyOrders, presupuestoSinPrecioOrders, refresh } = useData()
+  const { pendingBudgetOrders, externosOrders, porAvisarOrders, faltaRepuestosOrders, ingresaronHoyOrders, presupuestoSinPrecioOrders } = useData()
   const { currentUser } = useAuth()
   const canCreate = ['recepcion', 'admin'].includes(currentUser?.role)
   const [activeTab, setActiveTab] = useState('avisar')
@@ -75,8 +75,7 @@ export default function Dashboard() {
   const [printing, setPrinting] = useState(null)
 
   const onCreated = (created) => {
-    refresh()
-    setPrinting(created)
+    setPrinting({ order: created })
   }
 
   const counts = {

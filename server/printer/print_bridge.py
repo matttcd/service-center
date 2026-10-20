@@ -25,6 +25,22 @@ import subprocess
 import sys
 import tempfile
 import threading
+import hmac
+from pathlib import Path
+
+# Comparte el secreto de la app sin requerir módulos adicionales en Windows.
+def read_setting(name, default=''):
+    if name in os.environ:
+        return os.environ[name]
+    env_file = Path(__file__).resolve().parents[2] / '.env'
+    if env_file.exists():
+        for line in env_file.read_text(encoding='utf-8-sig').splitlines():
+            key, sep, value = line.partition('=')
+            if sep and key.strip() == name:
+                return value.strip().strip('\"\'')
+    return default
+
+BRIDGE_TOKEN = read_setting('PRINT_BRIDGE_TOKEN')
 
 try:
     import win32print
@@ -33,10 +49,10 @@ except ImportError:
     HAS_WIN32 = False
 
 # Ruta a SumatraPDF ( configurable por env SUMATRA_PDF ).
-SUMATRA_PDF = os.environ.get(
-    'SUMATRA_PDF',
-    r'C:\Users\Administrador\AppData\Local\SumatraPDF\SumatraPDF.exe',
-)
+SUMATRA_PDF = read_setting('SUMATRA_PDF') or next((str(p) for p in [
+    Path(os.environ.get('LOCALAPPDATA', '')) / 'SumatraPDF' / 'SumatraPDF.exe',
+    Path(os.environ.get('ProgramFiles', r'C:\Program Files')) / 'SumatraPDF' / 'SumatraPDF.exe',
+] if p.is_file()), '')
 
 
 def get_default_printer():
@@ -44,10 +60,13 @@ def get_default_printer():
         return None
     try:
         printers = [p[2] for p in win32print.EnumPrinters(2)]
+        configured = read_setting('LABEL_PRINTER_NAME')
+        if configured:
+            return next((p for p in printers if p == configured), None)
         for p in printers:
-            if 'zdesigner' in p.lower() or 'gt800' in p.lower():
+            if any(name in p.lower() for name in ('zdesigner', 'gt800', 'zebra', 'godex')):
                 return p
-        return win32print.GetDefaultPrinter()
+        return None
     except Exception:
         return None
 
@@ -66,7 +85,7 @@ def print_zpl(zpl_data):
         return False, 'win32print no disponible (¿estás en Windows?)'
     printer_name = get_default_printer()
     if not printer_name:
-        return False, 'No se encontró impresora por defecto.'
+        return False, 'Configurá LABEL_PRINTER_NAME con una impresora de etiquetas ZPL instalada.'
     try:
         hprinter = win32print.OpenPrinter(printer_name)
         win32print.StartDocPrinter(hprinter, 1, ('ZPL Label', None, 'RAW'))
@@ -119,7 +138,13 @@ def _send_response(conn, ok, error=None, extra=None):
 
 def handle_client(conn, addr):
     try:
-        raw_len = conn.recv(4)
+        conn.settimeout(10)
+        raw_len = b''
+        while len(raw_len) < 4:
+            chunk = conn.recv(4 - len(raw_len))
+            if not chunk:
+                break
+            raw_len += chunk
         if len(raw_len) < 4:
             _send_response(conn, False, 'Mensaje incompleto.')
             return
@@ -136,6 +161,10 @@ def handle_client(conn, addr):
             data += chunk
 
         payload = json.loads(data.decode('utf-8'))
+        token = payload.get('token', '')
+        if not BRIDGE_TOKEN or not isinstance(token, str) or not hmac.compare_digest(token, BRIDGE_TOKEN):
+            _send_response(conn, False, 'No autorizado.')
+            return
 
         # Lista de impresoras
         if payload.get('action') == 'printers':
@@ -173,6 +202,8 @@ def main():
     parser = argparse.ArgumentParser(description='Print Bridge: TCP → printer.')
     parser.add_argument('--port', type=int, default=9200, help='Puerto TCP (default: 9200)')
     args = parser.parse_args()
+    if not BRIDGE_TOKEN:
+        parser.error('Falta PRINT_BRIDGE_TOKEN. Ejecutá node scripts/setup-env.mjs antes de iniciar el bridge.')
 
     printer = get_default_printer()
     if not printer:

@@ -152,9 +152,9 @@ describe('FSM - canTransitionForRole (Control de acceso por rol)', () => {
     expect(canTransitionForRole('terminado', 'tecnico')).toBe(true)
   })
 
-  it('tecnico NO puede entregar equipos ni cargar presupuestos de mostrador', () => {
+  it('tecnico puede enviar a presupuesto pero no entregar equipos', () => {
     expect(canTransitionForRole('entregado', 'tecnico')).toBe(false)
-    expect(canTransitionForRole('presupuesto', 'tecnico')).toBe(false)
+    expect(canTransitionForRole('presupuesto', 'tecnico')).toBe(true)
   })
 
   it('tecnico NO puede derivar ni recibir equipos de talleres terceros', () => {

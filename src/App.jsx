@@ -2,6 +2,7 @@
 // App: definición de rutas y guardas de acceso
 // ============================================
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { useAuth } from './context/AuthContext.jsx'
 import Layout from './components/Layout.jsx'
 import Login from './pages/Login.jsx'
@@ -12,11 +13,12 @@ import Orders from './pages/Orders.jsx'
 import OrderDetail from './pages/OrderDetail.jsx'
 import Clients from './pages/Clients.jsx'
 import ClientDetail from './pages/ClientDetail.jsx'
-import Users from './pages/Users.jsx'
-import Backups from './pages/Backups.jsx'
 import Actividad from './pages/Actividad.jsx'
-import Settings from './pages/Settings.jsx'
-import Metrics from './pages/Metrics.jsx'
+const Users = lazy(() => import('./pages/Users.jsx'))
+const Backups = lazy(() => import('./pages/Backups.jsx'))
+const Settings = lazy(() => import('./pages/Settings.jsx'))
+const Metrics = lazy(() => import('./pages/Metrics.jsx'))
+const Trash = lazy(() => import('./pages/Trash.jsx'))
 
 // Protege rutas: sin sesión se redirige a /login.
 function RequireAuth({ children }) {
@@ -74,12 +76,13 @@ export default function App() {
         <Route path="ordenes/:id" element={<OrderDetail />} />
         <Route path="clientes" element={<Clients />} />
         <Route path="clientes/:id" element={<ClientDetail />} />
+        <Route path="papelera" element={<RequireRole roles={['admin']}><Suspense fallback={<p>Cargando papelera…</p>}><Trash /></Suspense></RequireRole>} />
         <Route path="actividad" element={<Actividad />} />
         <Route
           path="usuarios"
           element={
             <RequireRole roles={['admin']}>
-              <Users />
+              <Suspense fallback={<p>Cargando usuarios…</p>}><Users /></Suspense>
             </RequireRole>
           }
         />
@@ -87,7 +90,7 @@ export default function App() {
           path="backups"
           element={
             <RequireRole roles={['admin']}>
-              <Backups />
+              <Suspense fallback={<p>Cargando copias…</p>}><Backups /></Suspense>
             </RequireRole>
           }
         />
@@ -95,7 +98,7 @@ export default function App() {
           path="metricas"
           element={
             <RequireRole roles={['admin']}>
-              <Metrics />
+              <Suspense fallback={<p>Cargando métricas…</p>}><Metrics /></Suspense>
             </RequireRole>
           }
         />
@@ -103,7 +106,7 @@ export default function App() {
           path="configuracion"
           element={
             <RequireRole roles={['admin']}>
-              <Settings />
+              <Suspense fallback={<p>Cargando configuración…</p>}><Settings /></Suspense>
             </RequireRole>
           }
         />

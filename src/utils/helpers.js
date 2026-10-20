@@ -1,6 +1,7 @@
 // ============================================
 // Funciones auxiliares: fechas, moneda, estados
 // ============================================
+import { businessDate } from '../../shared/dates.js'
 
 // Normalización de texto (fuente única en ../../shared/text.js)
 export { titleCase, sentenceCase, normalizeList } from '../../shared/text.js'
@@ -63,7 +64,7 @@ export function formatMoney(n) {
 // Formatea una fecha ISO (YYYY-MM-DD) a DD/MM/YYYY.
 export function formatDate(iso) {
   if (!iso) return '—'
-  const d = parseISO(iso)
+  const d = parseISO(businessDate(iso))
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
 }
 

@@ -119,8 +119,8 @@ describe('FSM Matrix - Matriz de Permisos por Rol en Transiciones', () => {
     expect(canTransitionForRole('entregado', 'recepcion')).toBe(true)
   })
 
-  it('tecnico no puede presupuestar ni entregar al cliente', () => {
-    expect(canTransitionForRole('presupuesto', 'tecnico')).toBe(false)
+  it('tecnico puede enviar diagnóstico a presupuesto pero no entregar al cliente', () => {
+    expect(canTransitionForRole('presupuesto', 'tecnico')).toBe(true)
     expect(canTransitionForRole('entregado', 'tecnico')).toBe(false)
   })
 })

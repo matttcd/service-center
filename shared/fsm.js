@@ -100,13 +100,14 @@ export function canTransitionForRole(to, role, order) {
   if (to === 'en_tercero' && !COUNTER_ROLES.includes(role)) {
     return false
   }
-  if (order?.status === 'en_tercero' && !COUNTER_ROLES.includes(role)) {
-    return false
-  }
+  if (order?.status === 'en_tercero') return COUNTER_ROLES.includes(role)
   if (['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos'].includes(to) && !TECH_ROLES.includes(role)) {
     return false
   }
-  if (['presupuesto', 'entregado'].includes(to) && !COUNTER_ROLES.includes(role)) {
+  // Pasar a presupuesto permite que el técnico envíe su diagnóstico a recepción.
+  // Cargar el importe sigue reservado a recepción/admin en la API de edición.
+  if (to === 'presupuesto' && ![...TECH_ROLES, ...COUNTER_ROLES].includes(role)) return false
+  if (to === 'entregado' && !COUNTER_ROLES.includes(role)) {
     return false
   }
   return true

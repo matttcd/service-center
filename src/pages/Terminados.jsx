@@ -38,11 +38,13 @@ export default function Terminados() {
   }, [qInput])
 
   useEffect(() => {
+    let active = true
     const offset = (page - 1) * pageSize
     const filters = { status: 'terminado', q, limit: pageSize, offset }
     if (notifiedFilter === 'not_notified') filters.onlyNotNotified = '1'
     if (notifiedFilter === 'notified') filters.onlyNotified = '1'
-    loadOrders(filters).then(setPageData)
+    loadOrders(filters).then((result) => { if (active) setPageData(result) })
+    return () => { active = false }
   }, [loadOrders, q, notifiedFilter, page, pageSize, ordersRevision])
 
   const sorted = useMemo(() => {

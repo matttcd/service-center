@@ -23,12 +23,14 @@ export default function Backups() {
   const [toRestore, setToRestore] = useState(null)
   const [restoring, setRestoring] = useState(false)
   const [notice, setNotice] = useState(null)
+  const [health, setHealth] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await api('/backups')
       setBackups(res.backups || [])
+      setHealth(res.status || null)
     } catch (err) {
       setNotice({ type: 'error', text: err.message })
     } finally {
@@ -38,14 +40,16 @@ export default function Backups() {
 
   useEffect(() => {
     load()
+    const timer = setInterval(load, 60000)
+    return () => clearInterval(timer)
   }, [load])
 
   const createNow = async () => {
     setCreating(true)
     setNotice(null)
     try {
-      await api('/backups', { method: 'POST' })
-      setNotice({ type: 'ok', text: 'Copia de seguridad creada.' })
+      const result = await api('/backups', { method: 'POST' })
+      setNotice(result.status?.exportError ? { type: 'error', text: result.status.exportError } : { type: 'ok', text: 'Copia de seguridad creada.' })
       await load()
     } catch (err) {
       setNotice({ type: 'error', text: err.message })
@@ -55,7 +59,7 @@ export default function Backups() {
   }
 
   const confirmRestore = async () => {
-    if (!toRestore) return
+    if (!toRestore || restoring) return
     setRestoring(true)
     setNotice(null)
     try {
@@ -110,6 +114,13 @@ export default function Backups() {
           {creating ? 'Creando…' : 'Crear copia ahora'}
         </button>
       </div>
+
+      {health && <Card className="p-4 text-sm text-slate-600 dark:text-slate-300">
+        <p className="font-semibold text-slate-900 dark:text-white">Última copia: {health.lastSuccessAt ? fmtDate(health.lastSuccessAt) : 'todavía no hay una copia verificada'}</p>
+        <p className="mt-1">{health.exportConfigured ? 'Copia adicional automática activada.' : 'El destino de copia adicional todavía no está configurado.'}</p>
+        {(health.lastError || health.exportError) && <p role="alert" className="mt-2 text-red-700 dark:text-red-300">{health.lastError || health.exportError}</p>}
+        {health.lastSuccessAt && Date.now() - new Date(health.lastSuccessAt).getTime() > 36 * 3600000 && <p role="alert" className="mt-2 font-semibold text-amber-700 dark:text-amber-300">La última copia tiene más de 36 horas. Creá una copia ahora y revisá las copias automáticas.</p>}
+      </Card>}
 
       {notice && (
         <p
@@ -176,7 +187,7 @@ export default function Backups() {
       )}
 
       {/* Confirmación de restauración */}
-      <Modal open={!!toRestore} onClose={() => setToRestore(null)} title="Restaurar copia de seguridad">
+      <Modal open={!!toRestore} onClose={() => { if (!restoring) setToRestore(null) }} title="Restaurar copia de seguridad">
         {toRestore && (
           <div className="space-y-4">
             <p className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -191,6 +202,7 @@ export default function Backups() {
             <div className="flex gap-3">
               <button
                 type="button"
+                disabled={restoring}
                 onClick={() => setToRestore(null)}
                 className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >

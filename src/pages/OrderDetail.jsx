@@ -102,8 +102,8 @@ export default function OrderDetail() {
   // mostrando trayéndola directo por GET /api/orders/:id.
   const [localOrder, setLocalOrder] = useState(null)
 
-  const order = localOrder || orders.find((o) => o.id === id)
-  const customer = customers.find((c) => c.id === order?.customerId)
+  const order = orders.find((o) => o.id === id) || (localOrder?.id === id ? localOrder : null)
+  const customer = customers.find((c) => c.id === order?.customerId) || order?.customer
   const role = currentUser?.role
   const isAdmin = role === 'admin'
   const isTech = role === 'tecnico'
@@ -111,7 +111,13 @@ export default function OrderDetail() {
   const isAssignedTech = isTech && order?.assignedTo === currentUser?.id
 
   useEffect(() => {
-    setLocalOrder(null)
+    const activeOrder = orders.find((o) => o.id === id)
+    if (activeOrder) {
+      // Conserva la última versión mientras bootstrap deja de incluir una orden
+      // entregada. Evita desmontar y reiniciar el modal de retiro al sincronizar.
+      setLocalOrder(activeOrder)
+      return
+    }
     // Si la orden no está en el bootstrap (las entregadas se filtran para no
     // saturar la red), la traemos directo por id para poder seguir viéndola.
     if (!loading && !orders.some((o) => o.id === id)) {
@@ -160,11 +166,10 @@ export default function OrderDetail() {
     setNotice('')
     try {
       const res = await setOrderStatus(order.id, next, extras)
-      if (res.error) return showNotice(res.error)
+      if (res.error) { showNotice(res.error); return res }
       if (next === 'entregado') {
         showNotice('Equipo entregado.')
-        const fresh = await api(`/orders/${order.id}`)
-        setLocalOrder(fresh.order)
+        setLocalOrder(res.order)
       } else if (next === 'terminado') {
         showNotice('Equipo marcado como listo. Avisale al cliente.')
         if (!order.isSimpleService) setPrintOpen(true)
@@ -173,6 +178,7 @@ export default function OrderDetail() {
       } else if (order?.status === 'en_tercero') {
         showNotice('Equipo recibido de técnico externo.')
       } else showNotice('Estado actualizado.')
+      return res
     } finally {
       setBusy(null)
     }
@@ -185,17 +191,17 @@ export default function OrderDetail() {
     setExternalTechDraft('')
   }
 
-  const handleRetiro = async () => {
+  const handleRetiro = async (pickup) => {
     setBusy('retiro')
-    const res = await setOrderStatus(order.id, 'entregado', { retiro: true })
+    const res = await setOrderStatus(order.id, 'entregado', { retiro: true, pickup })
     if (res.error) {
       showNotice(res.error)
     } else {
       showNotice('Equipo retirado por el cliente.')
-      const fresh = await api(`/orders/${order.id}`)
-      setLocalOrder(fresh.order)
+      setLocalOrder(res.order)
     }
     setBusy(null)
+    return res
   }
 
   const handlePrintPickup = async () => {
@@ -342,7 +348,7 @@ export default function OrderDetail() {
     menuItems.push({ key: 'reprint-pickup', label: 'Reimprimir constancia', Icon: Printer, onClick: () => { setMenuOpen(false); handlePrintPickup() } })
   }
   if (isAdmin) {
-    menuItems.push({ key: 'delete', label: 'Eliminar', Icon: Trash2, danger: true, onClick: () => { setMenuOpen(false); setConfirm({ title: 'Eliminar orden', message: `¿Eliminar la orden ${order.orderNumber}? Esta acción no se puede deshacer.`, onConfirm: handleDelete, danger: true }) } })
+    menuItems.push({ key: 'delete', label: 'Eliminar', Icon: Trash2, danger: true, onClick: () => { setMenuOpen(false); setConfirm({ title: 'Eliminar orden', message: `¿Mover la orden ${order.orderNumber} a la papelera? Podés recuperarla durante 30 días.`, onConfirm: handleDelete, danger: true }) } })
   }
 
   return (
@@ -785,7 +791,7 @@ export default function OrderDetail() {
                     <CheckCircle2 size={16} />
                     Aceptó
                   </button>
-                  <button onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={btnGhost}>
+                  <button onClick={() => setPickupModal({ onConfirm: (pickup) => doStatus('entregado', { pickup }) })} disabled={busy === 'entregado'} className={btnGhost}>
                     Rechazó
                   </button>
                 </div>
@@ -803,7 +809,7 @@ export default function OrderDetail() {
                 </button>
               )}
               {isCounter && status === 'terminado' && order.notified && (
-                <button key="entregar" onClick={() => setPickupModal({ onConfirm: () => doStatus('entregado') })} disabled={busy === 'entregado'} className={btnPrimary}>
+                <button key="entregar" onClick={() => setPickupModal({ onConfirm: (pickup) => doStatus('entregado', { pickup }) })} disabled={busy === 'entregado'} className={btnPrimary}>
                   <PackageCheck size={16} />
                   Entregar al cliente
                 </button>

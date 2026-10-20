@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, User, Users, Printer, CheckCircle2, Loader2 } from 'lucide-react'
-import { api } from '../utils/api.js'
 import { loadSession } from '../utils/storage.js'
 
 let stack = 0
@@ -43,6 +42,7 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
   if (!open) return null
 
   const handleConfirm = async () => {
+    if (saving) return
     if (pickupBy === 'third') {
       if (!pickupName.trim()) return setError('Ingresá el nombre de quien retira.')
       if (!pickupDni.trim()) return setError('Ingresá el DNI de quien retira.')
@@ -50,19 +50,17 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
     setSaving(true)
     setError('')
     try {
-      await api(`/orders/${order.id}/pickup`, {
-        method: 'POST',
-        body: { pickupBy, pickupName: pickupName.trim(), pickupDni: pickupDni.trim() }
-      })
+      const result = await onConfirmRef.current({ pickupBy, pickupName: pickupName.trim(), pickupDni: pickupDni.trim() })
+      if (result?.error) throw new Error(result.error)
       setSaved(true)
-    } catch {
-      setError('No se pudo guardar. Intentá de nuevo.')
+    } catch (err) {
+      setError(err.message || 'No se pudo guardar. Intentá de nuevo.')
+    } finally {
       setSaving(false)
     }
   }
 
   const handleFinish = () => {
-    if (onConfirmRef.current) onConfirmRef.current()
     onCloseRef.current()
   }
 
@@ -77,8 +75,8 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       window.open(url, '_blank')
-    } catch {
-      // ignore
+    } catch (err) {
+      setError(err.message || 'No se pudo abrir la constancia de retiro.')
     }
     setPrinting(false)
   }
@@ -151,6 +149,7 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
           </>
         ) : (
           <>
+            {error && <p role="alert" className="mb-3 text-sm text-red-600">{error}</p>}
             <div className="flex flex-col items-center text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/15">
                 <CheckCircle2 size={24} className="text-emerald-600 dark:text-emerald-400" />

@@ -80,8 +80,8 @@ export default function OrderModal({ order, onClose }) {
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const [sparePartsModalOpen, setSparePartsModalOpen] = useState(false)
   const canBudget = ['recepcion', 'admin'].includes(currentUser?.role)
-  const canEditWork = ['tecnico', 'admin'].includes(currentUser?.role)
-  const isReadOnly = !['tecnico'].includes(currentUser?.role)
+  const canEditWork = currentUser?.role === 'admin' || (currentUser?.role === 'tecnico' && order?.assignedTo === currentUser?.id)
+  const isReadOnly = !['tecnico', 'admin'].includes(currentUser?.role)
   // Para órdenes a revisión, el tipo de reparación no se puede definir hasta que
   // haya un técnico asignado y la orden esté en "en_revision".
   const fixLocked =

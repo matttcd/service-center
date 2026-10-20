@@ -11,7 +11,7 @@ services:
     volumes:
       - service-center_pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${PG_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U service_center -d service_center"]
       interval: 5s
@@ -27,13 +27,30 @@ services:
     environment:
       - PORT=3000
       - DATA_DIR=/app/data
-      # IP de Windows detectada por docker-start.bat (donde corre print_bridge.py).
-      - PRINT_BRIDGE_HOST=${PRINT_BRIDGE_HOST:-localhost}
+      - BACKUP_EXPORT_DIR=/app/exported-backups
+      # Docker Desktop resuelve el host; con Docker Engine en WSL, indicar la IP de Windows.
+      - PRINT_BRIDGE_HOST=${PRINT_BRIDGE_HOST:-host.docker.internal}
       - PRINT_BRIDGE_PORT=9200
+      - PRINT_BRIDGE_TOKEN=${PRINT_BRIDGE_TOKEN:?Ejecutá node scripts/setup-env.mjs}
       - JWT_SECRET=${JWT_SECRET:?Definí JWT_SECRET antes de levantar el sistema}
+      - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:?Ejecutá node scripts/setup-env.mjs}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-admin123}
+      - TZ=America/Argentina/Buenos_Aires
       - DATABASE_URL=postgresql://service_center:${PG_PASSWORD}@postgres:5432/service_center
     volumes:
       - service-center_data:/app/data
+      - ${BACKUP_HOST_DIR:-./backups}:/app/exported-backups
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,11 +65,34 @@ services:
     restart: unless-stopped
     ports:
       # Cambiá el puerto de la izquierda si 8080 está ocupado.
-      - "8081:80"
+      - "${APP_BIND_IP:-127.0.0.1}:${APP_PORT:-8081}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  gateway:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    environment:
+      APP_HOST: ${APP_HOST:-localhost}
+    ports:
+      - "${HTTPS_BIND_IP:-127.0.0.1}:443:443"
+      - "${HTTPS_BIND_IP:-127.0.0.1}:80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - service-center_tls:/data
+    depends_on:
+      frontend:
+        condition: service_healthy
 
 volumes:
   # Los datos de la base central se guardan acá y sobreviven reinicios.
   service-center_data:
   service-center_pgdata:
+  service-center_tls:

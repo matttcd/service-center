@@ -1,0 +1,46 @@
+# Entorno descartable: nombres, almacenamiento y puerto separados de producción.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: service_center
+      POSTGRES_DB: service_center_verify
+      POSTGRES_PASSWORD: verification-only-password
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U service_center -d service_center_verify"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      DATABASE_URL: postgresql://service_center:verification-only-password@postgres:5432/service_center_verify
+      JWT_SECRET: verification-secret-not-for-production-000000000000
+      BACKUP_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      PRINT_BRIDGE_TOKEN: verification-bridge-token
+      VERIFICATION_INSTANCE: service-center-isolated-tests
+      BACKUP_EXPORT_DIR: /app/data/exported
+      TZ: America/Argentina/Buenos_Aires
+    tmpfs:
+      - /app/data:uid=1000,gid=1000,mode=0700
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "127.0.0.1:8181:80"
+    depends_on:
+      backend:
+        condition: service_healthy

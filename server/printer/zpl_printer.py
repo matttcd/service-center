@@ -17,9 +17,10 @@ import struct
 import sys
 import platform
 import socket
+import os
 
-PRINT_BRIDGE_HOST = 'host.docker.internal'
-PRINT_BRIDGE_PORT = 9200
+PRINT_BRIDGE_HOST = os.environ.get('PRINT_BRIDGE_HOST', 'host.docker.internal')
+PRINT_BRIDGE_PORT = int(os.environ.get('PRINT_BRIDGE_PORT', '9200'))
 
 # Transliteracion: las fuentes estandar de las Zebra (CG Triumvirate) no
 # incluyen acentos ni eñe; los reemplazamos por caracteres ASCII simples.
@@ -76,10 +77,13 @@ def _get_printer_name():
     try:
         import win32print
         printers = [p[2] for p in win32print.EnumPrinters(2)]
+        configured = os.environ.get('LABEL_PRINTER_NAME', '')
+        if configured:
+            return next((p for p in printers if p == configured), None)
         for p in printers:
-            if 'zdesigner' in p.lower() or 'gt800' in p.lower():
+            if any(name in p.lower() for name in ('zdesigner', 'gt800', 'zebra', 'godex')):
                 return p
-        return win32print.GetDefaultPrinter()
+        return None
     except Exception:
         return None
 
@@ -89,7 +93,7 @@ def _send_via_tcp(zpl):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(10)
         sock.connect((PRINT_BRIDGE_HOST, PRINT_BRIDGE_PORT))
-        payload = json.dumps({'zpl': zpl}).encode('utf-8')
+        payload = json.dumps({'zpl': zpl, 'token': os.environ.get('PRINT_BRIDGE_TOKEN', '')}).encode('utf-8')
         sock.sendall(struct.pack('>I', len(payload)))
         sock.sendall(payload)
         raw_len = sock.recv(4)

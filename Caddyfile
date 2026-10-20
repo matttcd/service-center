@@ -1,0 +1,4 @@
+{$APP_HOST:localhost} {
+    tls internal
+    reverse_proxy frontend:80
+}
