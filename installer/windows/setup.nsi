@@ -159,7 +159,11 @@ Function UpdatePage
     Pop $0
   ${Else}
     GetDlgItem $0 $HWNDPARENT 1
-    SendMessage $0 ${WM_SETTEXT} 0 "STR:$ActionLabel"
+    ${If} $Operation == "repair"
+      SendMessage $0 ${WM_SETTEXT} 0 "STR:Reparar"
+    ${Else}
+      SendMessage $0 ${WM_SETTEXT} 0 "STR:$ActionLabel"
+    ${EndIf}
   ${EndIf}
   nsDialogs::Show
 FunctionEnd
