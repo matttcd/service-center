@@ -117,6 +117,10 @@ try {
   assert.equal(printers.transport, 'windows')
   assert.equal(printers.error, null, JSON.stringify(printers))
   assert.ok(printers.account)
+  // El instalador debe poder comprobar la identidad del auxiliar real.
+  const printerIdentity = JSON.parse(execFileSync(bundledNode, [path.join(payload, 'scripts/windows/service-control.mjs'), 'printers'], { env: hostEnv, windowsHide: true, encoding: 'utf8' }))
+  assert.match(printerIdentity.sid, /^S-1-/)
+  assert.equal(typeof printerIdentity.admin, 'boolean')
   console.log('✓ Ejecutable de impresión autónomo: enumera colas y cuenta sin Python instalado en PATH.')
   const order = (await fetch('http://127.0.0.1:8181/api/orders', { headers }).then((r) => r.json())).orders[0]
   const labelResponse = await fetch(`http://127.0.0.1:8181/api/orders/${order.id}/label-pdf`, { headers })
@@ -125,6 +129,16 @@ try {
   fs.writeFileSync(path.join(root, 'test-results/label.pdf'), Buffer.from(await labelResponse.arrayBuffer()))
   assert.equal((await fetch('http://127.0.0.1:8181/api/printing/test', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{"kind":"order"}' })).status, 400)
   const previousKey = settings.BACKUP_ENCRYPTION_KEY
+  await stopServer()
+  settings.PG_BIN_DIR = path.join(temporary, 'runtime-retirado')
+  fs.writeFileSync(envFile, JSON.stringify(settings))
+  try {
+    const safety = JSON.parse(execFileSync(bundledNode, [path.join(payload, 'server/backup-before-update.js'), pgBin], { env: hostEnv, windowsHide: true, encoding: 'utf8' }).trim().split('\n').at(-1))
+    assert.ok(safety.name)
+    assert.ok(decryptBackup(fs.readFileSync(path.join(temporary, 'data/backups', safety.name)), previousKey).subarray(0, 5).equals(Buffer.from('PGDMP')))
+  } finally { settings.PG_BIN_DIR = pgBin; fs.writeFileSync(envFile, JSON.stringify(settings)) }
+  await startServer()
+  console.log('✓ Respaldo previo con aplicación detenida y runtime PostgreSQL anterior retirado, sin cambiar claves/configuración.')
   const backup = fs.readdirSync(path.join(temporary, 'data/backups')).filter((name) => /^db-\d+\.dump$/.test(name)).sort().at(-1)
   await stopServer()
   settings.BACKUP_ENCRYPTION_KEY = randomBytes(32).toString('hex')

@@ -26,6 +26,13 @@ function preflight(expected, registered = false) {
   assert.equal(result.status, expected, result.stdout + result.stderr)
 }
 try {
+  for (const name of ['verify-deployment', 'verify-backup-gate']) {
+    const work = path.join(directory, name)
+    fs.mkdirSync(work)
+    const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, `scripts/windows/${name}.ps1`), '-WorkDir', work]
+    if (name === 'verify-backup-gate') args.push('-NodeExe', process.execPath)
+    execFileSync('powershell.exe', args, { windowsHide: true, stdio: 'pipe' })
+  }
   preflight(0)
   assert.equal(fs.existsSync(appDir), false, 'El preflight no crea carpetas.')
   options.serviceAccount = 'Admin'

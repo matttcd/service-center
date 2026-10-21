@@ -72,6 +72,15 @@ def pdf_print(name, data, settings):
 
 def execute(payload):
     action = payload.get('action')
+    if action == 'grant-service-logon':
+        import win32security
+        sid = win32security.LookupAccountName(None, payload.get('account', ''))[0]
+        policy = win32security.LsaOpenPolicy(None, win32security.POLICY_LOOKUP_NAMES | win32security.POLICY_CREATE_ACCOUNT)
+        try:
+            win32security.LsaAddAccountRights(policy, sid, ('SeServiceLogonRight',))
+            return {'ok': True}
+        finally:
+            win32security.LsaClose(policy)
     if action == 'validate-account':
         import win32security
         account = payload.get('account', '')
@@ -90,6 +99,7 @@ def execute(payload):
     if action == 'printers':
         import win32api
         import win32print
+        import win32security
         accessible = []
         for entry in printers():
             try:
@@ -98,7 +108,15 @@ def execute(payload):
                 accessible.append(entry['pPrinterName'])
             except Exception:
                 continue
-        return {'ok': True, 'printers': accessible, 'account': win32api.GetUserNameEx(2)}
+        token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32security.TOKEN_QUERY)
+        try:
+            sid = win32security.GetTokenInformation(token, win32security.TokenUser)[0]
+            groups = win32security.GetTokenInformation(token, win32security.TokenGroups)
+            admin_sid = win32security.ConvertSidToStringSid(win32security.CreateWellKnownSid(win32security.WinBuiltinAdministratorsSid))
+            admin = any(win32security.ConvertSidToStringSid(group) == admin_sid for group, _attributes in groups)
+            return {'ok': True, 'printers': accessible, 'account': win32api.GetUserNameEx(2), 'sid': win32security.ConvertSidToStringSid(sid), 'admin': admin}
+        finally:
+            token.Close()
     if action not in ('pdf', 'zpl'):
         raise ValueError('Acción de impresión inválida.')
     name = require_printer(payload.get('printer'))

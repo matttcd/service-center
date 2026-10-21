@@ -56,6 +56,12 @@ La restauración reemplaza los datos y los usuarios. No fusiona instalaciones ni
 
 ## Actualizar, reparar o desinstalar
 
+Desde **1.1.4**, el instalador detecta la instalación existente y muestra las versiones actual y nueva con el botón **Actualizar**. Conserva carpetas, red, cuenta de servicio, usuarios, impresoras y claves sin repetir sus formularios. La misma versión permite reparar; una instalación interrumpida muestra **Reparar y actualizar**, y los datos conservados después de desinstalar permiten reinstalar. No se admite instalar una versión anterior directamente.
+
+Una actualización normal conserva las credenciales de los servicios en Windows. La contraseña de una cuenta personalizada solo se solicita al crearla o cuando una reparación necesita volver a configurar su inicio de sesión. La cuenta automática `ServiceCenterSvc` se administra sin pedir una contraseña al usuario. El aviso administrativo de Windows (UAC) sigue siendo necesario.
+
+Las versiones 1.1.1–1.1.3 podían registrar una identidad incorrecta por usar opciones incompatibles con WinSW 2.12; además, su actualización invocaba el comando inexistente `refresh`. La 1.1.4 corrige el flujo, exige un respaldo previo incluso con la aplicación detenida y comprueba la identidad real de aplicación, HTTPS e impresión antes de confirmar el resultado. Las pruebas con servicios reales requieren ejecutar `scripts/windows/verify-services.ps1` como administrador sobre una carpeta descartable `tools/windows-services-*`; el resultado queda en `result.json` y se retiran su servicio y cuenta temporales.
+
 El instalador coloca cada entrega en una carpeta versionada e inmutable. Al actualizar una instalación operativa activa mantenimiento y exige un respaldo previo; después detiene la aplicación, conserva claves y configuración, aplica migraciones y comprueba su identidad y salud. Si falla, no marca la instalación lista y conserva el respaldo para recuperar. No promete revertir automáticamente una migración de esquema.
 
 Los registros están en `logs\`, y el progreso de instalación en `installation.json`. Las reparaciones deben usar las mismas rutas y la misma cuenta Windows. PostgreSQL permanece en la misma versión mayor 16; una actualización mayor requerirá un procedimiento separado.

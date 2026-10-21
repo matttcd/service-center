@@ -2,6 +2,17 @@ param([Parameter(Mandatory=$true)][string]$OptionsFile)
 $ErrorActionPreference = 'Stop'
 $OutputEncoding = New-Object Text.UTF8Encoding $false
 $scOptions = [IO.File]::ReadAllText($OptionsFile) | ConvertFrom-Json
+. (Join-Path $PSScriptRoot 'services.ps1')
+try {
+$scDetection=Get-SCDeployment $scOptions.appDir $scOptions.dataDir $scOptions.version
+if ($scOptions.operation -ne $scDetection.operation -or [bool]::Parse([string]$scOptions.preserveServiceCredentials) -ne $scDetection.preserveServiceCredentials) { throw 'La instalación cambió desde que se abrió el asistente. Volvé a ejecutarlo.' }
+if ($scDetection.state -and ($scOptions.hostName -ne $scDetection.hostName -or [string]$scOptions.httpsPort -ne $scDetection.httpsPort -or [string]$scOptions.serviceAccount -ne $scDetection.serviceAccount)) { throw 'Se debe conservar la configuración de la instalación existente.' }
+$scPreserveCredentials=$scDetection.preserveServiceCredentials
+} catch {
+    if (Test-Path -LiteralPath $OptionsFile) { Remove-Item -LiteralPath $OptionsFile -Force }
+    Write-Error $_.Exception.Message
+    exit 1
+}
 $scApp = [IO.Path]::GetFullPath($scOptions.appDir)
 $scRelease = [IO.Path]::GetFullPath($scOptions.releaseDir)
 $scData = [IO.Path]::GetFullPath($scOptions.dataDir)
@@ -46,7 +57,7 @@ try {
     if ($scOptions.hostName -notmatch '^[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}$') { throw 'Nombre o IP del servidor inválido.' }
     $scHttpsPort = [int]$scOptions.httpsPort
     if ($scHttpsPort -lt 1 -or $scHttpsPort -gt 65535) { throw 'Puerto HTTPS inválido.' }
-    if (-not $scManaged) {
+    if (-not $scManaged -and -not $scPreserveCredentials) {
         if ($scUser -notmatch '^[^\\\r\n]+\\[^\\\r\n]+$' -or -not $scOptions.servicePassword) { throw 'Ingresá una cuenta Windows DOMINIO\usuario y su contraseña.' }
         $scRequest = @{action='validate-account';account=$scUser;password=$scOptions.servicePassword} | ConvertTo-Json -Compress
         $scValidation = ($scRequest | & (Join-Path $scRelease 'runtime/printer/ServiceCenterPrint.exe')) | ConvertFrom-Json
@@ -59,18 +70,24 @@ try {
         $scReadyExisting = $scExisting.status -eq 'ready'
         $scOldNode = Join-Path $scExisting.releaseDir 'runtime/node/node.exe'
         $env:SERVICE_CENTER_ENV_FILE = $scEnvFile
-      if ($scReadyExisting -and (Get-Service ServiceCenterApp -ErrorAction SilentlyContinue).Status -eq 'Running') {
-        Invoke-Checked $scOldNode @((Join-Path $scExisting.releaseDir 'scripts/windows/service-control.mjs'), 'maintenance')
-        # El control confirma que terminaron las mutaciones ya admitidas.
-        $scBackupOutput = & $scOldNode (Join-Path $scExisting.releaseDir 'server/backup-cli.js') create
+      # Copia obligatoria antes de modificar servicios, cuentas o configuración,
+      # incluso después de una instalación interrumpida.
+      if (Test-Path -LiteralPath (Join-Path $scData 'postgres/PG_VERSION')) {
+        $scPgService=Get-CimInstance Win32_Service -Filter "Name='ServiceCenterPostgres'"
+        if (-not $scPgService -and $scExisting.status -eq 'uninstalled') {
+            Invoke-Checked (Join-Path $scPgBin 'pg_ctl.exe') @('register','-D',(Join-Path $scData 'postgres'),'-N','ServiceCenterPostgres','-U','NT AUTHORITY\NetworkService','-S','auto')
+            $scPgService=Get-CimInstance Win32_Service -Filter "Name='ServiceCenterPostgres'"
+        }
+        if (-not $scPgService -or $scPgService.PathName.IndexOf($scApp+'\',[StringComparison]::OrdinalIgnoreCase) -lt 0) { throw 'PostgreSQL requiere reparación antes de poder respaldar los datos.' }
+        if ($scPgService.State -ne 'Running') { Start-Service ServiceCenterPostgres; (Get-Service ServiceCenterPostgres).WaitForStatus('Running',[TimeSpan]::FromSeconds(60)) }
+        if ((Get-Service ServiceCenterApp -ErrorAction SilentlyContinue).Status -eq 'Running') {
+            Invoke-Checked $scOldNode @((Join-Path $scExisting.releaseDir 'scripts/windows/service-control.mjs'), 'maintenance')
+        }
+        $scBackupOutput = & $scNode (Join-Path $scRelease 'server/backup-before-update.js') $scPgBin
         if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear la copia previa. Actualización cancelada.' }
         $scBackup = ($scBackupOutput | Select-Object -Last 1) | ConvertFrom-Json
         if (-not $scBackup.name) { throw 'No se confirmó la copia previa. Actualización cancelada.' }
         Write-Host "Respaldo previo: $($scBackup.name)"
-      } elseif ($scReadyExisting) {
-        # También exige respaldo si se actualiza con la aplicación detenida.
-        $scBackupOutput = & $scOldNode (Join-Path $scExisting.releaseDir 'server/backup-cli.js') create
-        if ($LASTEXITCODE -ne 0 -or -not (($scBackupOutput | Select-Object -Last 1) | ConvertFrom-Json).name) { throw 'No se pudo crear el respaldo previo. Actualización cancelada.' }
       }
     } else {
         if ((Test-Path -LiteralPath $scData) -and (Get-ChildItem -LiteralPath $scData -Force | Select-Object -First 1)) { throw 'La carpeta de datos ya contiene archivos ajenos a una instalación reconocida. Elegí una carpeta nueva.' }
@@ -88,18 +105,26 @@ try {
     }
     $scChanged = $true
     foreach ($scDir in @($scData, $scServices, (Join-Path $scData 'config'), (Join-Path $scData 'logs'), (Join-Path $scData 'tmp'), (Join-Path $scData 'tls'), (Join-Path $scData 'backups-exported'))) { New-Item -ItemType Directory -Path $scDir -Force | Out-Null }
-    $scPassword = 'Sc!' + (New-Secret)
-    if (-not $scManaged) {
-        $scPassword = [string]$scOptions.servicePassword
-        $scSid = $scValidation.sid
-    } elseif (-not $scExisting) {
-        New-LocalUser -Name $scUserName -Password (ConvertTo-SecureString $scPassword -AsPlainText -Force) -AccountNeverExpires -PasswordNeverExpires -Description 'Servicio de órdenes y colas de impresión' | Out-Null
-        $scSid = (Get-LocalUser -Name $scUserName).SID.Value
+    $scPassword=$null
+    if ($scPreserveCredentials) {
+        $scSid=$scExisting.serviceSid
     } else {
-        $scAccount = Get-LocalUser -Name $scUserName
-        if ($scAccount.SID.Value -ne $scExisting.serviceSid) { throw 'La identidad de la cuenta del servicio cambió. Instalación cancelada.' }
-        Set-LocalUser -Name $scUserName -Password (ConvertTo-SecureString $scPassword -AsPlainText -Force)
-        $scSid = $scAccount.SID.Value
+        $scPassword = 'Sc!' + (New-Secret)
+        if (-not $scManaged) {
+            $scPassword = [string]$scOptions.servicePassword
+            $scSid = $scValidation.sid
+        } elseif (-not $scExisting) {
+            New-LocalUser -Name $scUserName -Password (ConvertTo-SecureString $scPassword -AsPlainText -Force) -AccountNeverExpires -PasswordNeverExpires -Description 'Servicio de órdenes y colas de impresión' | Out-Null
+            $scSid = (Get-LocalUser -Name $scUserName).SID.Value
+        } else {
+            $scAccount = Get-LocalUser -Name $scUserName
+            if ($scAccount.SID.Value -ne $scExisting.serviceSid) { throw 'La identidad de la cuenta del servicio cambió.' }
+            Set-LocalUser -Name $scUserName -Password (ConvertTo-SecureString $scPassword -AsPlainText -Force)
+            $scSid = $scAccount.SID.Value
+        }
+        $scGrant=@{action='grant-service-logon';account=$scUser} | ConvertTo-Json -Compress
+        $scGrantResult=($scGrant | & (Join-Path $scRelease 'runtime/printer/ServiceCenterPrint.exe')) | ConvertFrom-Json
+        if (-not $scGrantResult.ok) { throw 'No se pudo habilitar el inicio de sesión como servicio.' }
     }
     Set-Private $scData $scUser
     Start-Transcript -Path (Join-Path $scData 'logs/installation.log') -Append | Out-Null
@@ -180,10 +205,7 @@ try {
     }
     Write-Utf8 $scEnvFile (ConvertTo-Json $scValues)
     Invoke-Checked 'icacls.exe' @((Join-Path $scData 'config'),'/inheritance:r','/grant:r',"${scAdminSid}:(OI)(CI)F","${scSystemSid}:(OI)(CI)F","${scUser}:(OI)(CI)RX")
-    if ($scExisting -and -not $scReadyExisting) {
-        $env:SERVICE_CENTER_ENV_FILE = $scEnvFile
-        Invoke-Checked $scNode @((Join-Path $scRelease 'server/backup-cli.js'),'create')
-    }
+
     # El servicio escribe solo en sus carpetas operativas. La raíz no concede
     # DeleteChild: tampoco puede reemplazar config/ o postgres/ desde su padre.
     foreach ($scWritable in @('app-data','backups-exported','logs','tmp','tls','browser')) {
@@ -207,19 +229,8 @@ try {
         $scServiceExe = Join-Path $scServices ($scId + '.exe')
         if (-not (Test-Path -LiteralPath $scServiceExe)) { Copy-Item -LiteralPath (Join-Path $scRelease 'runtime/WinSW.exe') -Destination $scServiceExe }
         $scXmlFile = Join-Path $scServices ($scId + '.xml')
-        # WinSW entrega la contraseña al SCM; se retira del XML después.
-        $scXmlUser = [Security.SecurityElement]::Escape($scUser)
-        $scXmlPassword = [Security.SecurityElement]::Escape($scPassword)
-        $scXml = $scConfigs[$scId].Replace('</service>', "<serviceaccount><username>$scXmlUser</username><password>$scXmlPassword</password><allowservicelogon>true</allowservicelogon></serviceaccount></service>")
-        Write-Utf8 $scXmlFile $scXml
+        Set-SCService -Id $scId -Wrapper $scServiceExe -Configuration $scConfigs[$scId] -Account $scUser -Sid $scSid -Password $scPassword -PreserveCredentials $scPreserveCredentials
         Invoke-Checked 'icacls.exe' @($scXmlFile,'/inheritance:r','/grant:r',"${scAdminSid}:F","${scSystemSid}:F","${scUser}:R")
-        try {
-            if (Get-Service -Name $scId -ErrorAction SilentlyContinue) {
-                Invoke-Checked $scServiceExe @('refresh')
-                $scChange = Invoke-CimMethod -InputObject (Get-CimInstance Win32_Service -Filter "Name='$scId'") -MethodName Change -Arguments @{StartName=$scUser;StartPassword=$scPassword}
-                if ($scChange.ReturnValue -ne 0) { throw 'No se pudo actualizar la cuenta del servicio.' }
-            } else { Invoke-Checked $scServiceExe @('install') }
-        } finally { Write-Utf8 $scXmlFile $scConfigs[$scId] }
     }
     $scChanged = $true
     Start-Service -Name ServiceCenterApp
@@ -233,8 +244,12 @@ try {
     $scPrinterOutput = & $scNode (Join-Path $scRelease 'scripts/windows/service-control.mjs') printers
     if ($LASTEXITCODE -ne 0) { throw 'El componente de impresión no funciona con la cuenta del servicio. Revisá los permisos y el servicio Spooler.' }
     $scPrinterState = ($scPrinterOutput | Select-Object -Last 1) | ConvertFrom-Json
+    if ($scPrinterState.sid -ne $scSid -or $scPrinterState.admin) { throw 'El componente de impresión se ejecuta con una identidad incorrecta o privilegiada.' }
+    Assert-SCServiceProcess 'ServiceCenterApp' $scSid
     Write-Host "Cuenta de impresión verificada: $($scPrinterState.account). Colas accesibles: $($scPrinterState.printers.Count)."
     Start-Service -Name ServiceCenterHttps
+    (Get-Service ServiceCenterHttps).WaitForStatus('Running',[TimeSpan]::FromSeconds(45))
+    Assert-SCServiceProcess 'ServiceCenterHttps' $scSid
     $scCertificate = Join-Path $scData 'tls/pki/authorities/local/root.crt'
     for ($scTry=0; $scTry -lt 30 -and -not (Test-Path -LiteralPath $scCertificate); $scTry++) { Start-Sleep -Seconds 1 }
     if (-not (Test-Path -LiteralPath $scCertificate)) { throw 'No se generó el certificado HTTPS local.' }

@@ -46,9 +46,17 @@ Var OldApp
 Var ReleaseDir
 Var AccountCheckbox
 Var UseCustomAccount
+Var Operation
+Var CurrentVersion
+Var PreserveCredentials
+Var CredentialRequired
+Var ProbeFile
+Var ActionLabel
 
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
+Page custom UpdatePage
+!define MUI_PAGE_CUSTOMFUNCTION_PRE DirectoryPage
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE DirectoryLeave
 !insertmacro MUI_PAGE_DIRECTORY
 Page custom DataPage DataLeave
@@ -102,8 +110,59 @@ Function .onInit
     StrCpy $Account ""
   InitPluginsDir
   StrCpy $OptionsFile "$PLUGINSDIR\options.json"
+  StrCpy $ProbeFile "$PLUGINSDIR\deployment.ini"
+  SetOutPath "$PLUGINSDIR"
+  File /oname=probe.ps1 "${StageDir}\installer\windows\probe.ps1"
+  File /oname=deployment.ps1 "${StageDir}\installer\windows\deployment.ps1"
+  nsExec::ExecToStack '"$PowerShell" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\probe.ps1" -AppDir "$INSTDIR" -DataDir "$DataDir" -Version "${AppVersion}" -OutputFile "$ProbeFile"'
+  Pop $0
+  Pop $1
+  ${If} $0 != 0
+    MessageBox MB_ICONSTOP "No se pudo reconocer la instalación.$\r$\n$1"
+    Abort
+  ${EndIf}
+  ReadINIStr $Operation $ProbeFile "deployment" "operation"
+  ReadINIStr $CurrentVersion $ProbeFile "deployment" "currentVersion"
+  ReadINIStr $PreserveCredentials $ProbeFile "deployment" "preserveServiceCredentials"
+  ReadINIStr $CredentialRequired $ProbeFile "deployment" "credentialRequired"
+  ${If} $CurrentVersion != ""
+    ReadINIStr $HostName $ProbeFile "deployment" "hostName"
+    ReadINIStr $HttpsPort $ProbeFile "deployment" "httpsPort"
+    ReadINIStr $Account $ProbeFile "deployment" "serviceAccount"
+  ${EndIf}
 FunctionEnd
 
+Function DirectoryPage
+  ${If} $Operation != "install"
+    Abort
+  ${EndIf}
+FunctionEnd
+Function UpdatePage
+  ${If} $Operation == "install"
+    Abort
+  ${EndIf}
+  StrCpy $ActionLabel "Actualizar"
+  ${If} $Operation == "repair"
+    StrCpy $ActionLabel "Reparar y actualizar"
+  ${ElseIf} $Operation == "reinstall"
+    StrCpy $ActionLabel "Reinstalar"
+  ${EndIf}
+  !insertmacro MUI_HEADER_TEXT "$ActionLabel Service Center" "Versión detectada: $CurrentVersion → ${AppVersion}"
+  nsDialogs::Create 1018
+  Pop $Dialog
+  ${NSD_CreateLabel} 0 0 100% 35u "Programa: $INSTDIR$\r$\nDatos y respaldos: $DataDir"
+  Pop $0
+  ${NSD_CreateLabel} 0 40u 100% 42u "Se conservarán usuarios, contraseñas, impresoras, certificados y configuración de red. Se creará un respaldo cifrado previo y la aplicación se reiniciará brevemente."
+  Pop $0
+  ${If} $CredentialRequired == "True"
+    ${NSD_CreateLabel} 0 90u 100% 32u "Falta reparar la identidad de un servicio con cuenta personalizada. Windows necesitará su contraseña en el siguiente paso."
+    Pop $0
+  ${Else}
+    GetDlgItem $0 $HWNDPARENT 1
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:$ActionLabel"
+  ${EndIf}
+  nsDialogs::Show
+FunctionEnd
 Function DirectoryLeave
   ${If} $OldApp != ""
   ${AndIf} $INSTDIR != $OldApp
@@ -113,6 +172,9 @@ Function DirectoryLeave
 FunctionEnd
 
 Function DataPage
+  ${If} $Operation != "install"
+    Abort
+  ${EndIf}
   !insertmacro MUI_HEADER_TEXT "Base de datos y respaldos" "Esta carpeta se conserva al actualizar o desinstalar."
   nsDialogs::Create 1018
   Pop $Dialog
@@ -133,6 +195,9 @@ Function DataLeave
 FunctionEnd
 
 Function NetworkPage
+  ${If} $Operation != "install"
+    Abort
+  ${EndIf}
   !insertmacro MUI_HEADER_TEXT "Acceso del local" "Solo se publicará HTTPS en la red privada."
   nsDialogs::Create 1018
   Pop $Dialog
@@ -160,6 +225,10 @@ Function NetworkLeave
 FunctionEnd
 
 Function AccountPage
+  ${If} $Operation != "install"
+  ${AndIf} $CredentialRequired != "True"
+    Abort
+  ${EndIf}
   !insertmacro MUI_HEADER_TEXT "Cuenta de impresión" "Se creará automáticamente una cuenta de servicio sin privilegios."
   nsDialogs::Create 1018
   Pop $Dialog
@@ -182,6 +251,9 @@ Function AccountPage
   ${NSD_CreatePassword} 0 113u 100% 14u "$AccountPassword"
   Pop $Field2
   Call AccountFields
+  ${If} $Operation != "install"
+    EnableWindow $Field1 0
+  ${EndIf}
   nsDialogs::Show
 FunctionEnd
 Function AccountToggle
@@ -314,6 +386,10 @@ Section "Instalar"
   !insertmacro JsonField adminPassword $AdminPassword
   FileWriteUTF16LE $JsonHandle ','
   !insertmacro JsonField serviceAccount $Account
+  FileWriteUTF16LE $JsonHandle ','
+  !insertmacro JsonField operation $Operation
+  FileWriteUTF16LE $JsonHandle ','
+  !insertmacro JsonField preserveServiceCredentials $PreserveCredentials
   FileWriteUTF16LE $JsonHandle ','
   !insertmacro JsonField servicePassword $AccountPassword
   FileWriteUTF16LE $JsonHandle '}'

@@ -39,7 +39,14 @@ function Test-StagedProgram([string]$Program, [string]$Data) {
 }
 try {
     $scOptions = [IO.File]::ReadAllText($OptionsFile) | ConvertFrom-Json
-    if ($scOptions.serviceAccount -and ($scOptions.serviceAccount -notmatch '^[^\\\r\n]+\\[^\\\r\n]+$' -or -not $scOptions.servicePassword)) { throw 'Usá una cuenta Windows EQUIPO\usuario con su contraseña, o elegí la creación automática.' }
+    $scPreserve=$false
+    if ($scOptions.operation) {
+        . (Join-Path $PSScriptRoot 'deployment.ps1')
+        $scDetected=Get-SCDeployment $scOptions.appDir $scOptions.dataDir $scOptions.version
+        if ($scDetected.operation -ne $scOptions.operation -or $scDetected.preserveServiceCredentials -ne [bool]::Parse([string]$scOptions.preserveServiceCredentials)) { throw 'La instalación cambió. Volvé a abrir el asistente.' }
+        $scPreserve=$scDetected.preserveServiceCredentials
+    }
+    if (-not $scPreserve -and $scOptions.serviceAccount -and ($scOptions.serviceAccount -notmatch '^[^\\\r\n]+\\[^\\\r\n]+$' -or -not $scOptions.servicePassword)) { throw 'Usá una cuenta Windows EQUIPO\usuario con su contraseña, o elegí la creación automática.' }
     $scApp = [IO.Path]::GetFullPath($scOptions.appDir).TrimEnd('\')
     $scData = [IO.Path]::GetFullPath($scOptions.dataDir).TrimEnd('\')
     foreach ($scPath in @($scApp,$scData)) {
