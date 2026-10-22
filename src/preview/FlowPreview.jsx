@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react'
 import {
-  ArrowLeft, ArrowRight, Check, CheckCheck, CheckCircle2, ChevronDown, ChevronRight,
+  ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, ChevronRight,
   ClipboardList, Clock3, Eye, EyeOff, FlaskConical, History, Inbox, MessageSquare,
-  MoreHorizontal, Package, Phone, RotateCcw, Save, Search, ShieldCheck, Smartphone,
+  Package, Phone, RotateCcw, Save, Search, ShieldCheck, Smartphone,
   StickyNote, UserRound, Wrench, Laptop, Monitor, Gamepad2,
 } from 'lucide-react'
 import { useNotify } from '../context/notifications.js'
@@ -14,10 +14,6 @@ import {
 
 const money = (value) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value)
 const date = (value) => new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(value)
-function age(value) {
-  const hours = Math.max(0, Math.floor((Date.now() - value) / 3600000))
-  return hours >= 24 ? `${Math.floor(hours / 24)} d` : `${hours} h`
-}
 function DeviceIcon({ type, ...props }) {
   const Icon = { Celular: Smartphone, Notebook: Laptop, Monitor, Consola: Gamepad2 }[type] || Smartphone
   return <Icon {...props} />
@@ -28,22 +24,8 @@ function Status({ order }) {
       : order.status === 'recibido' ? 'neutral' : 'blue'
   return <span className={`fp-status fp-status-${tone}`}><span />{STATUS_LABELS[order.status]}</span>
 }
-function StageTrack({ order }) {
-  const stage = { recibido: 0, en_revision: 1, presupuesto: 2, en_reparacion: 3, falta_repuestos: 3, terminado: 4, presupuesto_rechazado: 4, entregado: 5 }[order.status]
-  const withoutRepair = order.rejectedCharge !== null
-  return <ol className="fp-stages" aria-label="Etapas de la orden">
-    {['Ingreso', 'Revisión', 'Presupuesto', 'Reparación', 'Retiro'].map((label, index) => (
-      <li key={label} className={index === 3 && withoutRepair ? 'skipped' : index === Math.min(stage, 4) ? 'current' : index < stage ? 'done' : ''} aria-current={index === Math.min(stage, 4) ? 'step' : undefined}>
-        <span className="fp-stage-dot">{index === 3 && withoutRepair ? '—' : index < stage ? <Check size={10} /> : index + 1}</span><span>{index === 3 && withoutRepair ? 'Sin reparar' : label}</span>
-      </li>
-    ))}
-  </ol>
-}
-
 function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, onBack }) {
-  const [section, setSection] = useState(() => role === 'recepcion' && receptionQueue(order) === 'repuestos' ? 'parts' : 'work')
   const [showAccess, setShowAccess] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
   const [actionForm, setActionForm] = useState(null)
   const [response, setResponse] = useState('')
   const [pickupBy, setPickupBy] = useState('client')
@@ -51,7 +33,6 @@ function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, 
   const [pickupDni, setPickupDni] = useState('')
   const [physical, setPhysical] = useState(false)
   const [checked, setChecked] = useState(false)
-  const historyRef = useRef(null)
   const bodyRef = useRef(null)
   const own = order.assignedTo === TECHNICIAN
   const technical = role === 'tecnico'
@@ -87,9 +68,9 @@ function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, 
     : blocked || (action?.id === 'claim' ? 'Se asignará a vos y entrará en revisión.'
       : action?.partId ? `Repuesto: ${action.partName}. Se actualizará su estado en esta orden.`
         : action?.id === 'notify' ? 'Registrá el aviso después de comunicarte con el cliente. No se envían mensajes.'
-        : !action ? wait?.text || (technical && !own ? 'Asignado a Diego. Podés consultar el equipo.' : 'El técnico está trabajando en este equipo.')
+        : !action ? order.status === 'falta_repuestos' ? '' : wait?.text || (technical && !own ? 'Este equipo corresponde a otro técnico.' : 'El técnico está trabajando en este equipo.')
           : action?.id === 'sendQuote' ? 'Se guardará el diagnóstico y aparecerá en los pendientes de recepción.'
-            : action?.id === 'finish' ? 'Recepción lo verá en los pendientes de aviso.' : 'El cambio quedará registrado en el historial.')
+            : action?.id === 'finish' ? 'Recepción lo verá en los pendientes de aviso.' : outsideQueue ? 'La orden salió de esta cola. Podés seguir consultándola acá.' : '')
 
   const priceEditor = !technical && order.status === 'presupuesto' && !order.confirmed && <div className="fp-price-editor"><label htmlFor="quote-price">Precio del presupuesto</label><div className="fp-currency-input"><span>$</span><input id="quote-price" type="number" min="0" step="0.01" value={draft.price} onChange={(e) => setDraft({ price: e.target.value })} placeholder="Ingresá el importe" /></div>
     {order.price > 0 && Number(draft.price) !== order.price && <button className="fp-button secondary" onClick={() => onAction('price', { price: draft.price })} disabled={!draft.price || Number(draft.price) <= 0 || !Number.isFinite(Number(draft.price))}><Save size={15} />Guardar nuevo precio</button>}
@@ -97,18 +78,11 @@ function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, 
   return <article className="fp-order" aria-label={`Orden ${order.number}`}>
     <header className="fp-order-header">
       <button className="fp-back fp-link" onClick={onBack}><ArrowLeft size={16} /> Volver a la cola</button>
-      <div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} />
-        <details className="fp-more">
-          <summary aria-label="Más acciones"><MoreHorizontal size={21} /></summary>
-          <div><button onClick={(event) => { setHistoryOpen(true); event.currentTarget.closest('details').open = false; setTimeout(() => historyRef.current?.scrollIntoView({ block: 'nearest' }), 0) }}><History size={15} /> Ver historial</button>
-            <button onClick={(event) => { setShowAccess((value) => !value); event.currentTarget.closest('details').open = false }}><Eye size={15} /> {showAccess ? 'Ocultar acceso' : 'Ver acceso del equipo'}</button></div>
-        </details>
-      </div>
+      <div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} /></div>
       <h2>{order.brand} {order.model}</h2>
-      <div className="fp-order-meta"><span><UserRound size={14} />{order.customer}</span><span><Wrench size={14} />{order.assignedTo ? own ? 'Juan Pérez' : 'Diego Molina' : 'Sin técnico'}</span><span><Clock3 size={14} />Ingresó hace {age(order.createdAt)}</span>{!technical && <span><Phone size={14} />{order.phone}</span>}</div>
-      {outsideQueue && <p className="fp-outside"><CheckCheck size={14} />La orden salió de esta cola. Podés seguir consultándola acá.</p>}
+      <div className="fp-order-meta"><span><UserRound size={16} />{order.customer}</span><span><Phone size={16} />{order.phone}</span></div>
+      <div className="fp-access"><span>Acceso del equipo</span><button className="fp-link" aria-expanded={showAccess} aria-controls="device-access" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={16} /> : <Eye size={16} />}{showAccess ? 'Ocultar contraseña' : 'Mostrar contraseña'}</button><strong id="device-access" hidden={!showAccess}>{showAccess ? order.access : ''}</strong></div>
     </header>
-    <StageTrack order={order} />
     <div className="fp-order-body" ref={bodyRef}>
       {actionForm === 'response' && <section className="fp-action-form" aria-label="Respuesta del cliente">
         <h3>¿Qué respondió el cliente?</h3><p>Presupuesto comunicado: <strong>{money(order.price)}</strong></p>
@@ -125,54 +99,42 @@ function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, 
         {pickupBy === 'third' && <div className="fp-two-fields"><label>Nombre<input value={pickupName} onChange={(e) => setPickupName(e.target.value)} /></label><label>DNI<input inputMode="numeric" value={pickupDni} onChange={(e) => setPickupDni(e.target.value)} /></label></div>}
         <label className="fp-checkbox"><input type="checkbox" checked={physical} onChange={(e) => setPhysical(e.target.checked)} />Confirmo que el equipo se retira físicamente ahora</label>
       </section>}
-      {wait && <div className={`fp-handoff ${wait.ready ? 'ready' : ''}`}>
-        {wait.ready ? <CheckCircle2 size={19} /> : <Clock3 size={19} />}<div><strong>{wait.ready ? 'Disponible para continuar' : `En espera · ${wait.owner}`}</strong><p>{wait.text}</p></div>
-      </div>}
-      {order.status === 'entregado' && <div className="fp-handoff ready"><CheckCircle2 size={21} /><div><strong>Equipo entregado</strong><p>El retiro físico quedó registrado en esta demostración.</p></div></div>}
-      {action?.id === 'price' && priceEditor}
-      <section className="fp-issue"><span>Falla informada al ingresar</span><p>{order.issue}</p></section>
-      <div className="fp-section-tabs" role="tablist" aria-label="Información de la orden">
-        {[['work', 'Trabajo', Wrench], ['notes', 'Notas', StickyNote], ['parts', 'Repuestos', Package]].map(([key, label, Icon]) => (
-          <button key={key} id={`tab-${key}`} role="tab" tabIndex={section === key ? 0 : -1} aria-selected={section === key} aria-controls={`panel-${key}`} onKeyDown={(event) => {
-            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-            event.preventDefault()
-            const keys = ['work', 'notes', 'parts']
-            const position = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (keys.indexOf(section) + (event.key === 'ArrowRight' ? 1 : 2)) % 3
-            setSection(keys[position]); event.currentTarget.parentElement.querySelectorAll('[role=tab]')[position].focus()
-          }} onClick={() => setSection(key)}><Icon size={15} />{label}{key !== 'work' && <span>{order[key === 'notes' ? 'notes' : 'parts'].length}</span>}</button>
-        ))}
-      </div>
-      <section className="fp-section-content" id={`panel-${section}`} role="tabpanel" aria-labelledby={`tab-${section}`}>
-        {section === 'work' && <>
-          <div className="fp-section-heading"><h3>Diagnóstico y trabajo</h3>{canWork && <span className={`fp-save-state ${workDirty ? 'dirty' : ''}`}>{workDirty ? 'Borrador sin guardar' : <><Check size={12} /> Guardado</>}</span>}</div>
-          <label htmlFor="diagnosis">Diagnóstico del técnico</label>
-          {canWork ? <textarea id="diagnosis" rows={2} value={draft.diagnosis} onChange={(e) => setDraft({ diagnosis: e.target.value })} placeholder="Qué encontraste al revisar el equipo…" /> : <p className="fp-read-value">{order.diagnosis || 'El técnico todavía no registró el diagnóstico.'}</p>}
-          <label htmlFor="work">Trabajo {order.status === 'terminado' || order.status === 'entregado' ? 'registrado' : 'propuesto'}</label>
-          {canWork ? <textarea id="work" rows={2} value={draft.work} onChange={(e) => setDraft({ work: e.target.value })} placeholder="Qué reparación o pruebas necesita…" /> : <p className="fp-read-value">{order.work || 'Se definirá después de la revisión.'}</p>}
+      <section className="fp-issue" aria-labelledby="issue-title"><h3 id="issue-title">Falla informada</h3><p>{order.issue}</p></section>
+      <section className="fp-work" aria-labelledby="work-title">
+          <div className="fp-section-heading"><h3 id="work-title">{order.status === 'terminado' || order.status === 'entregado' ? 'Trabajo realizado' : order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : 'Trabajo a realizar'}</h3>{canWork && workDirty && <span className="fp-save-state">Borrador sin guardar</span>}</div>
+          {canWork ? <textarea id="work" aria-labelledby="work-title" rows={2} value={draft.work} onChange={(e) => setDraft({ work: e.target.value })} placeholder="Qué reparación o pruebas necesita el equipo…" /> : <p className="fp-read-value">{order.work || 'Revisar el equipo para definir el trabajo.'}</p>}
+          {order.status === 'en_revision' && technical ? <div className="fp-diagnosis"><label htmlFor="diagnosis">Diagnóstico del técnico</label>{canWork ? <textarea id="diagnosis" rows={2} value={draft.diagnosis} onChange={(e) => setDraft({ diagnosis: e.target.value })} placeholder="Qué encontraste al revisar el equipo…" /> : <p className="fp-read-value">{order.diagnosis || 'Todavía no se registró el diagnóstico.'}</p>}</div>
+            : <details className="fp-diagnosis"><summary>Ver diagnóstico<ChevronDown size={15} /></summary>{canWork ? <textarea aria-label="Diagnóstico del técnico" rows={2} value={draft.diagnosis} onChange={(e) => setDraft({ diagnosis: e.target.value })} /> : <p className="fp-read-value">{order.diagnosis || 'Todavía no se registró el diagnóstico.'}</p>}</details>}
+          {order.status === 'falta_repuestos' && <div className="fp-parts-wait"><Package size={17} /><div><p>{wait.text}</p><ul>{order.parts.map((part) => <li key={part.id}>{part.name} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Esperando llegada' : 'Recibido'}</li>)}</ul></div></div>}
           {action?.id === 'finish' && <label className="fp-checkbox fp-test-check"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />Realicé la prueba de funcionamiento del trabajo registrado</label>}
-          {action?.id !== 'price' && priceEditor}
+      </section>
+      {!technical && <section className="fp-counter" aria-label="Presupuesto y retiro">
+          {priceEditor}
           <div className="fp-finance"><div><span>{order.rejectedCharge !== null ? 'Importe de retiro' : 'Presupuesto'}</span><strong>{bill.total ? money(bill.total) : order.rejectedCharge === 0 ? money(0) : 'A definir'}</strong></div><div><span>Seña recibida</span><strong>{money(order.advance)}</strong></div><div><span>{bill.balance < 0 ? 'Saldo a favor' : 'Saldo pendiente'}</span><strong>{!bill.total && order.rejectedCharge === null ? '—' : money(Math.abs(bill.balance))}</strong></div></div>
           {order.rejectedCharge !== null && <p className="fp-finance-note">Presupuesto rechazado: {money(order.price)}. {bill.balance < 0 ? 'El saldo a favor debe resolverse con el cliente; no se registró una devolución.' : 'El importe de retiro fue confirmado por recepción.'}</p>}
-        </>}
-        {section === 'notes' && <>
-          <div className="fp-section-heading"><h3>Notas del equipo</h3><span className="fp-muted">Visibles para taller y recepción</span></div>
+      </section>}
+      <div className="fp-supporting">
+        <details className="fp-disclosure fp-notes-details">
+          <summary><StickyNote size={16} />Notas<span className="fp-count">{order.notes.length}</span>{draft.note.trim() && <span className="fp-draft-indicator">Borrador</span>}<ChevronDown size={15} /></summary>
+          <div className="fp-section-content">
           {order.notes.length ? <ul className="fp-notes">{order.notes.map((note) => <li key={note.id}><p>{note.text}</p><span>{note.by} · {date(note.at)}</span></li>)}</ul> : <div className="fp-inline-empty"><MessageSquare size={24} /><p>Dejá acá las observaciones para la próxima persona que trabaje con este equipo.</p></div>}
           {canNote && <form onSubmit={(e) => { e.preventDefault(); onAction('note', { text: draft.note }) }}><label htmlFor="new-note">Nueva nota</label><textarea id="new-note" rows={3} value={draft.note} onChange={(e) => setDraft({ note: e.target.value })} placeholder="Una observación útil para continuar el trabajo…" /><button className="fp-button secondary" type="submit" disabled={!draft.note.trim()}><Save size={15} />Guardar nota</button></form>}
-        </>}
-        {section === 'parts' && <>
-          <div className="fp-section-heading"><h3>Repuestos del equipo</h3><span className="fp-muted">Pedido y llegada: recepción</span></div>
+          </div>
+        </details>
+        <details className="fp-disclosure fp-parts-details" open={!technical && receptionQueue(order) === 'repuestos' ? true : undefined}>
+          <summary><Package size={16} />Repuestos<span className="fp-count">{order.parts.length}</span>{draft.partName.trim() && <span className="fp-draft-indicator">Borrador</span>}<ChevronDown size={15} /></summary>
+          <div className="fp-section-content">
           {order.parts.length ? <ul className="fp-parts">{order.parts.map((part) => <li key={part.id}><div className="fp-part-icon"><Package size={19} /></div><div><strong>{part.name}</strong><span>Cantidad: {part.quantity} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Pedido · esperando llegada' : 'Recibido'}</span></div>{!technical && order.status === 'falta_repuestos' && part.status !== 'recibido' && <button className="fp-button secondary" onClick={() => onAction(part.status === 'necesario' ? 'partOrdered' : 'partArrived', { id: part.id })}>{part.status === 'necesario' ? 'Registrar pedido' : 'Registrar llegada'}</button>}{part.status === 'recibido' && <CheckCircle2 size={19} className="fp-green" />}</li>)}</ul> : <div className="fp-inline-empty"><Package size={25} /><p>Este equipo no tiene repuestos solicitados.</p></div>}
           {canRequest && <form className="fp-part-form" onSubmit={(e) => { e.preventDefault(); onAction('requestPart', { name: draft.partName, quantity: draft.partQuantity }) }}><h4>Solicitar un repuesto</h4><div className="fp-part-fields"><label>Repuesto<input value={draft.partName} onChange={(e) => setDraft({ partName: e.target.value })} placeholder="Ej.: módulo de pantalla Moto G84" /></label><label>Cantidad<input type="number" min="1" max="99" value={draft.partQuantity} onChange={(e) => setDraft({ partQuantity: e.target.value })} /></label></div><p className="fp-muted">El equipo quedará en espera y recepción verá el pedido.</p><button type="submit" className="fp-button secondary" disabled={!draft.partName.trim()}><Package size={15} />Solicitar y dejar en espera</button></form>}
-        </>}
-      </section>
-      {!technical && <section className="fp-contact"><div className="fp-avatar">{order.customer.split(' ').map((word) => word[0]).join('')}</div><div><strong>{order.customer}</strong><span><Phone size={13} />{order.phone} <small>Dato ficticio</small></span></div>{order.notified && <span className="fp-contacted"><CheckCheck size={15} />Avisado</span>}</section>}
-      <details className="fp-device-details"><summary>Datos de ingreso y acceso<ChevronDown size={15} /></summary><div className="fp-device-grid"><div><span>Accesorios</span><p>{order.accessories}</p></div><div><span>Estado al ingresar</span><p>{order.conditions}</p></div><div><span>Ingreso</span><p>{date(order.createdAt)}</p></div><div><span>Acceso del equipo</span><button className="fp-link" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={14} /> : <Eye size={14} />}{showAccess ? order.access : 'Ver acceso'}</button></div></div></details>
-      {showAccess && <p className="fp-access"><ShieldCheck size={15} />PIN de ejemplo: {order.access}. Ocultalo al terminar de consultarlo.</p>}
-      <details className="fp-history" open={historyOpen} onToggle={(e) => setHistoryOpen(e.currentTarget.open)} ref={historyRef}><summary><History size={15} />Historial de la orden<span>{order.history.length}</span><ChevronDown size={15} /></summary><ol>{[...order.history].reverse().map((event, i) => <li key={`${event.at}-${i}`}><span className="fp-history-dot" /><div><p>{event.text}</p><span>{event.by} · {date(event.at)}</span></div></li>)}</ol></details>
+          </div>
+        </details>
+        <details className="fp-disclosure fp-history"><summary><History size={16} />Historial<span className="fp-count">{order.history.length}</span><ChevronDown size={15} /></summary><ol>{[...order.history].reverse().map((event, i) => <li key={`${event.at}-${i}`}><div><p>{event.text}</p><span>{event.by} · {date(event.at)}</span></div></li>)}</ol></details>
+        <details className="fp-disclosure fp-device-details"><summary>Datos de ingreso<ChevronDown size={15} /></summary><div className="fp-device-grid"><div><span>Accesorios</span><p>{order.accessories}</p></div><div><span>Estado al ingresar</span><p>{order.conditions}</p></div><div><span>Ingreso</span><p>{date(order.createdAt)}</p></div><div><span>Técnico</span><p>{order.assignedTo ? own ? 'Juan Pérez' : 'Diego Molina' : 'Sin asignar'}</p></div></div></details>
+      </div>
     </div>
-    <footer className="fp-action-dock"><div className="fp-action-context"><span className={blocked ? 'fp-blocked' : ''}>{context}</span></div><div className="fp-dock-buttons">
+    <footer className="fp-action-dock">{context && <p className={`fp-action-context ${blocked ? 'fp-blocked' : ''}`}>{context}</p>}<div className="fp-dock-buttons">
       {actionForm && <button className="fp-button secondary" onClick={() => { setActionForm(null); setResponse('') }}>Cancelar</button>}
-      {!actionForm && canWork && <button className="fp-button secondary" onClick={() => onAction('saveWork', { diagnosis: draft.diagnosis, work: draft.work })} disabled={!workDirty}><Save size={16} />Guardar</button>}
+      {!actionForm && canWork && workDirty && <button className="fp-button secondary" onClick={() => onAction('saveWork', { diagnosis: draft.diagnosis, work: draft.work })}><Save size={16} />Guardar cambios</button>}
       {primaryLabel && <button className="fp-button primary" onClick={runPrimary} disabled={!!blocked}>{actionForm === 'pickup' || action?.id === 'finish' ? <Check size={17} /> : <ArrowRight size={17} />}{primaryLabel}</button>}
       {!primaryLabel && <span className="fp-no-action"><Clock3 size={15} />{order.status === 'entregado' ? 'Orden cerrada' : 'Sin acciones pendientes para vos'}</span>}
     </div></footer>
@@ -246,12 +208,9 @@ export default function FlowPreview() {
         <header className="fp-page-heading"><div><p>Órdenes de servicio <ChevronRight size={12} />{role === 'tecnico' ? 'Taller' : 'Recepción'}</p><h1>{role === 'tecnico' ? 'Mesa de trabajo' : 'Pendientes de recepción'}</h1><span>{role === 'tecnico' ? 'Elegí un equipo, continuá el trabajo y dejá claro el próximo paso.' : 'Presupuestos, respuestas y retiros. Cada pendiente, en su lugar.'}</span></div><div className="fp-role-switch" role="group" aria-label="Cambiar vista de demostración"><button aria-pressed={role === 'tecnico'} onClick={() => changeRole('tecnico')}><Wrench size={15} />Taller</button><button aria-pressed={role === 'recepcion'} onClick={() => changeRole('recepcion')}><ClipboardList size={15} />Recepción</button></div></header>
         <div className={`fp-workspace ${mobileDetail ? 'fp-show-detail' : ''}`}>
           <section className="fp-queue" aria-label="Cola de equipos"><div className="fp-queue-tools"><div className="fp-queue-title"><h2>{role === 'tecnico' ? 'Equipos del taller' : 'Por hacer'}</h2><span>{list.length} equipo{list.length !== 1 ? 's' : ''}</span></div><label className="fp-search"><Search size={17} /><input aria-label="Buscar equipo" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="N.º, equipo o cliente" />{search && <button aria-label="Limpiar búsqueda" onClick={() => setSearch('')}>×</button>}</label><div className="fp-queue-filters" role="group" aria-label="Filtrar cola">{viewOptions.map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => changeView(key)}>{label}<span>{queueOrders(orders, role, key).length}</span></button>)}</div></div>
-            <div className="fp-queue-list" ref={queueRef}>{list.length ? list.map((item, index) => {
-              const waiting = waitingFor(item)
-              return <button key={item.id} data-order={item.number} className={`fp-queue-row ${selectedId === item.id ? 'selected' : ''}`} aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => openOrder(item.id)} onKeyDown={(event) => onQueueKey(event, index)}>
-                <div className="fp-row-top"><span>{item.number}</span><span><Clock3 size={11} />{age(item.statusSince)}</span></div><div className="fp-row-device"><DeviceIcon type={item.deviceType} size={19} /><strong>{item.brand} {item.model}</strong><ChevronRight size={14} /></div><p>{item.issue}</p><div className="fp-row-bottom"><Status order={item} />{waiting ? <span className={waiting.ready ? 'fp-green' : ''}>{waiting.ready ? 'Podés continuar' : waiting.owner}</span> : <span>{item.customer.split(' ')[0]}</span>}</div>
-              </button>
-            }) : <div className="fp-empty"><Inbox size={30} /><h3>{search ? 'Sin coincidencias' : 'Todo al día en esta cola'}</h3><p>{search ? 'Probá otro número, equipo o nombre.' : role === 'tecnico' ? 'Podés buscar un equipo en Sin asignar o consultar Todo el taller.' : 'Elegí otra tarea para continuar.'}</p></div>}</div>
+            <div className="fp-queue-list" ref={queueRef}>{list.length ? list.map((item, index) => <button key={item.id} data-order={item.number} className={`fp-queue-row ${selectedId === item.id ? 'selected' : ''}`} aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => openOrder(item.id)} onKeyDown={(event) => onQueueKey(event, index)}>
+                <div className="fp-row-top"><span>{item.number}</span><Status order={item} /></div><div className="fp-row-device"><DeviceIcon type={item.deviceType} size={18} /><strong>{item.brand} {item.model}</strong><ChevronRight size={14} /></div><p>{item.issue}</p>
+              </button>) : <div className="fp-empty"><Inbox size={30} /><h3>{search ? 'Sin coincidencias' : 'Todo al día en esta cola'}</h3><p>{search ? 'Probá otro número, equipo o nombre.' : role === 'tecnico' ? 'Podés buscar un equipo en Sin asignar o consultar Todo el taller.' : 'Elegí otra tarea para continuar.'}</p></div>}</div>
             <div className="fp-queue-footer"><span className="fp-live-dot" />{role === 'tecnico' ? 'Para continuar primero · mayor espera después' : 'Ordenados por tiempo de espera'}</div>
           </section>
           {order ? <OrderWorkspace key={`${generation}-${order.id}-${role}`} order={order} role={role} draft={draft} setDraft={(fields) => setDrafts((previous) => ({ ...previous, [order.id]: { ...previous[order.id], ...fields } }))} onAction={mutate} outsideQueue={!list.some((item) => item.id === order.id)} onBack={() => setMobileDetail(false)} /> : <div className="fp-order fp-empty fp-select-empty"><ClipboardList size={36} /><h2>Elegí un equipo de la cola</h2><p>Acá vas a ver el trabajo, sus notas y la próxima acción.</p><button className="fp-button secondary fp-back" onClick={() => setMobileDetail(false)}><ArrowLeft size={15} />Volver a la cola</button></div>}

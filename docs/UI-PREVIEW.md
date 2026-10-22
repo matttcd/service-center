@@ -25,7 +25,9 @@ La entrada está habilitada únicamente en desarrollo y no se incluye en la comp
 
 Taller y Recepción pueden alternarse desde la navegación o el selector superior. Se conserva el equipo seleccionado al pasar de un rol al otro cuando hay una tarea correspondiente. Cambiar de cola selecciona un equipo de esa cola; avanzar conserva la ficha aunque deje de coincidir con el filtro.
 
-En escritorio se ven cola y ficha juntas; debajo de 1200 px se recorre lista → ficha → Volver a la cola. Las flechas recorren las filas y las pestañas de información; Enter abre el equipo. Los borradores son independientes por orden.
+La ficha prioriza equipo y cliente (incluido teléfono y acceso oculto), falla informada siempre visible y trabajo a realizar. Durante la revisión se completa el diagnóstico junto al trabajo; después queda en un desplegable. Los importes aparecen solamente en Recepción. Las esperas por repuestos se muestran junto al trabajo; notas, repuestos, historial y datos de ingreso se consultan en desplegables. «Guardar cambios» aparece cuando el trabajo o diagnóstico tienen modificaciones.
+
+En escritorio se ven cola y ficha juntas; debajo de 1200 px se recorre lista → ficha → Volver a la cola. Las flechas recorren las filas; Enter abre el equipo. Tab recorre los controles y Enter o Espacio abre los desplegables. Los borradores son independientes por orden y se conservan al cerrar sus secciones o cambiar de equipo.
 
 ## Validación
 
