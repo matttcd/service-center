@@ -25,7 +25,9 @@ La entrada está habilitada únicamente en desarrollo y no se incluye en la comp
 
 Taller y Recepción pueden alternarse desde la navegación o el selector superior. Se conserva el equipo seleccionado al pasar de un rol al otro cuando hay una tarea correspondiente. Cambiar de cola selecciona un equipo de esa cola; avanzar conserva la ficha aunque deje de coincidir con el filtro.
 
-La ficha prioriza equipo y cliente (incluido teléfono y acceso oculto), falla informada siempre visible y trabajo a realizar. Durante la revisión se completa el diagnóstico junto al trabajo; después queda en un desplegable. Los importes aparecen solamente en Recepción. Las esperas por repuestos se muestran junto al trabajo; notas, repuestos, historial y datos de ingreso se consultan en desplegables. «Guardar cambios» aparece cuando el trabajo o diagnóstico tienen modificaciones.
+En Taller la ficha muestra desde que se elige el equipo: cliente, teléfono, PIN / contraseña, patrón si tiene, estado físico, accesorios, falla, diagnóstico actual y trabajo. Diagnóstico y trabajo se leen completos, sin desplegables; «Editar» permite modificarlos y «Guardar cambios» vuelve a la consulta. Al iniciar una revisión sin diagnóstico ni trabajo, los campos se abren para completarlos. Las esperas por repuestos se muestran junto al trabajo; notas, repuestos e historial se consultan en desplegables. El Moto G84 incluye un patrón ficticio para revisar su visualización.
+
+Los importes aparecen solamente en Recepción, donde se conservan la consulta del diagnóstico y los datos de ingreso en desplegables y el botón para mostrar el acceso.
 
 En escritorio se ven cola y ficha juntas; debajo de 1200 px se recorre lista → ficha → Volver a la cola. Las flechas recorren las filas; Enter abre el equipo. Tab recorre los controles y Enter o Espacio abre los desplegables. Los borradores son independientes por orden y se conservan al cerrar sus secciones o cambiar de equipo.
 
