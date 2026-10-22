@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:ui": "vite --host 127.0.0.1 --port 5175 --strictPort",
     "dev:server": "cd server && cross-env PORT=4000 node index.js",
     "build": "vite build",
     "build:windows": "node scripts/windows/build.mjs",
