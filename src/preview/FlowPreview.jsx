@@ -3,7 +3,7 @@ import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, ChevronRight,
   ClipboardList, Clock3, Eye, EyeOff, FlaskConical, History, Inbox, MessageSquare,
   Package, Pencil, Phone, RotateCcw, Save, Search, ShieldCheck, Smartphone,
-  StickyNote, UserRound, Wrench, Laptop, Monitor, Gamepad2, Moon, Sun,
+  StickyNote, UserRound, Wrench, Laptop, Monitor, Gamepad2, Moon, Sun, KeyRound, Grid3X3, Cable,
 } from 'lucide-react'
 import { useNotify } from '../context/notifications.js'
 import { PatternPreview } from '../components/PatternPad.jsx'
@@ -116,12 +116,12 @@ function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, 
     </header>
     {technical && <aside className="fp-reference" aria-label="Referencia del equipo">
       <h3>Referencia</h3>
-      <div className="fp-reference-client"><span>Cliente</span><p>{order.customer}</p><p className="fp-reference-phone"><Phone size={14} />{order.phone}</p></div>
+      <div className="fp-reference-client"><span><UserRound size={16} aria-hidden="true" />Cliente</span><p>{order.customer}</p><p className="fp-reference-phone"><Phone size={16} aria-hidden="true" />{order.phone}</p></div>
       <dl className="fp-equipment-facts">
-        <div><dt>Contraseña o PIN</dt><dd>{order.access || 'Sin contraseña informada'}</dd></div>
-        {order.pattern?.length > 0 && <div><dt>Patrón de desbloqueo</dt><dd><div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((point) => point + 1).join(', ')}`}><PatternPreview value={order.pattern} size={112} /></div></dd></div>}
-        <div><dt>Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div>
-        <div><dt>Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
+        <div><dt><KeyRound size={16} aria-hidden="true" />Contraseña o PIN</dt><dd>{order.access || 'Sin contraseña informada'}</dd></div>
+        {order.pattern?.length > 0 && <div><dt><Grid3X3 size={16} aria-hidden="true" />Patrón de desbloqueo</dt><dd><div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((point) => point + 1).join(', ')}`}><PatternPreview value={order.pattern} size={112} /></div></dd></div>}
+        <div><dt><Smartphone size={16} aria-hidden="true" />Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div>
+        <div><dt><Cable size={16} aria-hidden="true" />Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
       </dl>
     </aside>}
     <div className="fp-order-body" ref={bodyRef}>
