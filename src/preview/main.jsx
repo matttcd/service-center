@@ -6,6 +6,7 @@ import './flow-preview.css'
 
 // Esta entrada evita montar AuthProvider/DataProvider, incluso si hay una sesión real.
 if (import.meta.env.DEV) {
+  document.body.classList.add('fp-preview')
   import('./FlowPreview.jsx').then(({ default: FlowPreview }) => {
     createRoot(document.getElementById('root')).render(
       <StrictMode><NotificationProvider><FlowPreview /></NotificationProvider></StrictMode>,
