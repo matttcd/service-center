@@ -25,11 +25,11 @@ La entrada está habilitada únicamente en desarrollo y no se incluye en la comp
 
 Taller y Recepción pueden alternarse desde la navegación o el selector superior. Se conserva el equipo seleccionado al pasar de un rol al otro cuando hay una tarea correspondiente. Cambiar de cola selecciona un equipo de esa cola; avanzar conserva la ficha aunque deje de coincidir con el filtro.
 
-En Taller la ficha muestra desde que se elige el equipo: cliente, teléfono, PIN / contraseña, patrón si tiene, estado físico, accesorios, falla, diagnóstico actual y trabajo. Diagnóstico y trabajo se leen completos, sin desplegables; «Editar» permite modificarlos y «Guardar cambios» vuelve a la consulta. Al iniciar una revisión sin diagnóstico ni trabajo, los campos se abren para completarlos. Las esperas por repuestos se muestran junto al trabajo; notas, repuestos e historial se consultan en desplegables. El Moto G84 incluye un patrón ficticio para revisar su visualización.
+En Taller se usa la variante con cola angosta (240 px), trabajo en el centro y referencia lateral (240 px). La referencia contiene cliente, teléfono, PIN / contraseña, patrón si tiene, estado físico y accesorios, sin repetirlos en la ficha. Permanece visible al editar o consultar notas y repuestos. Falla, diagnóstico actual y trabajo se leen completos y apilados en el centro; «Editar» permite modificarlos y «Guardar cambios» vuelve a la consulta. Al iniciar una revisión sin diagnóstico ni trabajo, los campos se abren para completarlos. Las esperas por repuestos se muestran junto al trabajo; notas, repuestos e historial se consultan en desplegables. El Moto G84 incluye un patrón ficticio para revisar su visualización.
 
 Los importes aparecen solamente en Recepción, donde se conservan la consulta del diagnóstico y los datos de ingreso en desplegables y el botón para mostrar el acceso.
 
-En escritorio se ven cola y ficha juntas; debajo de 1200 px se recorre lista → ficha → Volver a la cola. Las flechas recorren las filas; Enter abre el equipo. Tab recorre los controles y Enter o Espacio abre los desplegables. Los borradores son independientes por orden y se conservan al cerrar sus secciones o cambiar de equipo.
+En escritorio se ven cola, trabajo y referencia juntos; debajo de 1200 px se recorre lista → ficha → Volver a la cola, manteniendo trabajo y referencia juntos. En móvil, Taller apila referencia y trabajo sin colapsarlos, con desplazamiento vertical de la página. Las flechas recorren las filas; Enter abre el equipo. Tab recorre los controles y Enter o Espacio abre los desplegables. Los borradores son independientes por orden y se conservan al cerrar sus secciones o cambiar de equipo.
 
 ## Validación
 

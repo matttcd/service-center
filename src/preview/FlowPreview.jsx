@@ -83,12 +83,21 @@ function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, 
       <button className="fp-back fp-link" onClick={onBack}><ArrowLeft size={16} /> Volver a la cola</button>
       <div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} /></div>
       <h2>{order.brand} {order.model}</h2>
-      <div className="fp-order-meta"><span><UserRound size={16} />{order.customer}</span><span><Phone size={16} />{order.phone}</span></div>
-      {technical ? <div className={`fp-equipment ${order.pattern?.length ? 'fp-with-pattern' : ''}`}>
-        <dl className="fp-equipment-facts"><div><dt>PIN / contraseña</dt><dd>{order.access || 'No proporcionado'}</dd></div><div><dt>Estado del equipo</dt><dd>{order.conditions || 'Sin registrar'}</dd></div><div><dt>Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div></dl>
-        {order.pattern?.length > 0 && <div className="fp-pattern" role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((point) => point + 1).join(', ')}`}><span>Patrón de desbloqueo</span><PatternPreview value={order.pattern} size={96} /></div>}
-      </div> : <div className="fp-access"><span>Acceso del equipo</span><button className="fp-link" aria-expanded={showAccess} aria-controls="device-access" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={16} /> : <Eye size={16} />}{showAccess ? 'Ocultar contraseña' : 'Mostrar contraseña'}</button><strong id="device-access" hidden={!showAccess}>{showAccess ? order.access : ''}</strong></div>}
+      {!technical && <>
+        <div className="fp-order-meta"><span><UserRound size={16} />{order.customer}</span><span><Phone size={16} />{order.phone}</span></div>
+        <div className="fp-access"><span>Acceso del equipo</span><button className="fp-link" aria-expanded={showAccess} aria-controls="device-access" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={16} /> : <Eye size={16} />}{showAccess ? 'Ocultar contraseña' : 'Mostrar contraseña'}</button><strong id="device-access" hidden={!showAccess}>{showAccess ? order.access : ''}</strong></div>
+      </>}
     </header>
+    {technical && <aside className="fp-reference" aria-label="Referencia del equipo">
+      <h3>Referencia</h3>
+      <div className="fp-reference-client"><span>Cliente</span><p>{order.customer}</p><p className="fp-reference-phone"><Phone size={14} />{order.phone}</p></div>
+      <dl className="fp-equipment-facts">
+        <div><dt>PIN / contraseña</dt><dd>{order.access || 'No proporcionado'}</dd></div>
+        {order.pattern?.length > 0 && <div><dt>Patrón de desbloqueo</dt><dd><div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((point) => point + 1).join(', ')}`}><PatternPreview value={order.pattern} size={112} /></div></dd></div>}
+        <div><dt>Estado del equipo</dt><dd>{order.conditions || 'Sin registrar'}</dd></div>
+        <div><dt>Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
+      </dl>
+    </aside>}
     <div className="fp-order-body" ref={bodyRef}>
       {actionForm === 'response' && <section className="fp-action-form" aria-label="Respuesta del cliente">
         <h3>¿Qué respondió el cliente?</h3><p>Presupuesto comunicado: <strong>{money(order.price)}</strong></p>
@@ -215,7 +224,7 @@ export default function FlowPreview() {
       <aside className="fp-sidebar"><div className="fp-brand"><img src={logo} alt="" /><div><strong>El Gringo</strong><span>Service Center</span></div></div><div className="fp-navigation"><span>Espacios de trabajo</span><button className={role === 'tecnico' ? 'active' : ''} onClick={() => changeRole('tecnico')}><Wrench size={18} />Taller<ChevronRight size={15} /></button><button className={role === 'recepcion' ? 'active' : ''} onClick={() => changeRole('recepcion')}><ClipboardList size={18} />Recepción<ChevronRight size={15} /></button></div><div className="fp-sidebar-note"><ShieldCheck size={18} /><p>Estás explorando el nuevo flujo con equipos de ejemplo.</p></div><div className="fp-person"><span className="fp-avatar">{role === 'tecnico' ? 'JP' : 'SM'}</span><div><strong>{role === 'tecnico' ? 'Juan Pérez' : 'Sofía Martín'}</strong><span>{role === 'tecnico' ? 'Técnico de taller' : 'Recepción'}</span></div></div></aside>
       <main className="fp-main">
         <header className="fp-page-heading"><div><p>Órdenes de servicio <ChevronRight size={12} />{role === 'tecnico' ? 'Taller' : 'Recepción'}</p><h1>{role === 'tecnico' ? 'Mesa de trabajo' : 'Pendientes de recepción'}</h1><span>{role === 'tecnico' ? 'Elegí un equipo, continuá el trabajo y dejá claro el próximo paso.' : 'Presupuestos, respuestas y retiros. Cada pendiente, en su lugar.'}</span></div><div className="fp-role-switch" role="group" aria-label="Cambiar vista de demostración"><button aria-pressed={role === 'tecnico'} onClick={() => changeRole('tecnico')}><Wrench size={15} />Taller</button><button aria-pressed={role === 'recepcion'} onClick={() => changeRole('recepcion')}><ClipboardList size={15} />Recepción</button></div></header>
-        <div className={`fp-workspace ${mobileDetail ? 'fp-show-detail' : ''}`}>
+        <div className={`fp-workspace ${role === 'tecnico' ? 'fp-workspace-technical' : ''} ${mobileDetail ? 'fp-show-detail' : ''}`}>
           <section className="fp-queue" aria-label="Cola de equipos"><div className="fp-queue-tools"><div className="fp-queue-title"><h2>{role === 'tecnico' ? 'Equipos del taller' : 'Por hacer'}</h2><span>{list.length} equipo{list.length !== 1 ? 's' : ''}</span></div><label className="fp-search"><Search size={17} /><input aria-label="Buscar equipo" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="N.º, equipo o cliente" />{search && <button aria-label="Limpiar búsqueda" onClick={() => setSearch('')}>×</button>}</label><div className="fp-queue-filters" role="group" aria-label="Filtrar cola">{viewOptions.map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => changeView(key)}>{label}<span>{queueOrders(orders, role, key).length}</span></button>)}</div></div>
             <div className="fp-queue-list" ref={queueRef}>{list.length ? list.map((item, index) => <button key={item.id} data-order={item.number} className={`fp-queue-row ${selectedId === item.id ? 'selected' : ''}`} aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => openOrder(item.id)} onKeyDown={(event) => onQueueKey(event, index)}>
                 <div className="fp-row-top"><span>{item.number}</span><Status order={item} /></div><div className="fp-row-device"><DeviceIcon type={item.deviceType} size={18} /><strong>{item.brand} {item.model}</strong><ChevronRight size={14} /></div><p>{item.issue}</p>
