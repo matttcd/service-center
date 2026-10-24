@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Activity, Archive, ArrowLeft, ChevronRight, ClipboardList, DatabaseBackup, FlaskConical, Inbox, LayoutDashboard, LogIn, Menu, Moon, Plus, RotateCcw, Settings, Shield, Sun, Trash2, TrendingUp, Users, Wrench, X } from 'lucide-react'
+import { Activity, Archive, ArrowLeft, ChevronRight, ClipboardList, Calculator, Bell, MessageSquare, Package, PackageCheck, Truck, DatabaseBackup, FlaskConical, Inbox, LayoutDashboard, LogIn, Menu, Moon, Plus, RotateCcw, Settings, Shield, Sun, Trash2, TrendingUp, Users, Wrench, X } from 'lucide-react'
 import { useNotify } from '../context/notifications.js'
 import logo from '../assets/gringologo-modified.png'
 import ProfileMenu from './ProfileMenu.jsx'
@@ -12,6 +12,7 @@ import { ActivityPage, BackupsPage, ClientsPage, Empty, OrdersTable, SearchBox, 
 
 const ICONS = { '/resumen': LayoutDashboard, '/recepcion': ClipboardList, '/taller': Wrench, '/terminados': Archive, '/ordenes': Inbox, '/clientes': Users, '/actividad': Activity, '/metricas': TrendingUp, '/usuarios': Shield, '/copias': DatabaseBackup, '/papelera': Trash2, '/configuracion': Settings }
 const TITLES = { ...Object.fromEntries(NAVIGATION.flatMap((g) => g.items.map(([url, name]) => [url.slice(1), name]))), ajustes: 'Ajustes' }
+const RECEPTION_ICONS = { presupuestar: Calculator, avisar: Bell, respuesta: MessageSquare, repuestos: Package, retiros: PackageCheck, externos: Truck, simples: Wrench }
 const defaultDraft = (o, fee) => ({ diagnosis: o.diagnosis, work: o.work, price: o.price || '', charge: String(fee ?? REVIEW_FEE), note: '', partName: '', partQuantity: '1' })
 
 export default function FlowPreview() {
@@ -97,10 +98,19 @@ export default function FlowPreview() {
     const target = e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : Math.max(0, Math.min(list.length - 1, index + (e.key === 'ArrowDown' ? 1 : -1)))
     queueRef.current?.querySelectorAll('.fp-queue-row')[target]?.focus()
   }
+  const receptionTabKey = (event, index) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const target = event.key === 'Home' ? 0 : event.key === 'End' ? RECEPTION_VIEWS.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + RECEPTION_VIEWS.length) % RECEPTION_VIEWS.length
+    const key = RECEPTION_VIEWS[target][0]
+    if (key !== view) changeView(key)
+    event.currentTarget.closest('[role="tablist"]').querySelectorAll('[role="tab"]')[target].focus()
+  }
   const pageContent = () => {
     if (isQueue) return <div className={page === 'recepcion' ? 'fp-reception-page' : undefined}>
-      {page === 'recepcion' && <div className="fp-reception-filters" role="group" aria-label="Filtrar pendientes de recepción">{RECEPTION_VIEWS.map(([key, label]) => <button key={key} data-pending={key} aria-pressed={view === key} onClick={() => changeView(key)}>{key === 'simples' ? 'Simples' : label}<span>{queueOrders(orders, queueRole, key).length}</span></button>)}</div>}
-      <div className={`fp-workspace ${page === 'taller' ? 'fp-workspace-technical' : ''} ${queue.detail ? 'fp-show-detail' : ''}`}>
+      {page === 'recepcion' && <div className="fp-reception-filters" role="tablist" aria-label="Pendientes de recepción">{RECEPTION_VIEWS.map(([key, label], index) => { const Icon = RECEPTION_ICONS[key]; return <button key={key} id={`reception-tab-${key}`} role="tab" data-pending={key} aria-selected={view === key} aria-controls={`reception-panel-${key}`} tabIndex={view === key ? 0 : -1} onClick={() => { if (view !== key) changeView(key) }} onKeyDown={(event) => receptionTabKey(event, index)}><Icon size={16} aria-hidden="true" />{key === 'simples' ? 'Simples' : label}<span>{queueOrders(orders, queueRole, key).length}</span></button> })}</div>}
+      {page === 'recepcion' && RECEPTION_VIEWS.filter(([key]) => key !== view).map(([key]) => <div key={key} role="tabpanel" id={`reception-panel-${key}`} aria-labelledby={`reception-tab-${key}`} hidden />)}
+      <div role={page === 'recepcion' ? 'tabpanel' : undefined} id={page === 'recepcion' ? `reception-panel-${view}` : undefined} aria-labelledby={page === 'recepcion' ? `reception-tab-${view}` : undefined} className={`fp-workspace ${page === 'taller' ? 'fp-workspace-technical' : ''} ${queue.detail ? 'fp-show-detail' : ''}`}>
       <section className="fp-queue" aria-label="Cola de equipos"><div className="fp-queue-tools"><div className="fp-queue-title"><h2>{page === 'taller' ? 'Equipos del taller' : 'Por hacer'}</h2><span>{list.length} equipos</span></div><SearchBox label="Buscar equipo" value={queue.search} onChange={(search) => patchQueue({ search })} placeholder="N.º, equipo o cliente" />{page === 'taller' && <div className="fp-queue-filters" role="group" aria-label="Filtrar cola">{TECH_VIEWS.map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => changeView(key)}>{label}<span>{queueOrders(orders, queueRole, key).length}</span></button>)}</div>}</div>
       <div className="fp-queue-list" key={`${page}-${view}`} ref={(element) => { queueRef.current = element; if (element && Math.abs(element.scrollTop - (queue.scroll || 0)) > 2) element.scrollTop = queue.scroll || 0 }} onScroll={(e) => patchQueue({ scroll: e.currentTarget.scrollTop })}>{list.length ? list.map((item, index) => <button key={item.id} data-order={item.number} className={`fp-queue-row ${queue.selected === item.id ? 'selected' : ''}`} aria-current={queue.selected === item.id ? 'true' : undefined} onClick={() => patchQueue({ selected: item.id, detail: true })} onKeyDown={(e) => queueKey(e, index)}><div className="fp-row-device"><DeviceIcon type={item.deviceType} size={18} /><div className="fp-row-name"><strong>{item.brand} {item.model}</strong>{page === 'taller' && workAge(item, now) && <span className="fp-work-age">· {workAge(item, now)}</span>}</div><Status order={item} /></div><div className="fp-row-bottom"><p className="fp-row-issue">{item.issue}</p><ChevronRight size={14} /></div></button>) : <Empty text={queue.search ? 'Sin coincidencias' : 'Sin equipos'} />}</div></section>{renderOrder()}</div></div>
     if (page === 'ordenes' && id) return <><button className="fp-link fp-detail-back" onClick={() => navigate(location.state?.from || '/ordenes')}><ArrowLeft size={16} />Volver al listado</button><div className="fp-standalone-order">{renderOrder()}</div></>

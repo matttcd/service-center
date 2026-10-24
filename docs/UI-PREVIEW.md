@@ -80,3 +80,6 @@ Las pruebas de dominio cubren estado compartido, entradas inválidas, visibilida
 
 
 Recepción muestra las siete tareas y sus cantidades en una barra que ocupa el ancho de la cola y la ficha. En escritorio y notebook se distribuyen en una fila; en móvil se acomodan en varias filas sin ocultar opciones. La barra permanece al abrir la ficha y muestra también los pendientes con cantidad cero. El botón de usuario del lateral (o el icono en móvil) abre la lista para cambiar de perfil. Ajustes, junto a Salir, permite editar el perfil y simular el cambio de contraseña para cualquier rol; estas acciones ya no aparecen directamente debajo del usuario.
+
+
+Las tareas de Recepción funcionan como pestañas con icono y cantidad, integradas en el mismo panel que la cola y la ficha, con un divisor interno. Tab entra por la pestaña seleccionada; las flechas izquierda/derecha cambian de tarea y Home/End van a la primera/última. Volver a pulsar la pestaña activa conserva la ficha abierta. Los borradores y la búsqueda se conservan al cambiar de tarea.
