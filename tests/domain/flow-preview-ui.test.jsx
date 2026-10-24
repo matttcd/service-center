@@ -27,6 +27,14 @@ describe('Ficha de consulta del taller', () => {
     expect(html).toContain('Falla informada · Recepción')
     expect(html).toContain('Diagnóstico · Técnico')
     expect(html).toContain('Actualizado por Juan · Técnico')
+    const header = html.match(/<header class="fp-order-header"[\s\S]*?<\/header>/)[0]
+    const technical = html.match(/<section class="fp-work"[\s\S]*?<\/section>/)[0]
+    expect(header).not.toContain('Editar')
+    expect(technical).toMatch(/<button\b[^>]*>[\s\S]*?Editar<\/button>/)
+    expect(html).not.toContain('Guardar cambios')
+    expect(html).not.toContain('Se guardará el diagnóstico')
+    expect(html).not.toContain('Estás explorando el nuevo flujo')
+    expect(html).not.toContain('Elegí un equipo, continuá el trabajo')
   })
   it('inicia según el tema del sistema sin necesitar la preferencia de producción', () => {
     vi.stubGlobal('window', { matchMedia: (query) => ({ matches: query === '(prefers-color-scheme: dark)' }) })
