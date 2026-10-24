@@ -37,12 +37,16 @@ describe('Ficha de consulta del taller', () => {
     expect(html).not.toContain('Estás explorando el nuevo flujo')
     expect(html).not.toContain('Elegí un equipo, continuá el trabajo')
   })
-  it('compacta los pendientes de recepción y mantiene contraseña en Ajustes', () => {
+  it('muestra todos los pendientes sobre la cola y la ficha y mantiene contraseña en Ajustes', () => {
     const render = (path) => renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><MemoryRouter initialEntries={[path]}><FlowPreview /></MemoryRouter></NotificationContext.Provider>)
     const reception = render('/recepcion')
     expect(reception).toContain('aria-label="Filtrar pendientes de recepción"')
-    expect(reception).toContain('value="externos"')
-    expect(reception).toContain('value="simples"')
+    const filters = reception.match(/<div class="fp-reception-filters"[\s\S]*?<\/div>/)[0]
+    for (const task of ['presupuestar', 'avisar', 'respuesta', 'repuestos', 'retiros', 'externos', 'simples']) expect(filters).toContain(`data-pending="${task}"`)
+    expect(filters.match(/<button/g)).toHaveLength(7)
+    expect(filters).toContain('aria-pressed="true"')
+    expect(reception.indexOf('fp-reception-filters')).toBeLessThan(reception.indexOf('aria-label="Cola de equipos"'))
+    expect(reception).not.toContain('fp-queue-task')
     expect(reception).not.toContain('aria-label="Filtrar cola"')
     expect(reception).toContain('aria-label="Cambiar de perfil"')
     expect(reception).not.toContain('Cambiar contraseña')
