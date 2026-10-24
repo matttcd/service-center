@@ -83,10 +83,11 @@ body.fp-preview {
 .fp-queue-row.selected { background: var(--fp-selection); border-left-color: var(--fp-blue-text); }
 .fp-row-device { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .fp-row-device > svg:first-child { color: var(--fp-muted); }
-.fp-row-device > svg:last-child { margin-left: auto; color: var(--fp-muted); }
 .fp-row-device strong { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 400; }
 .fp-row-device .fp-status { flex-shrink: 0; }
-.fp-row-issue { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--fp-muted); font-size: 14px; }
+.fp-row-bottom { display: flex; align-items: center; gap: 8px; }
+.fp-row-bottom > svg { color: var(--fp-muted); }
+.fp-row-issue { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--fp-muted); font-size: 14px; }
 .fp-status { display: inline-flex; align-items: center; gap: 5px; font-size: 14px; padding: 3px 7px; font-weight: 400; border-radius: 5px; background: var(--fp-bg); color: var(--fp-ink); white-space: nowrap; }
 .fp-status > span { width: 5px; height: 5px; background: currentColor; border-radius: 50%; }
 .fp-status-blue { background: var(--fp-selection); color: var(--fp-blue-text); }
