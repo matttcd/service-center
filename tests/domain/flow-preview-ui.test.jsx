@@ -24,6 +24,9 @@ describe('Ficha de consulta del taller', () => {
     expect(html).toContain('aria-label="Herramientas de la orden"')
     expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(3)
     expect(html).not.toContain('<details')
+    expect(html).toContain('Falla informada · Recepción')
+    expect(html).toContain('Diagnóstico · Técnico')
+    expect(html).toContain('Actualizado por Juan · Técnico')
   })
   it('inicia según el tema del sistema sin necesitar la preferencia de producción', () => {
     vi.stubGlobal('window', { matchMedia: (query) => ({ matches: query === '(prefers-color-scheme: dark)' }) })

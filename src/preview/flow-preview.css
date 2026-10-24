@@ -132,7 +132,8 @@ body.fp-preview {
 .fp-access strong { color: var(--fp-ink); font-size: 14px; overflow-wrap: anywhere; }
 .fp-link { color: var(--fp-blue-text); font-size: 14px; min-height: 30px; }
 .fp-order-body { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px; scroll-padding: 20px; }
-.fp-issue { margin-bottom: 20px; }
+.fp-issue { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--fp-line); }
+.fp-preview .fp-work-origin { color: var(--fp-muted); margin-top: 6px; }
 .fp-issue h3 { color: var(--fp-ink); margin-bottom: 8px; font-weight: 700; }
 .fp-issue p, .fp-read-value { color: var(--fp-ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .fp-section-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -203,6 +204,7 @@ body.fp-preview {
 .fp-history { padding: 0; }
 .fp-history li { padding: 12px 0; }
 .fp-history li p { color: var(--fp-ink); }
+.fp-history-work { margin-top: 6px !important; white-space: pre-wrap; overflow-wrap: anywhere; }
 .fp-history li > span { display: block; font-size: 14px; color: var(--fp-muted); margin-top: 4px; }
 .fp-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; padding: 35px 23px; color: var(--fp-muted); min-height: 220px; }
 .fp-empty h3, .fp-empty h2 { font-size: 14px; font-weight: 700; color: var(--fp-ink); }

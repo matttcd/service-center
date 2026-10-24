@@ -25,6 +25,7 @@ export function createDemoOrders(now = Date.now()) {
     { number: 'OS1024', brand: 'Samsung', model: 'Galaxy A32', customer: 'Gabriel Paz', issue: 'No se escucha durante las llamadas.', status: 'terminado', days: 6, assignedTo: 'demo-diego', diagnosis: 'Auricular interno dañado.', work: 'Reemplazar auricular y comprobar llamadas.', price: 42000, advance: 10000 },
     { number: 'OS1020', brand: 'LG', model: 'Monitor 24MP', customer: 'Valeria Sol', deviceType: 'Monitor', issue: 'Imagen intermitente.', status: 'presupuesto_rechazado', days: 7, assignedTo: 'demo-diego', diagnosis: 'Falla de alimentación del panel.', work: 'Reemplazar placa de alimentación.', price: 30000, advance: 5000, rejectedCharge: 3500, notified: true },
     { number: 'OS1040', brand: 'Xiaomi', model: 'Redmi Note 13', customer: 'Mateo Gil', issue: 'La cámara no enfoca.', status: 'en_reparacion', days: 3, assignedTo: 'demo-diego', diagnosis: 'Módulo de cámara defectuoso.', work: 'Cambiar cámara y probar enfoque.', price: 49000 },
+    { number: 'OS1045', brand: 'Samsung', model: 'Galaxy A15', customer: 'Elena Castro', issue: 'Se cayó. La pantalla está rota y no da imagen.', status: 'presupuesto', days: 1, diagnosis: '', work: 'Cambiar módulo y probar imagen y táctil.', workAuthor: { name: 'Sofía', role: 'recepcion' }, price: 65000, advance: 20000, notified: true, confirmed: true },
   ]
   return seeds.map((seed, i) => {
     const createdAt = now - seed.days * day
@@ -32,9 +33,13 @@ export function createDemoOrders(now = Date.now()) {
       deviceType: 'Celular', assignedTo: TECHNICIAN, price: 0, advance: 0,
       notified: false, confirmed: false, rejectedCharge: null, parts: [], notes: [],
       ...seed, id: `demo-${seed.number}`, createdAt, statusSince: createdAt + 3600000,
+      workAuthor: seed.work ? seed.workAuthor || { name: seed.assignedTo === 'demo-diego' ? 'Diego' : 'Juan', role: 'tecnico' } : null,
       phone: `11 5555-${String(100 + i).padStart(4, '0')}`, access: '2580 (ejemplo)',
       accessories: 'Sin accesorios', conditions: 'Marcas de uso en carcasa',
-      history: [{ text: 'Equipo recibido por Sofía', by: 'Recepción', at: createdAt }],
+      history: [
+        { text: 'Equipo recibido por Sofía', by: 'Recepción', at: createdAt },
+        ...(seed.workAuthor?.role === 'recepcion' ? [{ text: 'Trabajo definido en recepción', work: seed.work, by: ROLE_NAMES.recepcion, at: createdAt }] : []),
+      ],
     }
   })
 }
@@ -179,6 +184,8 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
     if (payload.by === 'third') require(String(payload.name || '').trim() && /^\d{6,8}$/.test(String(payload.dni || '')), 'Ingresá nombre y DNI válido de quien retira.')
     next.pickup = payload; setStatus('entregado'); text = 'Entrega física registrada'
   } else throw new Error('Acción desconocida.')
-  next.history.push({ text, by: ROLE_NAMES[role], at: now })
+  const workChanged = next.work !== order.work
+  if (workChanged) next.workAuthor = next.work ? { name: role === 'tecnico' ? 'Juan' : 'Sofía', role } : null
+  next.history.push({ text, by: ROLE_NAMES[role], at: now, ...(workChanged ? { previousWork: order.work, work: next.work } : {}) })
   return next
 }

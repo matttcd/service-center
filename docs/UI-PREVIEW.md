@@ -16,6 +16,7 @@ La entrada está habilitada únicamente en desarrollo y no se incluye en la comp
 ## Recorridos para revisar
 
 - **Sin asignar:** tomar el iPhone 13, completar diagnóstico y trabajo propuesto, enviar a recepción.
+- **Reparación directa:** buscar OS1045 (Galaxy A15). Tiene un cambio de módulo definido en recepción por Sofía y presupuesto aprobado; se puede iniciar y finalizar sin completar un diagnóstico.
 - **Recepción:** el mismo equipo aparece para presupuestar. Guardar precio, registrar que se avisó al cliente y registrar su aprobación. Volver a Taller para iniciar la reparación.
 - **Repuestos:** durante una reparación, solicitar un repuesto desde la sección Repuestos. En Recepción registrar pedido y llegada. El técnico retoma explícitamente.
 - **Notas:** escribir una nota, cambiar de equipo y volver. El borrador se conserva; guardar agrega autor y fecha.
@@ -25,7 +26,9 @@ La entrada está habilitada únicamente en desarrollo y no se incluye en la comp
 
 Taller y Recepción pueden alternarse desde la navegación o el selector superior. Se conserva el equipo seleccionado al pasar de un rol al otro cuando hay una tarea correspondiente. Cambiar de cola selecciona un equipo de esa cola; avanzar conserva la ficha aunque deje de coincidir con el filtro.
 
-En Taller se usa la variante con cola de aproximadamente un tercio del espacio (mínimo 320 px), trabajo en el centro y referencia lateral (240 px). La referencia contiene cliente, teléfono, contraseña o PIN, patrón si tiene, estado físico y accesorios, sin repetirlos en la ficha. Falla, diagnóstico y trabajo se leen completos y apilados en el centro; «Editar» permite modificarlos y «Guardar cambios» vuelve a la consulta. Al iniciar una revisión sin diagnóstico ni trabajo, los campos se abren para completarlos. Las esperas por repuestos se muestran junto al trabajo. El Moto G84 incluye un patrón ficticio para revisar su visualización.
+En Taller se usa la variante con cola de aproximadamente un tercio del espacio (mínimo 320 px), trabajo en el centro y referencia lateral (240 px). La referencia contiene cliente, teléfono, contraseña o PIN, patrón si tiene, estado físico y accesorios, sin repetirlos en la ficha. Falla, diagnóstico y trabajo se leen completos y apilados en el centro. La falla informada por Recepción se consulta sin editar y está separada del bloque técnico. «Editar diagnóstico y trabajo» en el encabezado permite modificar esos dos campos y «Guardar cambios» vuelve a la consulta. Al iniciar una revisión sin diagnóstico ni trabajo, los campos se abren para completarlos. Las esperas por repuestos se muestran junto al trabajo. El Moto G84 incluye un patrón ficticio para revisar su visualización.
+
+El trabajo vigente muestra quién lo definió. Guardar solamente el diagnóstico conserva la autoría del trabajo; modificar el trabajo actualiza su autor y guarda el texto anterior, el nuevo, autor y fecha en Historial. Los borradores no cambian la autoría hasta guardarse. El ejemplo OS1045 permite comprobar el paso de un trabajo definido por Sofía en Recepción a uno actualizado por Juan en Taller. Esta procedencia es parte de los datos ficticios; no modifica las APIs ni el esquema real.
 
 Notas, Repuestos e Historial tienen botones con cantidades debajo del encabezado del equipo. Se abren en ventanas emergentes; al cerrarlas se conserva la posición de la ficha y los borradores. Escape cierra la ventana y devuelve el foco al botón que la abrió; Tab permanece dentro. Las notificaciones se muestran por encima de las ventanas.
 

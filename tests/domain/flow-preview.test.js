@@ -7,6 +7,36 @@ const fixture = (number) => createDemoOrders(1800000000000).find((order) => orde
 const counter = (order, action, payload) => applyDemoAction(order, action, payload, 'recepcion')
 
 describe('Vista previa del flujo: simulación aislada', () => {
+  it('permite reparar un cambio de módulo definido por recepción sin completar diagnóstico', () => {
+    const original = fixture('OS1045')
+    expect(original.diagnosis).toBe('')
+    expect(original.workAuthor).toEqual({ name: 'Sofía', role: 'recepcion' })
+    expect(original.history.at(-1)).toMatchObject({ work: original.work, by: 'Sofía · Recepción' })
+    const started = applyDemoAction(original, 'startRepair')
+    const finished = applyDemoAction(started, 'finish')
+    expect(finished.status).toBe('terminado')
+    expect(finished.diagnosis).toBe('')
+    expect(finished.workAuthor).toEqual(original.workAuthor)
+  })
+  it('conserva la autoría de recepción al guardar solamente el diagnóstico', () => {
+    const original = applyDemoAction(fixture('OS1045'), 'startRepair')
+    const result = applyDemoAction(original, 'saveWork', { diagnosis: 'Pantalla dañada; placa funcionando.', work: original.work })
+    expect(result.diagnosis).toBe('Pantalla dañada; placa funcionando.')
+    expect(result.workAuthor).toEqual(original.workAuthor)
+    expect(result.work).toBe(original.work)
+    expect(result.history.at(-1)).not.toHaveProperty('previousWork')
+    expect(original.diagnosis).toBe('')
+  })
+  it.each(['saveWork', 'sendQuote', 'finish'])('registra antes, después, autor y fecha al cambiar el trabajo mediante %s', (action) => {
+    const original = action === 'sendQuote' ? fixture('OS1042') : applyDemoAction(fixture('OS1045'), 'startRepair')
+    const now = 1800000005000
+    const result = applyDemoAction(original, action, { diagnosis: 'Pantalla dañada.', work: 'Cambiar módulo con marco y comprobar sensores.' }, 'tecnico', now)
+    expect(result.workAuthor).toEqual({ name: 'Juan', role: 'tecnico' })
+    expect(result.history.at(-1)).toMatchObject({ previousWork: original.work, work: result.work, by: 'Juan · Técnico', at: now })
+    expect(result.issue).toBe(original.issue)
+    expect(original.work).not.toBe(result.work)
+    expect(original.history).not.toEqual(result.history)
+  })
   it('toma e inicia el equipo sin modificar los datos de origen ni permitir otra toma', () => {
     const original = fixture('OS1047')
     const result = applyDemoAction(original, 'claim')
@@ -90,5 +120,9 @@ describe('Vista previa del flujo: simulación aislada', () => {
     const first = createDemoOrders()
     first[0].notes.push({ text: 'Borrador' })
     expect(createDemoOrders()[0].notes).toHaveLength(0)
+    const direct = fixture('OS1045')
+    const edited = applyDemoAction(applyDemoAction(direct, 'startRepair'), 'saveWork', { work: 'Otro trabajo', diagnosis: '' })
+    expect(edited.workAuthor.name).toBe('Juan')
+    expect(fixture('OS1045').workAuthor.name).toBe('Sofía')
   })
 })
