@@ -77,3 +77,6 @@ La asignación manual no inicia el reloj de trabajo: el técnico debe aceptar el
 Los formularios de ingreso, cliente, usuario y configuración conservan borradores al cerrar o navegar. Las contraseñas ficticias se descartan al cerrar la ventana. Reiniciar demo requiere confirmación si hay borradores y conserva el tema y perfil elegidos.
 
 Las pruebas de dominio cubren estado compartido, entradas inválidas, visibilidad de rutas, restauración, papelera, perfiles y recorridos. Las pruebas de render cubren todas las pantallas sin AuthProvider/DataProvider; otra prueba comprueba que la entrada sigue bajo DEV y que el código de la demo no invoca API, almacenamiento de sesión o impresión.
+
+
+Recepción usa un selector de tarea con cantidades para evitar varias líneas de pestañas. El botón de usuario del lateral (o el icono en móvil) abre la lista para cambiar de perfil. Ajustes, junto a Salir, permite editar el perfil y simular el cambio de contraseña para cualquier rol; estas acciones ya no aparecen directamente debajo del usuario.

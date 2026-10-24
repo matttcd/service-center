@@ -37,13 +37,24 @@ describe('Ficha de consulta del taller', () => {
     expect(html).not.toContain('Estás explorando el nuevo flujo')
     expect(html).not.toContain('Elegí un equipo, continuá el trabajo')
   })
+  it('compacta los pendientes de recepción y mantiene contraseña en Ajustes', () => {
+    const render = (path) => renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><MemoryRouter initialEntries={[path]}><FlowPreview /></MemoryRouter></NotificationContext.Provider>)
+    const reception = render('/recepcion')
+    expect(reception).toContain('aria-label="Filtrar pendientes de recepción"')
+    expect(reception).toContain('value="externos"')
+    expect(reception).toContain('value="simples"')
+    expect(reception).not.toContain('aria-label="Filtrar cola"')
+    expect(reception).toContain('aria-label="Cambiar de perfil"')
+    expect(reception).not.toContain('Cambiar contraseña')
+    expect(render('/ajustes')).toContain('Cambiar contraseña')
+  })
   it('inicia según el tema del sistema sin necesitar la preferencia de producción', () => {
     vi.stubGlobal('window', { matchMedia: (query) => ({ matches: query === '(prefers-color-scheme: dark)' }) })
     const html = renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><MemoryRouter initialEntries={['/taller']}><FlowPreview /></MemoryRouter></NotificationContext.Provider>)
     expect(html).toContain('data-theme="dark"')
     expect(html).toContain('aria-label="Activar modo claro"')
   })
-  it.each(['/recepcion', '/ordenes', '/terminados', '/clientes', '/clientes/client-0', '/resumen', '/metricas', '/actividad', '/usuarios', '/copias', '/papelera', '/configuracion', '/acceso'])('renderiza la pantalla %s sin proveedores de producción', (path) => {
+  it.each(['/recepcion', '/ordenes', '/terminados', '/clientes', '/clientes/client-0', '/resumen', '/metricas', '/actividad', '/usuarios', '/copias', '/papelera', '/configuracion', '/ajustes', '/acceso'])('renderiza la pantalla %s sin proveedores de producción', (path) => {
     const html = renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><MemoryRouter initialEntries={[path]}><FlowPreview /></MemoryRouter></NotificationContext.Provider>)
     expect(html).toContain('Perfil de demostración')
     expect(html).not.toContain('Pantalla no disponible')

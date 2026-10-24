@@ -12,7 +12,7 @@ export const NAVIGATION = [
   { group: 'Consultas', items: [['/ordenes', 'Órdenes'], ['/clientes', 'Clientes', ['recepcion', 'admin']], ['/actividad', 'Actividad']] },
   { group: 'Administración', items: [['/metricas', 'Métricas', ['admin']], ['/usuarios', 'Usuarios', ['admin']], ['/copias', 'Copias de seguridad', ['admin']], ['/papelera', 'Papelera', ['admin']], ['/configuracion', 'Configuración', ['admin']]] },
 ]
-export const canVisit = (path, role) => path === '/acceso' || NAVIGATION.some(({ items }) => items.some(([url, , roles]) => (path === url || path.startsWith(`${url}/`)) && (!roles || roles.includes(role))))
+export const canVisit = (path, role) => ['/acceso', '/ajustes'].includes(path) || NAVIGATION.some(({ items }) => items.some(([url, , roles]) => (path === url || path.startsWith(`${url}/`)) && (!roles || roles.includes(role))))
 export const initialProfile = (path) => canVisit(path, 'tecnico') ? 'tecnico' : canVisit(path, 'recepcion') ? 'recepcion' : 'admin'
 export const money = (n) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n || 0)
 export const date = (n) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(n)

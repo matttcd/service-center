@@ -407,3 +407,27 @@ body.fp-preview {
 .fp-brand > div { min-width: 0; }
 
 .fp-more summary { display: flex; align-items: center; gap: 5px; min-height: 38px; }
+
+.fp-preview .fp-queue-task { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: var(--fp-muted); }
+.fp-preview .fp-queue-task select { flex: 1; min-width: 0; width: 0; margin: 0; }
+.fp-profile-menu { position: relative; min-width: 0; }
+.fp-profile-menu > .fp-person > span:nth-child(2) { flex: 1; }
+.fp-profile-menu > .fp-person > span:nth-child(2) > span { display: block; color: var(--fp-muted); }
+.fp-profile-options { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 40; width: 280px; max-width: calc(100vw - 24px); background: var(--fp-paper); border: 1px solid var(--fp-line); border-radius: 9px; padding: 5px; box-shadow: 0 10px 28px #0003; }
+.fp-profile-options > p { padding: 8px; color: var(--fp-muted); }
+.fp-profile-options > button { width: 100%; justify-content: flex-start; text-align: left; padding: 10px 8px; border-radius: 6px; }
+.fp-profile-options > button:hover { background: var(--fp-subtle); }
+.fp-profile-options > button:disabled { opacity: 1; background: var(--fp-selection); }
+.fp-profile-options > button > span:nth-child(2) { flex: 1; }
+.fp-profile-options > button > span:nth-child(2) > span { display: block; color: var(--fp-muted); }
+.fp-profile-active { color: var(--fp-blue-text); }
+.fp-account-actions { display: flex; gap: 6px; }
+.fp-account-actions > a { flex: 1; min-width: 0; padding: 8px 5px; text-decoration: none; }
+.fp-account-settings { margin-top: 24px; }
+.fp-profile-menu-mobile .fp-profile-options { top: calc(100% + 8px); right: 0; left: auto; bottom: auto; }
+
+.fp-sidebar { overflow: visible; }
+.fp-sidebar > .fp-brand, .fp-account { flex-shrink: 0; }
+.fp-navigation { overflow-y: auto; min-height: 0; flex: 1; }
+
+.fp-account-actions > a { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
