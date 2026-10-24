@@ -1,14 +1,14 @@
 export const TECHNICIAN = 'demo-juan'
-export const ROLE_NAMES = { tecnico: 'Juan · Técnico', recepcion: 'Sofía · Recepción' }
+export const ROLE_NAMES = { tecnico: 'Juan · Técnico', recepcion: 'Sofía · Recepción', admin: 'Martín · Administrador' }
 export const REVIEW_FEE = 3500
 export const STATUS_LABELS = {
   recibido: 'Sin iniciar', en_revision: 'En revisión', presupuesto: 'Presupuesto',
   en_reparacion: 'En reparación', falta_repuestos: 'Espera repuestos',
-  terminado: 'Listo para retirar', presupuesto_rechazado: 'Sin reparar', entregado: 'Entregado',
+  terminado: 'Listo para retirar', presupuesto_rechazado: 'Sin reparar', entregado: 'Entregado', en_tercero: 'En externo',
 }
 export const RECEPTION_VIEWS = [
   ['presupuestar', 'Presupuestar'], ['avisar', 'Avisar'], ['respuesta', 'Respuesta'],
-  ['repuestos', 'Repuestos'], ['retiros', 'Retiros'],
+  ['repuestos', 'Repuestos'], ['retiros', 'Retiros'], ['externos', 'Externos'], ['simples', 'Servicios simples'],
 ]
 export const TECH_VIEWS = [['mine', 'Mis trabajos'], ['available', 'Sin asignar'], ['all', 'Todo el taller']]
 
@@ -55,6 +55,8 @@ export function createDemoOrders(now = Date.now()) {
 }
 
 export function receptionQueue(order) {
+  if (order.status === 'en_tercero') return 'externos'
+  if (order.isSimpleService && order.status === 'recibido') return 'simples'
   if (order.status === 'presupuesto') {
     if (order.price <= 0) return 'presupuestar'
     if (!order.notified) return 'avisar'
@@ -68,9 +70,11 @@ export function receptionQueue(order) {
 
 export function nextAction(order, role) {
   if (order.status === 'entregado') return null
-  if (role === 'tecnico') {
+  if (role === 'tecnico' || (role === 'admin' && !receptionQueue(order))) {
+    if (order.needsAcceptance && (role === 'admin' || order.assignedTo === TECHNICIAN)) return { id: 'acceptAssigned', label: 'Aceptar equipo' }
+    if (order.status === 'presupuesto' && order.confirmed && !order.assignedTo) return { id: 'claimRepair', label: 'Tomar e iniciar reparación' }
     if (order.status === 'recibido' && !order.assignedTo) return { id: 'claim', label: 'Tomar e iniciar revisión' }
-    if (order.assignedTo !== TECHNICIAN) return null
+    if (role !== 'admin' && order.assignedTo !== TECHNICIAN) return null
     if (order.status === 'recibido') return { id: 'startReview', label: 'Iniciar revisión' }
     if (order.status === 'en_revision') return { id: 'sendQuote', label: 'Enviar a recepción' }
     if (order.status === 'presupuesto' && order.confirmed) return { id: 'startRepair', label: 'Iniciar reparación' }
@@ -78,6 +82,8 @@ export function nextAction(order, role) {
     if (order.status === 'falta_repuestos' && order.parts.length && order.parts.every((part) => part.status === 'recibido')) return { id: 'resume', label: 'Retomar reparación' }
   } else {
     const queue = receptionQueue(order)
+    if (queue === 'simples') return { id: 'finishSimple', label: 'Finalizar servicio' }
+    if (queue === 'externos') return { id: 'returnExternal', label: 'Registrar regreso' }
     if (queue === 'presupuestar') return { id: 'price', label: 'Guardar presupuesto' }
     if (queue === 'avisar') return { id: 'notify', label: 'Registrar aviso al cliente' }
     if (queue === 'respuesta') return { id: 'response', label: 'Registrar respuesta' }
@@ -109,10 +115,10 @@ export function waitingFor(order) {
 export function queueOrders(orders, role, view, search = '') {
   const q = search.trim().toLocaleLowerCase('es')
   return orders.filter((order) => {
-    if (order.status === 'entregado') return false
+    if (order.deletedAt || order.status === 'entregado') return false
     if (q && !`${order.number} ${order.brand} ${order.model} ${order.customer}`.toLocaleLowerCase('es').includes(q)) return false
     if (role === 'recepcion') return receptionQueue(order) === view
-    if (view === 'available') return !order.assignedTo && order.status === 'recibido'
+    if (view === 'available') return !order.assignedTo && (order.status === 'recibido' || (order.status === 'presupuesto' && order.confirmed))
     if (view === 'mine') return order.assignedTo === TECHNICIAN && !['terminado', 'presupuesto_rechazado'].includes(order.status)
     return true
   }).sort((a, b) => {
@@ -129,8 +135,8 @@ export function charges(order) {
 // shortcut: simulación en memoria; al integrar se reemplaza por operaciones transaccionales del servidor.
 export function applyDemoAction(order, action, payload = {}, role = 'tecnico', now = Date.now()) {
   const next = structuredClone(order)
-  const own = role === 'tecnico' && order.assignedTo === TECHNICIAN
-  const counter = role === 'recepcion'
+  const own = role === 'admin' || (role === 'tecnico' && order.assignedTo === TECHNICIAN)
+  const counter = ['recepcion', 'admin'].includes(role)
   let text
   const require = (condition, message) => { if (!condition) throw new Error(message) }
   const setStatus = (status) => { next.status = status; next.statusSince = now }
@@ -139,10 +145,12 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
     next.diagnosis = String(payload.diagnosis || '').trim()
     next.work = String(payload.work || '').trim()
     text = 'Diagnóstico y trabajo guardados'
-  } else if (['claim', 'startReview', 'sendQuote', 'startRepair', 'finish', 'resume'].includes(action)) {
+  } else if (['claim', 'claimRepair', 'acceptAssigned', 'startReview', 'sendQuote', 'startRepair', 'finish', 'resume'].includes(action)) {
     require(nextAction(order, role)?.id === action, 'Esta acción ya no está disponible para este equipo.')
     if (action === 'claim') { next.assignedTo = TECHNICIAN; next.acceptedAt = now; setStatus('en_revision'); text = 'Juan tomó el equipo e inició la revisión' }
-    if (action === 'startReview') { setStatus('en_revision'); text = 'Revisión iniciada' }
+    if (action === 'claimRepair') { next.assignedTo = TECHNICIAN; next.acceptedAt = now; setStatus('en_reparacion'); text = 'Juan tomó el equipo e inició la reparación' }
+    if (action === 'acceptAssigned') { next.needsAcceptance = false; next.acceptedAt = now; if (order.status === 'recibido') setStatus('en_revision'); text = 'Equipo aceptado por el técnico' }
+    if (action === 'startReview') { next.acceptedAt ??= now; setStatus('en_revision'); text = 'Revisión iniciada' }
     if (action === 'sendQuote') {
       next.diagnosis = String(payload.diagnosis ?? next.diagnosis).trim()
       next.work = String(payload.work ?? next.work).trim()
@@ -150,12 +158,25 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
       setStatus('presupuesto'); next.price = 0; next.notified = false; next.confirmed = false
       text = 'Diagnóstico enviado a recepción para presupuestar'
     }
-    if (action === 'startRepair' || action === 'resume') { setStatus('en_reparacion'); text = action === 'resume' ? 'Reparación retomada' : 'Reparación iniciada' }
+    if (action === 'startRepair' || action === 'resume') { next.acceptedAt ??= now; setStatus('en_reparacion'); text = action === 'resume' ? 'Reparación retomada' : 'Reparación iniciada' }
     if (action === 'finish') {
       next.diagnosis = String(payload.diagnosis ?? next.diagnosis).trim()
       next.work = String(payload.work ?? next.work).trim()
       setStatus('terminado'); next.notified = false; text = 'Reparación finalizada. Recepción debe avisar al cliente'
     }
+  } else if (action === 'finishSimple') {
+    require(counter && order.isSimpleService && order.status === 'recibido', 'Servicio no disponible.')
+    setStatus('terminado'); next.notified = false; text = 'Servicio finalizado'
+  } else if (action === 'sendExternal') {
+    require(counter && ['recibido', 'en_revision', 'en_reparacion', 'presupuesto'].includes(order.status), 'No se puede enviar este equipo.')
+    require(String(payload.name || '').trim(), 'Elegí el técnico externo.')
+    next.externalTech = payload.name.trim(); setStatus('en_tercero'); text = `Enviado a ${next.externalTech}`
+  } else if (action === 'returnExternal') {
+    require(counter && order.status === 'en_tercero', 'El equipo no está en un técnico externo.')
+    setStatus(payload.repaired ? 'terminado' : 'recibido'); next.notified = false; text = `Regreso de ${order.externalTech}`
+  } else if (action === 'warranty') {
+    require(counter && order.status === 'entregado', 'Solo se reingresan equipos entregados.')
+    setStatus('recibido'); next.warrantyReturn = true; next.assignedTo = null; next.acceptedAt = null; next.notified = false; next.confirmed = false; text = 'Reingreso por garantía'
   } else if (action === 'price') {
     require(counter && order.status === 'presupuesto' && !order.confirmed, 'Recepción debe gestionar el presupuesto pendiente.')
     require(payload.price !== '' && Number.isFinite(Number(payload.price)) && Number(payload.price) > 0, 'Ingresá un presupuesto mayor a cero.')
@@ -192,10 +213,10 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
     require(counter && receptionQueue(order) === 'retiros' && payload.physical === true, 'Confirmá el retiro físico del equipo.')
     require(['client', 'third'].includes(payload.by), 'Indicá quién retira.')
     if (payload.by === 'third') require(String(payload.name || '').trim() && /^\d{6,8}$/.test(String(payload.dni || '')), 'Ingresá nombre y DNI válido de quien retira.')
-    next.pickup = payload; setStatus('entregado'); text = 'Entrega física registrada'
+    next.pickup = payload; next.deliveredAt = now; setStatus('entregado'); text = payload.withoutReceipt ? 'Retiro sin comprobante registrado' : 'Entrega física registrada'
   } else throw new Error('Acción desconocida.')
   const workChanged = next.work !== order.work
-  if (workChanged) next.workAuthor = next.work ? { name: role === 'tecnico' ? 'Juan' : 'Sofía', role } : null
+  if (workChanged) next.workAuthor = next.work ? { name: { tecnico: 'Juan', recepcion: 'Sofía', admin: 'Martín' }[role], role } : null
   next.history.push({ text, by: ROLE_NAMES[role], at: now, ...(workChanged ? { previousWork: order.work, work: next.work } : {}) })
   return next
 }

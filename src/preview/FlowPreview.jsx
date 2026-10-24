@@ -1,262 +1,134 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, ChevronRight,
-  ClipboardList, Clock3, Eye, EyeOff, FlaskConical, History, Inbox, MessageSquare,
-  Package, Pencil, Phone, RotateCcw, Save, Search, Smartphone,
-  StickyNote, UserRound, Wrench, Laptop, Monitor, Gamepad2, Moon, Sun, KeyRound, Grid3X3, Cable,
-} from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Activity, Archive, ArrowLeft, ChevronRight, ClipboardList, DatabaseBackup, FlaskConical, Inbox, LayoutDashboard, LogIn, Menu, Moon, Plus, RotateCcw, Settings, Shield, Sun, Trash2, TrendingUp, UserRound, Users, Wrench, X } from 'lucide-react'
 import { useNotify } from '../context/notifications.js'
-import { PatternPreview } from '../components/PatternPad.jsx'
-import Modal from '../components/Modal.jsx'
 import logo from '../assets/gringologo-modified.png'
-import {
-  TECHNICIAN, REVIEW_FEE, STATUS_LABELS, TECH_VIEWS, RECEPTION_VIEWS,
-  createDemoOrders, queueOrders, nextAction, waitingFor, receptionQueue, applyDemoAction, charges, workAge,
-} from './preview-model.js'
+import OrderWorkspace, { DeviceIcon, Status, ToolWindow } from './OrderWorkspace.jsx'
+import { TECH_VIEWS, RECEPTION_VIEWS, REVIEW_FEE, queueOrders, receptionQueue, workAge } from './preview-model.js'
+import { NAVIGATION, NEW_ORDER, PROFILES, applySystemAction, canVisit, createSystemState, initialProfile } from './system-model.js'
+import { AccountForm, CustomerForm, DocumentPreview, Field, FormActions, NewOrderForm, UserForm } from './PreviewForms.jsx'
+import { ActivityPage, BackupsPage, ClientsPage, Empty, OrdersTable, SearchBox, SettingsPage, SummaryPage, TrashPage, UsersPage } from './SystemPages.jsx'
 
-const money = (value) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value)
-const date = (value) => new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(value)
-function DeviceIcon({ type, ...props }) {
-  const Icon = { Celular: Smartphone, Notebook: Laptop, Monitor, Consola: Gamepad2 }[type] || Smartphone
-  return <Icon {...props} />
-}
-function Status({ order }) {
-  const tone = order.status === 'entregado' || order.status === 'terminado' ? 'green'
-    : ['presupuesto', 'falta_repuestos', 'presupuesto_rechazado'].includes(order.status) ? 'amber'
-      : order.status === 'recibido' ? 'neutral' : 'blue'
-  return <span className={`fp-status fp-status-${tone}`}><span />{STATUS_LABELS[order.status]}</span>
-}
-function ToolWindow({ title, onClose, children }) {
-  const contentRef = useRef(null)
-  useEffect(() => {
-    const opener = document.activeElement
-    const dialog = contentRef.current.closest('[role="dialog"]')
-    dialog.setAttribute('aria-labelledby', 'preview-tool-title')
-    dialog.tabIndex = -1
-    dialog.focus({ preventScroll: true })
-    const trapFocus = (event) => {
-      if (event.key !== 'Tab') return
-      const controls = [...dialog.querySelectorAll('button, input, textarea, select, a[href], [tabindex="0"]')].filter((element) => !element.disabled && element.getClientRects().length)
-      const first = controls[0], last = controls.at(-1)
-      if (!first) { event.preventDefault(); dialog.focus(); return }
-      if (event.shiftKey && (document.activeElement === first || !controls.includes(document.activeElement))) { event.preventDefault(); last.focus() }
-      else if (!event.shiftKey && (document.activeElement === last || !controls.includes(document.activeElement))) { event.preventDefault(); first.focus() }
-    }
-    document.addEventListener('keydown', trapFocus)
-    return () => { document.removeEventListener('keydown', trapFocus); if (opener?.isConnected) opener.focus({ preventScroll: true }) }
-  }, [])
-  return <Modal open onClose={onClose} title={<span id="preview-tool-title">{title}</span>} maxWidth="max-w-2xl"><div className="fp-tool-content" ref={contentRef}>{children}</div></Modal>
-}
-function OrderWorkspace({ order, role, draft, setDraft, onAction, onBack }) {
-  const [showAccess, setShowAccess] = useState(false)
-  const [editingWork, setEditingWork] = useState(() => draft.diagnosis !== order.diagnosis || draft.work !== order.work || (!order.diagnosis && !order.work))
-  const [actionForm, setActionForm] = useState(null)
-  const [response, setResponse] = useState('')
-  const [pickupBy, setPickupBy] = useState('client')
-  const [pickupName, setPickupName] = useState('')
-  const [pickupDni, setPickupDni] = useState('')
-  const [physical, setPhysical] = useState(false)
-  const [checked, setChecked] = useState(false)
-  const [tool, setTool] = useState(null)
-  const bodyRef = useRef(null)
-  const own = order.assignedTo === TECHNICIAN
-  const technical = role === 'tecnico'
-  const canWork = technical && own && ['en_revision', 'en_reparacion'].includes(order.status)
-  const showWorkEditor = canWork && editingWork
-  const canNote = order.status !== 'entregado' && (!technical || own)
-  const canRequest = technical && own && ['en_reparacion', 'falta_repuestos'].includes(order.status)
-  const workDirty = draft.diagnosis !== order.diagnosis || draft.work !== order.work
-  const action = nextAction(order, role)
-  const wait = waitingFor(order)
-  const bill = charges(order)
-  let blocked = ''
-  if (action?.id === 'sendQuote' && (!draft.diagnosis.trim() || !draft.work.trim())) blocked = 'Completá diagnóstico y trabajo.'
-  if (action?.id === 'price' && (!draft.price || !Number.isFinite(Number(draft.price)) || Number(draft.price) <= 0)) blocked = 'Ingresá un presupuesto válido.'
-  if (!technical && order.status === 'presupuesto' && action?.id !== 'price' && Number(draft.price) !== order.price) blocked = 'Guardá el nuevo precio.'
-  if (action?.id === 'finish' && !checked) blocked = 'Confirmá la prueba de funcionamiento.'
-  if (draft.note.trim() || draft.partName.trim()) blocked = 'Hay notas o repuestos sin guardar.'
-  if (actionForm === 'response' && (!response || (response === 'reject' && (draft.charge === '' || !Number.isFinite(Number(draft.charge)) || Number(draft.charge) < 0)))) blocked = 'Completá la respuesta y el importe.'
-  if (actionForm === 'pickup' && (!physical || (pickupBy === 'third' && (!pickupName.trim() || !/^\d{6,8}$/.test(pickupDni))))) blocked = 'Completá y confirmá el retiro.'
-
-  const runPrimary = () => {
-    if (actionForm === 'response') {
-      if (onAction(response, { charge: draft.charge })) { setActionForm(null); setResponse('') }
-    } else if (actionForm === 'pickup') {
-      if (onAction('pickup', { by: pickupBy, name: pickupName, dni: pickupDni, physical })) setActionForm(null)
-    } else if (action?.id === 'response' || action?.id === 'pickup') {
-      setActionForm(action.id)
-      bodyRef.current?.scrollTo({ top: 0, behavior: 'instant' })
-    } else if (action) onAction(action.id, { diagnosis: draft.diagnosis, work: draft.work, price: draft.price, id: action.partId })
-  }
-  const primaryLabel = actionForm === 'response' ? response === 'reject' ? 'Confirmar rechazo' : 'Confirmar aprobación'
-    : actionForm === 'pickup' ? 'Confirmar entrega' : action?.label
-  const priceEditor = !technical && order.status === 'presupuesto' && !order.confirmed && <div className="fp-price-editor"><label htmlFor="quote-price">Precio del presupuesto</label><div className="fp-currency-input"><span>$</span><input id="quote-price" type="number" min="0" step="0.01" value={draft.price} onChange={(e) => setDraft({ price: e.target.value })} placeholder="Ingresá el importe" /></div>
-    {order.price > 0 && Number(draft.price) !== order.price && <button className="fp-button secondary" onClick={() => onAction('price', { price: draft.price })} disabled={!draft.price || Number(draft.price) <= 0 || !Number.isFinite(Number(draft.price))}><Save size={15} />Guardar nuevo precio</button>}
-  </div>
-  return <article className={`fp-order ${technical ? 'fp-technical-order' : ''}`} aria-label={`Orden ${order.number}`}>
-    <header className="fp-order-header">
-      <button className="fp-back fp-link" onClick={onBack}><ArrowLeft size={16} /> Volver a la cola</button>
-      <div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} /></div>
-      <h2>{order.brand} {order.model}</h2>
-      <div className="fp-tool-buttons" role="group" aria-label="Herramientas de la orden">
-        {[['notes', 'Notas', StickyNote, order.notes.length, draft.note.trim()], ['parts', 'Repuestos', Package, order.parts.length, draft.partName.trim()], ['history', 'Historial', History, order.history.length, false]].map(([key, label, Icon, count, pending]) => <button key={key} aria-haspopup="dialog" onClick={() => setTool(key)}><Icon size={16} />{label}<span>{count}</span>{pending && <span className="fp-draft-indicator">· Borrador</span>}</button>)}
-      </div>
-      {!technical && <>
-        <div className="fp-order-meta"><span><UserRound size={16} />{order.customer}</span><span><Phone size={16} />{order.phone}</span></div>
-        <div className="fp-access"><span>Acceso del equipo</span><button className="fp-link" aria-expanded={showAccess} aria-controls="device-access" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={16} /> : <Eye size={16} />}{showAccess ? 'Ocultar contraseña' : 'Mostrar contraseña'}</button><strong id="device-access" hidden={!showAccess}>{showAccess ? order.access : ''}</strong></div>
-      </>}
-    </header>
-    {technical && <aside className="fp-reference" aria-label="Datos del equipo">
-      <div className="fp-reference-client"><span><UserRound size={16} aria-hidden="true" />Cliente</span><p>{order.customer}</p><span className="fp-reference-phone"><Phone size={16} aria-hidden="true" />Teléfono</span><p>{order.phone}</p></div>
-      <dl className="fp-equipment-facts">
-        <div><dt><KeyRound size={16} aria-hidden="true" />Contraseña o PIN</dt><dd>{order.access || 'Sin contraseña informada'}</dd></div>
-        {order.pattern?.length > 0 && <div><dt><Grid3X3 size={16} aria-hidden="true" />Patrón de desbloqueo</dt><dd><div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((point) => point + 1).join(', ')}`}><PatternPreview value={order.pattern} size={112} /></div></dd></div>}
-        <div><dt><Smartphone size={16} aria-hidden="true" />Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div>
-        <div><dt><Cable size={16} aria-hidden="true" />Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
-      </dl>
-    </aside>}
-    <div className="fp-order-body" ref={bodyRef}>
-      {actionForm === 'response' && <section className="fp-action-form" aria-label="Respuesta del cliente">
-        <h3>¿Qué respondió el cliente?</h3><p>Presupuesto comunicado: <strong>{money(order.price)}</strong></p>
-        <div className="fp-response-options" role="group" aria-label="Respuesta al presupuesto">
-          <button className={response === 'approve' ? 'selected' : ''} aria-pressed={response === 'approve'} onClick={() => setResponse('approve')}><CheckCircle2 size={18} />Aprobó el presupuesto</button>
-          <button className={response === 'reject' ? 'selected' : ''} aria-pressed={response === 'reject'} onClick={() => setResponse('reject')}>Retira sin reparar</button>
-        </div>
-        {response === 'reject' && <div className="fp-rejection"><label htmlFor="rejection-charge">Importe de revisión / retiro</label><div className="fp-currency-input"><span>$</span><input id="rejection-charge" type="number" min="0" step="0.01" value={draft.charge} onChange={(e) => setDraft({ charge: e.target.value })} /></div>
-          </div>}
-      </section>}
-      {actionForm === 'pickup' && <section className="fp-action-form" aria-label="Datos de entrega">
-        <h3>Registrar el retiro del equipo</h3><p>{order.rejectedCharge !== null ? 'Retiro sin reparación.' : 'Reparación finalizada.'} Importe: <strong>{money(bill.total)}</strong></p>
-        <label htmlFor="pickup-by">¿Quién retira?</label><select id="pickup-by" value={pickupBy} onChange={(e) => setPickupBy(e.target.value)}><option value="client">El cliente titular</option><option value="third">Otra persona autorizada</option></select>
-        {pickupBy === 'third' && <div className="fp-two-fields"><label>Nombre<input value={pickupName} onChange={(e) => setPickupName(e.target.value)} /></label><label>DNI<input inputMode="numeric" value={pickupDni} onChange={(e) => setPickupDni(e.target.value)} /></label></div>}
-        <label className="fp-checkbox"><input type="checkbox" checked={physical} onChange={(e) => setPhysical(e.target.checked)} />Confirmo que el equipo se retira físicamente ahora</label>
-      </section>}
-      <section className="fp-issue" aria-labelledby="issue-title"><h3 id="issue-title">Falla informada · Recepción</h3><p>{order.issue}</p></section>
-      <section className="fp-work" aria-label="Diagnóstico y trabajo">
-          <div className={technical ? 'fp-work-fields' : undefined}>
-            {technical && <div className="fp-current-diagnosis"><div className="fp-section-heading"><h3 id="diagnosis-title">Diagnóstico · Técnico</h3>{canWork && <button className="fp-button secondary" aria-expanded={showWorkEditor} onClick={() => { if (showWorkEditor) { if (!workDirty || onAction('saveWork', { diagnosis: draft.diagnosis, work: draft.work })) setEditingWork(false) } else setEditingWork(true) }}>{showWorkEditor ? <Save size={14} /> : <Pencil size={14} />}{showWorkEditor ? 'Guardar' : 'Editar'}</button>}</div>{showWorkEditor ? <textarea id="diagnosis" aria-labelledby="diagnosis-title" rows={3} value={draft.diagnosis} onChange={(e) => setDraft({ diagnosis: e.target.value })} /> : <p className="fp-read-value">{draft.diagnosis || 'Sin diagnóstico registrado'}</p>}</div>}
-            <div><div className="fp-section-heading"><h3 id="work-title">{order.status === 'terminado' || order.status === 'entregado' ? 'Trabajo realizado' : order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : 'Trabajo a realizar'}</h3></div>
-            {showWorkEditor ? <textarea id="work" aria-labelledby="work-title" rows={3} value={draft.work} onChange={(e) => setDraft({ work: e.target.value })} /> : <p className="fp-read-value">{draft.work || 'Trabajo por definir'}</p>}
-            {order.workAuthor && <p className="fp-work-origin">{order.workAuthor.role === 'recepcion' ? `Definido en recepción por ${order.workAuthor.name}` : `Actualizado por ${order.workAuthor.name} · Técnico`}</p>}</div>
-          </div>
-          {canWork && workDirty && <p className="fp-save-state">Borrador sin guardar</p>}
-          {!technical && <details className="fp-diagnosis"><summary>Ver diagnóstico<ChevronDown size={15} /></summary><p className="fp-read-value">{order.diagnosis || 'Sin diagnóstico registrado'}</p></details>}
-          {order.status === 'falta_repuestos' && <div className="fp-parts-wait"><Package size={17} /><div><p>{wait.ready ? 'Repuestos recibidos' : 'Repuestos pendientes'}</p><ul>{order.parts.map((part) => <li key={part.id}>{part.name} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Esperando llegada' : 'Recibido'}</li>)}</ul></div></div>}
-          {action?.id === 'finish' && <label className="fp-checkbox fp-test-check"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />Realicé la prueba de funcionamiento del trabajo registrado</label>}
-      </section>
-      {!technical && <section className="fp-counter" aria-label="Presupuesto y retiro">
-          {priceEditor}
-          <div className="fp-finance"><div><span>{order.rejectedCharge !== null ? 'Importe de retiro' : 'Presupuesto'}</span><strong>{bill.total ? money(bill.total) : order.rejectedCharge === 0 ? money(0) : 'A definir'}</strong></div><div><span>Seña recibida</span><strong>{money(order.advance)}</strong></div><div><span>{bill.balance < 0 ? 'Saldo a favor' : 'Saldo pendiente'}</span><strong>{!bill.total && order.rejectedCharge === null ? '—' : money(Math.abs(bill.balance))}</strong></div></div>
-          {order.rejectedCharge !== null && <p className="fp-finance-note">Presupuesto rechazado: {money(order.price)}.{bill.balance < 0 && ' Sin devolución registrada.'}</p>}
-      </section>}
-      {tool && <ToolWindow title={`${{ notes: 'Notas', parts: 'Repuestos', history: 'Historial' }[tool]} · ${order.number}`} onClose={() => setTool(null)}>
-        {tool === 'notes' && <div className="fp-section-content">
-          {order.notes.length ? <ul className="fp-notes">{order.notes.map((note) => <li key={note.id}><p>{note.text}</p><span>{note.by} · {date(note.at)}</span></li>)}</ul> : <div className="fp-inline-empty"><MessageSquare size={24} /><p>Sin notas.</p></div>}
-          {canNote && <form onSubmit={(e) => { e.preventDefault(); onAction('note', { text: draft.note }); e.currentTarget.querySelector('textarea').focus() }}><label htmlFor="new-note">Nueva nota</label><textarea id="new-note" rows={3} value={draft.note} onChange={(e) => setDraft({ note: e.target.value })} placeholder="Una observación útil para continuar el trabajo…" /><button className="fp-button secondary" type="submit" disabled={!draft.note.trim()}><Save size={15} />Guardar nota</button></form>}
-        </div>}
-        {tool === 'parts' && <div className="fp-section-content">
-          {order.parts.length ? <ul className="fp-parts">{order.parts.map((part) => <li key={part.id}><div className="fp-part-icon"><Package size={19} /></div><div><strong>{part.name}</strong><span>Cantidad: {part.quantity} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Pedido · esperando llegada' : 'Recibido'}</span></div>{!technical && order.status === 'falta_repuestos' && part.status !== 'recibido' && <button className="fp-button secondary" onClick={(e) => { onAction(part.status === 'necesario' ? 'partOrdered' : 'partArrived', { id: part.id }); e.currentTarget.closest('[role="dialog"]').focus() }}>{part.status === 'necesario' ? 'Registrar pedido' : 'Registrar llegada'}</button>}{part.status === 'recibido' && <CheckCircle2 size={19} className="fp-green" />}</li>)}</ul> : <div className="fp-inline-empty"><Package size={25} /><p>Sin repuestos.</p></div>}
-          {canRequest && <form className="fp-part-form" onSubmit={(e) => { e.preventDefault(); onAction('requestPart', { name: draft.partName, quantity: draft.partQuantity }); e.currentTarget.querySelector('input').focus() }}><h4>Solicitar un repuesto</h4><div className="fp-part-fields"><label>Repuesto<input value={draft.partName} onChange={(e) => setDraft({ partName: e.target.value })} placeholder="Ej.: módulo de pantalla Moto G84" /></label><label>Cantidad<input type="number" min="1" max="99" value={draft.partQuantity} onChange={(e) => setDraft({ partQuantity: e.target.value })} /></label></div><button type="submit" className="fp-button secondary" disabled={!draft.partName.trim()}><Package size={15} />Solicitar repuesto</button></form>}
-        </div>}
-        {tool === 'history' && <ol className="fp-history">{[...order.history].reverse().map((event, i) => <li key={`${event.at}-${i}`}><p>{event.text}</p>{event.previousWork !== undefined && <p className="fp-history-work">Antes: {event.previousWork || 'Trabajo por definir'}</p>}{event.work !== undefined && <p className="fp-history-work">{event.previousWork !== undefined ? 'Ahora' : 'Trabajo'}: {event.work || 'Trabajo por definir'}</p>}<span>{event.by} · {date(event.at)}</span></li>)}</ol>}
-      </ToolWindow>}
-      {!technical && <details className="fp-disclosure fp-device-details"><summary>Datos de ingreso<ChevronDown size={15} /></summary><div className="fp-device-grid"><div><span>Accesorios</span><p>{order.accessories}</p></div><div><span>Estado físico</span><p>{order.conditions}</p></div><div><span>Ingreso</span><p>{date(order.createdAt)}</p></div><div><span>Técnico</span><p>{order.assignedTo ? own ? 'Juan Pérez' : 'Diego Molina' : 'Sin asignar'}</p></div></div></details>}
-    </div>
-    <footer className="fp-action-dock">{blocked && <p className="fp-action-context fp-blocked">{blocked}</p>}<div className="fp-dock-buttons">
-      {actionForm && <button className="fp-button secondary" onClick={() => { setActionForm(null); setResponse('') }}>Cancelar</button>}
-      {primaryLabel && <button className="fp-button primary" onClick={runPrimary} disabled={!!blocked}>{actionForm === 'pickup' || action?.id === 'finish' ? <Check size={17} /> : <ArrowRight size={17} />}{primaryLabel}</button>}
-      {!primaryLabel && <span className="fp-no-action"><Clock3 size={15} />{order.status === 'entregado' ? 'Orden cerrada' : 'Sin acciones pendientes'}</span>}
-    </div></footer>
-  </article>
-}
+const ICONS = { '/resumen': LayoutDashboard, '/recepcion': ClipboardList, '/taller': Wrench, '/terminados': Archive, '/ordenes': Inbox, '/clientes': Users, '/actividad': Activity, '/metricas': TrendingUp, '/usuarios': Shield, '/copias': DatabaseBackup, '/papelera': Trash2, '/configuracion': Settings }
+const TITLES = Object.fromEntries(NAVIGATION.flatMap((g) => g.items.map(([url, name]) => [url.slice(1), name])))
+const defaultDraft = (o, fee) => ({ diagnosis: o.diagnosis, work: o.work, price: o.price || '', charge: String(fee ?? REVIEW_FEE), note: '', partName: '', partQuantity: '1' })
 
 export default function FlowPreview() {
+  const location = useLocation(), navigate = useNavigate()
+  const [state, setState] = useState(createSystemState)
+  const [role, setRole] = useState(() => initialProfile(location.pathname === '/' ? '/taller' : location.pathname))
   const [theme, setTheme] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-  useEffect(() => {
-    const root = document.documentElement
-    const previousDark = root.classList.contains('dark'), previousScheme = root.style.colorScheme
-    root.classList.toggle('dark', theme === 'dark')
-    root.style.colorScheme = theme
-    return () => { root.classList.toggle('dark', previousDark); root.style.colorScheme = previousScheme }
-  }, [theme])
-  const [orders, setOrders] = useState(createDemoOrders)
   const [now, setNow] = useState(Date.now)
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60000)
-    return () => window.clearInterval(timer)
-  }, [])
-  const [role, setRole] = useState('tecnico')
-  const [views, setViews] = useState({ tecnico: 'mine', recepcion: 'presupuestar' })
-  const [search, setSearch] = useState('')
-  const [selectedId, setSelectedId] = useState('demo-OS1042')
-  const [drafts, setDrafts] = useState({})
-  const [mobileDetail, setMobileDetail] = useState(false)
-  const [generation, setGeneration] = useState(0)
+  const [queries, setQueries] = useState({})
+  const [queues, setQueues] = useState({ taller: { view: 'mine', selected: 'demo-OS1042' }, recepcion: { view: 'presupuestar', selected: 'demo-OS1038' } })
+  const [drafts, setDrafts] = useState({}), [forms, setForms] = useState({})
+  const [modal, setModal] = useState(null), [menu, setMenu] = useState(false), [generation, setGeneration] = useState(0)
   const queueRef = useRef(null)
   const notify = useNotify('success')
-  const order = orders.find((item) => item.id === selectedId)
-  const view = views[role]
-  const list = queueOrders(orders, role, view, search)
-  const viewOptions = role === 'tecnico' ? TECH_VIEWS : RECEPTION_VIEWS
-  const draft = order ? { diagnosis: order.diagnosis, work: order.work, price: order.price || '', charge: String(REVIEW_FEE), note: '', partName: '', partQuantity: '1', ...drafts[order.id] } : null
-  const hasDrafts = Object.values(drafts).some((value) => Object.keys(value).length)
+  const [page, id] = location.pathname.slice(1).split('/')
+  const queryKey = location.pathname
+  const query = queries[queryKey] || {}
+  const setQuery = (patch) => setQueries((previous) => ({ ...previous, [queryKey]: { ...previous[queryKey], ...patch } }))
+  const counter = role !== 'tecnico'
+  const orders = state.orders.filter((o) => !o.deletedAt)
+  const isQueue = ['taller', 'recepcion'].includes(page)
+  const queue = queues[page] || {}, queueRole = page === 'recepcion' ? 'recepcion' : 'tecnico'
+  const view = queue.view || (page === 'recepcion' ? 'presupuestar' : 'mine')
+  const list = isQueue ? queueOrders(orders, queueRole, view, queue.search || '') : []
+  const order = orders.find((o) => o.id === (isQueue ? queue.selected : id))
+  const patchQueue = (patch) => setQueues((previous) => ({ ...previous, [page]: { ...previous[page], ...patch } }))
+  const patchDraft = (patch) => setDrafts((previous) => ({ ...previous, [order.id]: { ...previous[order.id], ...patch } }))
+  const formKey = modal?.key || modal?.type
+  const formValue = forms[formKey] || modal?.initial || {}
+  const patchForm = (patch) => setForms((previous) => ({ ...previous, [formKey]: { ...formValue, ...patch } }))
+  const clearForm = (key = formKey) => setForms((previous) => { const next = { ...previous }; delete next[key]; return next })
 
-  const changeRole = (next) => {
-    if (next === role) return
-    setRole(next)
-    if (next === 'recepcion') {
-      const target = receptionQueue(order || {})
-      if (target) setViews((previous) => ({ ...previous, recepcion: target }))
-      else setSelectedId(queueOrders(orders, next, views[next], search)[0]?.id || null)
-    } else if (order && (order.assignedTo !== TECHNICIAN || ['terminado', 'presupuesto_rechazado', 'entregado'].includes(order.status))) {
-      setSelectedId(queueOrders(orders, next, views[next], search)[0]?.id || null)
-    }
+  useEffect(() => {
+    const root = document.documentElement, previousDark = root.classList.contains('dark'), previousScheme = root.style.colorScheme
+    root.classList.toggle('dark', theme === 'dark'); root.style.colorScheme = theme
+    return () => { root.classList.toggle('dark', previousDark); root.style.colorScheme = previousScheme }
+  }, [theme])
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 60000); return () => window.clearInterval(timer) }, [])
+  useEffect(() => { if (!canVisit(location.pathname, role)) navigate(PROFILES[role].home, { replace: true }) }, [location.pathname, role, navigate])
+  useEffect(() => { setMenu(false); setModal(null) }, [location.pathname])
+
+  const dispatch = (action, payload = {}) => {
+    try { const next = applySystemAction(state, action, payload, role); setState(next); setNow(Date.now()); return next }
+    catch (error) { notify({ type: 'error', text: error.message }); return null }
   }
-  const changeView = (next) => {
-    setViews((previous) => ({ ...previous, [role]: next }))
-    const nextList = queueOrders(orders, role, next, search)
-    if (!nextList.some((item) => item.id === selectedId)) setSelectedId(nextList[0]?.id || null)
-    setMobileDetail(false)
+  const saveForm = (action, payload, message) => {
+    const next = dispatch(action, payload)
+    if (next) { clearForm(); setModal(null); notify(message); return next }
   }
-  const mutate = (action, payload) => {
-    try {
-      const updated = applyDemoAction(order, action, payload, role)
-      setOrders((previous) => previous.map((item) => item.id === order.id ? updated : item))
-      const clear = ['saveWork', 'sendQuote', 'finish'].includes(action) ? ['diagnosis', 'work'] : action === 'price' ? ['price'] : action === 'note' ? ['note'] : action === 'requestPart' ? ['partName', 'partQuantity'] : action === 'reject' ? ['charge'] : []
-      setDrafts((previous) => { const kept = { ...previous[order.id] }; clear.forEach((key) => delete kept[key]); return { ...previous, [order.id]: kept } })
-      notify(updated.history.at(-1).text)
-      return true
-    } catch (error) { notify({ type: 'error', text: error.message }); return false }
+  const mutateOrder = (action, data) => {
+    const next = dispatch('orderAction', { id: order.id, action, data })
+    if (!next) return false
+    const clear = ['saveWork', 'sendQuote', 'finish'].includes(action) ? ['diagnosis', 'work'] : action === 'price' ? ['price'] : action === 'note' ? ['note'] : action === 'requestPart' ? ['partName', 'partQuantity'] : action === 'reject' ? ['charge'] : []
+    setDrafts((previous) => { const kept = { ...previous[order.id] }; clear.forEach((key) => delete kept[key]); return { ...previous, [order.id]: kept } })
+    notify(next.orders.find((o) => o.id === order.id).history.at(-1).text)
+    return true
+  }
+  const changeRole = (next) => { setRole(next); setModal(null); navigate(PROFILES[next].home) }
+  const openNewOrder = () => setModal({ type: 'newOrder', initial: NEW_ORDER })
+  const openCustomer = (customer) => setModal({ type: 'customer', key: `customer-${customer?.id || 'new'}`, initial: customer || { name: '', phone: '', email: '', address: '' } })
+  const openUser = (user) => setModal({ type: 'user', key: `user-${user?.id || 'new'}`, initial: user || { name: '', role: 'tecnico', active: true } })
+  const confirm = (title, text, action) => setModal({ type: 'confirm', title, text, action })
+  const performReset = () => {
+    setState(createSystemState()); setNow(Date.now()); setDrafts({}); setForms({}); setQueries({}); setQueues({ taller: { view: 'mine', selected: 'demo-OS1042' }, recepcion: { view: 'presupuestar', selected: 'demo-OS1038' } }); setModal(null); setGeneration((n) => n + 1); navigate(PROFILES[role].home); notify('Demo reiniciada')
   }
   const reset = () => {
-    if (hasDrafts && !window.confirm('¿Reiniciar la demostración y descartar los borradores?')) return
-    setOrders(createDemoOrders()); setNow(Date.now()); setDrafts({}); setSearch(''); setSelectedId('demo-OS1042'); setRole('tecnico'); setViews({ tecnico: 'mine', recepcion: 'presupuestar' }); setMobileDetail(false)
-    setGeneration((previous) => previous + 1)
-    queueRef.current?.scrollTo({ top: 0 })
-    notify('Demostración reiniciada.')
+    if (Object.values(drafts).some((d) => Object.keys(d).length) || Object.keys(forms).length) confirm('Reiniciar demo', 'Se descartarán los borradores y los cambios de esta sesión.', performReset)
+    else performReset()
   }
-  const openOrder = (id) => { setSelectedId(id); setMobileDetail(true) }
-  const onQueueKey = (event, index) => {
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
-    event.preventDefault()
-    const target = event.key === 'Home' ? 0 : event.key === 'End' ? list.length - 1 : Math.max(0, Math.min(list.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))
+  const goOrders = (status) => { setQueries((q) => ({ ...q, '/ordenes': { status, page: 1 } })); navigate('/ordenes') }
+  const goReception = (view) => { setQueues((q) => ({ ...q, recepcion: { ...q.recepcion, view, selected: queueOrders(orders, 'recepcion', view)[0]?.id, detail: false } })); navigate('/recepcion') }
+  const extra = (type) => {
+    if (['print', 'label'].includes(type)) setModal({ type: 'document', order, label: type === 'label' })
+    else if (type === 'trash') confirm('Enviar a Papelera', `${order.number} · ${order.brand} ${order.model}`, () => { if (dispatch('trash', { kind: 'orders', id: order.id })) { setModal(null); navigate('/ordenes'); notify('Orden en Papelera') } })
+    else if (type === 'warranty') confirm('Reingreso por garantía', `${order.number} · ${order.customer}`, () => { if (mutateOrder('warranty', {})) setModal(null) })
+    else setModal({ type, initial: { name: state.settings.externals.split('\n')[0], repaired: true, technician: order?.assignedTo || state.users.find((u) => u.role === 'tecnico' && u.active)?.id } })
+  }
+  const renderOrder = () => order ? <OrderWorkspace key={`${generation}-${order.id}-${role}-${page}`} order={order} role={role} technical={role === 'tecnico' || (role === 'admin' && !receptionQueue(order))} draft={{ ...defaultDraft(order, state.settings.revisionFee), ...drafts[order.id] }} setDraft={patchDraft} onAction={mutateOrder} onBack={() => isQueue ? patchQueue({ detail: false }) : navigate(location.state?.from || '/ordenes')} onExtra={extra} /> : <div className="fp-order"><Empty text="Elegí un equipo" /></div>
+  const changeView = (view) => patchQueue({ view, selected: queueOrders(orders, queueRole, view, queue.search || '')[0]?.id, detail: false, scroll: 0 })
+  const queueKey = (e, index) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+    e.preventDefault()
+    const target = e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : Math.max(0, Math.min(list.length - 1, index + (e.key === 'ArrowDown' ? 1 : -1)))
     queueRef.current?.querySelectorAll('.fp-queue-row')[target]?.focus()
   }
+  const pageContent = () => {
+    if (isQueue) return <div className={`fp-workspace ${page === 'taller' ? 'fp-workspace-technical' : ''} ${queue.detail ? 'fp-show-detail' : ''}`}>
+      <section className="fp-queue" aria-label="Cola de equipos"><div className="fp-queue-tools"><div className="fp-queue-title"><h2>{page === 'taller' ? 'Equipos del taller' : 'Por hacer'}</h2><span>{list.length} equipos</span></div><SearchBox label="Buscar equipo" value={queue.search} onChange={(search) => patchQueue({ search })} placeholder="N.º, equipo o cliente" /><div className="fp-queue-filters" role="group" aria-label="Filtrar cola">{(page === 'taller' ? TECH_VIEWS : RECEPTION_VIEWS).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => changeView(key)}>{label}<span>{queueOrders(orders, queueRole, key).length}</span></button>)}</div></div>
+      <div className="fp-queue-list" key={`${page}-${view}`} ref={(element) => { queueRef.current = element; if (element && Math.abs(element.scrollTop - (queue.scroll || 0)) > 2) element.scrollTop = queue.scroll || 0 }} onScroll={(e) => patchQueue({ scroll: e.currentTarget.scrollTop })}>{list.length ? list.map((item, index) => <button key={item.id} data-order={item.number} className={`fp-queue-row ${queue.selected === item.id ? 'selected' : ''}`} aria-current={queue.selected === item.id ? 'true' : undefined} onClick={() => patchQueue({ selected: item.id, detail: true })} onKeyDown={(e) => queueKey(e, index)}><div className="fp-row-device"><DeviceIcon type={item.deviceType} size={18} /><div className="fp-row-name"><strong>{item.brand} {item.model}</strong>{page === 'taller' && workAge(item, now) && <span className="fp-work-age">· {workAge(item, now)}</span>}</div><Status order={item} /></div><div className="fp-row-bottom"><p className="fp-row-issue">{item.issue}</p><ChevronRight size={14} /></div></button>) : <Empty text={queue.search ? 'Sin coincidencias' : 'Sin equipos'} />}</div></section>{renderOrder()}</div>
+    if (page === 'ordenes' && id) return <><button className="fp-link fp-detail-back" onClick={() => navigate(location.state?.from || '/ordenes')}><ArrowLeft size={16} />Volver al listado</button><div className="fp-standalone-order">{renderOrder()}</div></>
+    if (page === 'ordenes' || page === 'terminados') return <OrdersTable orders={page === 'terminados' ? orders.filter((o) => ['terminado', 'presupuesto_rechazado', 'entregado'].includes(o.status)) : orders} query={query} setQuery={setQuery} from={location.pathname} onExport={(rows) => setModal({ type: 'document', rows })} />
+    if (page === 'resumen' || page === 'metricas') return <SummaryPage state={state} metrics={page === 'metricas'} goOrders={goOrders} goReception={goReception} />
+    if (page === 'clientes') return <ClientsPage state={state} role={role} id={id} query={query} setQuery={setQuery} from={location.pathname} onEdit={openCustomer} onTrash={(c) => confirm('Enviar cliente a Papelera', `Se incluirán las órdenes de ${c.name}.`, () => { if (dispatch('trash', { kind: 'customers', id: c.id })) { setModal(null); navigate('/clientes'); notify('Cliente en Papelera') } })} />
+    if (page === 'actividad') return <ActivityPage state={state} query={query} setQuery={setQuery} />
+    if (page === 'usuarios') return <UsersPage state={state} onEdit={openUser} />
+    if (page === 'copias') return <BackupsPage state={state} onCreate={() => { if (dispatch('backup')) notify('Copia creada en memoria') }} onRestore={(b) => confirm('Restaurar copia de demostración', 'Reemplazará los datos ficticios actuales y descartará los borradores.', () => { if (dispatch('restoreBackup', { id: b.id })) { setDrafts({}); setForms({}); setGeneration((n) => n + 1); setModal(null); notify('Copia restaurada en memoria') } })} />
+    if (page === 'papelera') return <TrashPage state={state} query={query} setQuery={setQuery} onRestore={(kind, id) => { if (dispatch('restore', { kind, id })) notify('Elemento restaurado') }} />
+    if (page === 'configuracion') return <SettingsPage state={state} tab={query.tab || 'general'} setTab={(tab) => setQuery({ tab })} value={{ ...state.settings, catalogText: '', ...forms.settings }} set={(patch) => setForms((f) => ({ ...f, settings: { ...f.settings, ...patch } }))} onSave={() => { const { catalogText: _text, ...settings } = forms.settings || {}; if (dispatch('settings', settings)) { clearForm('settings'); notify('Configuración guardada') } }} onImport={(text) => { if (dispatch('catalog', { text })) { setForms((f) => ({ ...f, settings: { ...f.settings, catalogText: '' } })); notify('Modelos agregados') } }} onTest={(label) => setModal({ type: 'document', order: orders[0], label })} />
+    return <Empty text="Pantalla no disponible" />
+  }
+  const modalTitle = { newOrder: 'Nueva orden', customer: formValue.id ? 'Editar cliente' : 'Nuevo cliente', user: formValue.id ? 'Editar usuario' : 'Nuevo usuario', document: modal?.label ? 'Vista previa de etiqueta' : 'Vista previa', profile: 'Mi perfil', password: 'Cambiar contraseña', sendExternal: 'Enviar a técnico externo', returnExternal: 'Registrar regreso' }[modal?.type] || modal?.title
+
   return <div className="flow-demo" data-theme={theme}>
-    <div className="fp-demo-bar"><span><FlaskConical size={15} /><strong>Vista previa</strong><span className="fp-demo-description">Datos ficticios</span></span><div className="fp-demo-tools"><button onClick={() => setTheme((previous) => previous === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</button><button onClick={reset}><RotateCcw size={14} />Reiniciar demo</button></div></div>
-    <div className="fp-shell">
-      <aside className="fp-sidebar"><div className="fp-brand"><img src={logo} alt="" /><div><strong>El Gringo</strong><span>Service Center</span></div></div><div className="fp-navigation"><span>Espacios de trabajo</span><button className={role === 'tecnico' ? 'active' : ''} onClick={() => changeRole('tecnico')}><Wrench size={18} />Taller<ChevronRight size={15} /></button><button className={role === 'recepcion' ? 'active' : ''} onClick={() => changeRole('recepcion')}><ClipboardList size={18} />Recepción<ChevronRight size={15} /></button></div><div className="fp-person"><span className="fp-avatar">{role === 'tecnico' ? 'JP' : 'SM'}</span><div><strong>{role === 'tecnico' ? 'Juan Pérez' : 'Sofía Martín'}</strong><span>{role === 'tecnico' ? 'Técnico de taller' : 'Recepción'}</span></div></div></aside>
-      <main className="fp-main">
-        <header className="fp-page-heading"><div><p>Órdenes de servicio <ChevronRight size={12} />{role === 'tecnico' ? 'Taller' : 'Recepción'}</p><h1>{role === 'tecnico' ? 'Mesa de trabajo' : 'Pendientes de recepción'}</h1></div><div className="fp-role-switch" role="group" aria-label="Cambiar vista de demostración"><button aria-pressed={role === 'tecnico'} onClick={() => changeRole('tecnico')}><Wrench size={15} />Taller</button><button aria-pressed={role === 'recepcion'} onClick={() => changeRole('recepcion')}><ClipboardList size={15} />Recepción</button></div></header>
-        <div className={`fp-workspace ${role === 'tecnico' ? 'fp-workspace-technical' : ''} ${mobileDetail ? 'fp-show-detail' : ''}`}>
-          <section className="fp-queue" aria-label="Cola de equipos"><div className="fp-queue-tools"><div className="fp-queue-title"><h2>{role === 'tecnico' ? 'Equipos del taller' : 'Por hacer'}</h2><span>{list.length} equipo{list.length !== 1 ? 's' : ''}</span></div><label className="fp-search"><Search size={17} /><input aria-label="Buscar equipo" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="N.º, equipo o cliente" />{search && <button aria-label="Limpiar búsqueda" onClick={() => setSearch('')}>×</button>}</label><div className="fp-queue-filters" role="group" aria-label="Filtrar cola">{viewOptions.map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => changeView(key)}>{label}<span>{queueOrders(orders, role, key).length}</span></button>)}</div></div>
-            <div className="fp-queue-list" ref={queueRef}>{list.length ? list.map((item, index) => <button key={item.id} data-order={item.number} className={`fp-queue-row ${selectedId === item.id ? 'selected' : ''}`} aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => openOrder(item.id)} onKeyDown={(event) => onQueueKey(event, index)}>
-                <div className="fp-row-device"><DeviceIcon type={item.deviceType} size={18} /><div className="fp-row-name"><strong>{item.brand} {item.model}</strong>{role === 'tecnico' && workAge(item, now) && <span className="fp-work-age">· {workAge(item, now)}</span>}</div><Status order={item} /></div><div className="fp-row-bottom"><p className="fp-row-issue">{item.issue}</p><ChevronRight size={14} /></div>
-              </button>) : <div className="fp-empty"><Inbox size={30} /><h3>{search ? 'Sin coincidencias' : 'Sin equipos'}</h3></div>}</div>
-          </section>
-          {order ? <OrderWorkspace key={`${generation}-${order.id}-${role}`} order={order} role={role} draft={draft} setDraft={(fields) => setDrafts((previous) => ({ ...previous, [order.id]: { ...previous[order.id], ...fields } }))} onAction={mutate} onBack={() => setMobileDetail(false)} /> : <div className="fp-order fp-empty fp-select-empty"><ClipboardList size={36} /><h2>Elegí un equipo</h2><button className="fp-button secondary fp-back" onClick={() => setMobileDetail(false)}><ArrowLeft size={15} />Volver a la cola</button></div>}
-        </div>
-      </main>
-    </div>
+    <div className="fp-demo-bar"><span><FlaskConical size={15} /><strong>Demo</strong><span className="fp-demo-description">Datos ficticios</span></span><div className="fp-demo-tools"><label className="fp-profile-picker">Perfil<select aria-label="Perfil de demostración" value={role} onChange={(e) => changeRole(e.target.value)}>{Object.entries(PROFILES).map(([key, p]) => <option key={key} value={key}>{p.label}</option>)}</select></label><button onClick={() => setTheme((t) => t === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}<span className="fp-theme-text">{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span></button><button onClick={reset} aria-label="Reiniciar demo"><RotateCcw size={15} /><span className="fp-reset-text">Reiniciar demo</span></button></div></div>
+    {page === 'acceso' ? <main className="fp-login"><section className="fp-card fp-card-pad"><img src={logo} alt="" /><h1>Service Center</h1><p className="fp-muted">Acceso simulado · Datos ficticios</p><form className="fp-form" onSubmit={(e) => { e.preventDefault(); changeRole(role); notify('Acceso simulado') }}><Field label="Perfil"><select value={role} onChange={(e) => setRole(e.target.value)}>{Object.entries(PROFILES).map(([key, p]) => <option key={key} value={key}>{p.label}</option>)}</select></Field><Field label="Usuario ficticio" placeholder="usuario.demo" autoComplete="off" /><Field label="Contraseña ficticia" type="password" autoComplete="off" /><button className="fp-button primary">Entrar a la demo<LogIn size={16} /></button></form></section></main> : <div className="fp-shell">
+      <div className="fp-mobile-top"><button className="fp-button secondary" onClick={() => setMenu(!menu)} aria-expanded={menu} aria-controls="preview-navigation">{menu ? <X size={18} /> : <Menu size={18} />}Menú</button><span>{state.settings.business}</span><button aria-label="Mi perfil" className="fp-button secondary" onClick={() => setModal({ type: 'profile' })}><UserRound size={18} /></button></div>
+      <aside id="preview-navigation" className={`fp-sidebar ${menu ? 'fp-menu-open' : ''}`}><div className="fp-brand"><img src={logo} alt="" /><div><strong>{state.settings.business}</strong><span>Service Center</span></div></div><nav aria-label="Navegación de demostración" className="fp-navigation">{NAVIGATION.map(({ group, items }) => <div key={group}>{items.some(([, , roles]) => !roles || roles.includes(role)) && <span className="fp-nav-group">{group}</span>}{items.filter(([, , roles]) => !roles || roles.includes(role)).map(([url, label]) => { const Icon = ICONS[url]; return <Link className={location.pathname === url || location.pathname.startsWith(`${url}/`) ? 'active' : ''} aria-current={location.pathname === url ? 'page' : undefined} key={url} to={url}><Icon size={17} />{label}</Link> })}</div>)}</nav><div className="fp-account"><button className="fp-person" onClick={() => setModal({ type: 'profile' })}><span className="fp-avatar">{PROFILES[role].name.split(' ').map((s) => s[0]).join('')}</span><span>{PROFILES[role].name}<span>{PROFILES[role].label}</span></span></button><button className="fp-link" onClick={() => setModal({ type: 'password' })}>Cambiar contraseña</button><Link className="fp-link" to="/acceso"><LogIn size={15} />Acceso simulado</Link></div></aside>
+      <main className="fp-main"><header className="fp-page-heading"><div><p>Service Center<ChevronRight size={12} />{TITLES[page]}</p><h1>{page === 'taller' ? 'Mesa de trabajo' : page === 'recepcion' ? 'Pendientes de recepción' : id && page === 'ordenes' ? 'Detalle de orden' : TITLES[page]}</h1></div><div className="fp-inline-actions">{counter && ['recepcion', 'ordenes', 'resumen'].includes(page) && !id && <button className="fp-button primary" onClick={openNewOrder}><Plus size={16} />Nueva orden</button>}{page === 'clientes' && !id && <button className="fp-button primary" onClick={() => openCustomer()}><Plus size={16} />Nuevo cliente</button>}{page === 'usuarios' && <button className="fp-button primary" onClick={() => openUser()}><Plus size={16} />Nuevo usuario</button>}</div></header>{canVisit(location.pathname, role) && pageContent()}</main>
+    </div>}
+    {modal && <ToolWindow title={modalTitle} onClose={() => setModal(null)}>
+      {modal.type === 'newOrder' && <NewOrderForm state={state} value={formValue} set={patchForm} onClose={() => setModal(null)} onSubmit={(data) => { const next = saveForm('createOrder', data, 'Orden creada'); if (next) navigate(`/ordenes/${next.orders.at(-1).id}`, { state: { from: '/recepcion' } }) }} />}
+      {modal.type === 'customer' && <CustomerForm value={formValue} set={patchForm} onClose={() => setModal(null)} onSubmit={(data) => saveForm('customer', data, 'Cliente guardado')} />}
+      {modal.type === 'user' && <UserForm value={formValue} set={patchForm} onClose={() => setModal(null)} onSubmit={(data) => saveForm('user', data, 'Usuario guardado')} />}
+      {modal.type === 'document' && <DocumentPreview state={state} order={modal.order} label={modal.label} rows={modal.rows || []} />}
+      {['profile', 'password'].includes(modal.type) && <AccountForm role={role} type={modal.type} onClose={() => setModal(null)} onSubmit={() => { setModal(null); notify('Cambio simulado. No modifica credenciales reales.') }} />}
+      {modal.type === 'assign' && <form className="fp-form" onSubmit={(e) => { e.preventDefault(); saveForm('assign', { id: order.id, technician: formValue.technician }, 'Técnico asignado') }}><Field label="Técnico"><select value={formValue.technician} onChange={(e) => patchForm({ technician: e.target.value })}>{state.users.filter((u) => u.active && u.role === 'tecnico').map((u) => <option value={u.id} key={u.id}>{u.name}</option>)}</select></Field><FormActions onClose={() => setModal(null)} /></form>}
+      {['sendExternal', 'returnExternal'].includes(modal.type) && <form className="fp-form" onSubmit={(e) => { e.preventDefault(); if (mutateOrder(modal.type, formValue)) { clearForm(); setModal(null) } }}>{modal.type === 'sendExternal' ? <Field label="Técnico externo"><select value={formValue.name} onChange={(e) => patchForm({ name: e.target.value })}>{state.settings.externals.split('\n').filter(Boolean).map((name) => <option key={name}>{name}</option>)}</select></Field> : <><p>{order?.externalTech}</p><label className="fp-checkbox"><input type="checkbox" checked={formValue.repaired} onChange={(e) => patchForm({ repaired: e.target.checked })} />Reparación finalizada</label></>}<FormActions onClose={() => setModal(null)} /></form>}
+      {modal.type === 'confirm' && <div className="fp-form"><p>{modal.text}</p><div className="fp-form-actions"><button className="fp-button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="fp-button primary" onClick={modal.action}>Confirmar</button></div></div>}
+    </ToolWindow>}
   </div>
 }

@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { HashRouter } from 'react-router-dom'
 import NotificationProvider from '../components/NotificationProvider.jsx'
 import '../index.css'
 import './flow-preview.css'
@@ -9,7 +10,7 @@ if (import.meta.env.DEV) {
   document.body.classList.add('fp-preview')
   import('./FlowPreview.jsx').then(({ default: FlowPreview }) => {
     createRoot(document.getElementById('root')).render(
-      <StrictMode><NotificationProvider><FlowPreview /></NotificationProvider></StrictMode>,
+      <StrictMode><HashRouter><NotificationProvider><FlowPreview /></NotificationProvider></HashRouter></StrictMode>,
     )
   })
 } else {
