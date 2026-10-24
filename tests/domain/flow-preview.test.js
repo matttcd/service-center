@@ -1,12 +1,45 @@
 import { describe, it, expect } from 'vitest'
 import {
-  TECHNICIAN, createDemoOrders, applyDemoAction, nextAction, queueOrders, receptionQueue, charges,
+  TECHNICIAN, createDemoOrders, applyDemoAction, nextAction, queueOrders, receptionQueue, charges, workAge,
 } from '../../src/preview/preview-model.js'
 
 const fixture = (number) => createDemoOrders(1800000000000).find((order) => order.number === number)
 const counter = (order, action, payload) => applyDemoAction(order, action, payload, 'recepcion')
 
 describe('Vista previa del flujo: simulación aislada', () => {
+  it.each([
+    [0, 'recién'], [59000, 'recién'], [60000, 'hace 1 min'], [59 * 60000, 'hace 59 min'],
+    [3600000, 'hace 1 h'], [2 * 3600000, 'hace 2 h'], [86400000, 'hace 1 d'], [-1000, 'recién'],
+  ])('muestra el tiempo transcurrido de trabajo para %s ms', (elapsed, expected) => {
+    expect(workAge({ assignedTo: TECHNICIAN, acceptedAt: 1800000000000 }, 1800000000000 + elapsed)).toBe(expected)
+  })
+  it('cuenta desde la aceptación y conserva el tiempo en presupuestos, repuestos y reanudaciones', () => {
+    const now = 1800000000000
+    let order = applyDemoAction(fixture('OS1047'), 'claim', {}, 'tecnico', now)
+    expect(order.acceptedAt).toBe(now)
+    expect(workAge(order, now)).toBe('recién')
+    order = applyDemoAction(order, 'saveWork', { diagnosis: 'Pantalla dañada', work: 'Cambiar módulo' }, 'tecnico', now + 3600000)
+    order = applyDemoAction(order, 'sendQuote', {}, 'tecnico', now + 2 * 3600000)
+    expect(workAge(order, now + 2 * 3600000)).toBe('hace 2 h')
+    order = counter(order, 'price', { price: 65000 })
+    order = counter(order, 'notify')
+    order = counter(order, 'approve')
+    order = applyDemoAction(order, 'startRepair', {}, 'tecnico', now + 3 * 3600000)
+    expect(workAge(order, now + 3 * 3600000)).toBe('hace 3 h')
+    order = applyDemoAction(order, 'requestPart', { name: 'Módulo', quantity: 1 })
+    expect(workAge(order, now + 4 * 3600000)).toBe('hace 4 h')
+    order = counter(order, 'partOrdered', { id: order.parts[0].id })
+    order = counter(order, 'partArrived', { id: order.parts[0].id })
+    order = applyDemoAction(order, 'resume', {}, 'tecnico', now + 5 * 3600000)
+    expect(order.acceptedAt).toBe(now)
+    expect(workAge(order, now + 5 * 3600000)).toBe('hace 5 h')
+  })
+  it('muestra tiempo en todos mis trabajos y ninguno en los equipos sin aceptar', () => {
+    const now = 1800000000000
+    for (const order of queueOrders(createDemoOrders(now), 'tecnico', 'mine')) expect(workAge(order, now)).toMatch(/^hace /)
+    expect(workAge(fixture('OS1047'), now)).toBe('')
+    expect(workAge({ assignedTo: TECHNICIAN, acceptedAt: null }, now)).toBe('')
+  })
   it('permite reparar un cambio de módulo definido por recepción sin completar diagnóstico', () => {
     const original = fixture('OS1045')
     expect(original.diagnosis).toBe('')

@@ -30,6 +30,8 @@ En Taller se usa la variante con cola de aproximadamente un tercio del espacio (
 
 Los controles, estados y datos reemplazan las instrucciones repetidas en la ficha, navegación y ventanas. Se conservan la identificación de la demo y los mensajes breves de validación o de datos pendientes.
 
+La cola de Taller muestra junto al equipo el tiempo desde que el técnico lo aceptó («· hace 2 h»), actualizado cada minuto. Se mantiene en todos «Mis trabajos», incluso durante las esperas por presupuesto o repuestos; iniciar reparación, retomar o guardar no lo reinicia. Los equipos sin aceptar no muestran tiempo. Tiempo y estado tienen prioridad de espacio sobre el nombre, que se recorta si hace falta. Los tiempos iniciales también son ficticios.
+
 El trabajo vigente muestra quién lo definió. Guardar solamente el diagnóstico conserva la autoría del trabajo; modificar el trabajo actualiza su autor y guarda el texto anterior, el nuevo, autor y fecha en Historial. Los borradores no cambian la autoría hasta guardarse. El ejemplo OS1045 permite comprobar el paso de un trabajo definido por Sofía en Recepción a uno actualizado por Juan en Taller. Esta procedencia es parte de los datos ficticios; no modifica las APIs ni el esquema real.
 
 Notas, Repuestos e Historial tienen botones con cantidades debajo del encabezado del equipo. Se abren en ventanas emergentes; al cerrarlas se conserva la posición de la ficha y los borradores. Escape cierra la ventana y devuelve el foco al botón que la abrió; Tab permanece dentro. Las notificaciones se muestran por encima de las ventanas.

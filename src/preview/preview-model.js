@@ -12,12 +12,21 @@ export const RECEPTION_VIEWS = [
 ]
 export const TECH_VIEWS = [['mine', 'Mis trabajos'], ['available', 'Sin asignar'], ['all', 'Todo el taller']]
 
+export function workAge(order, now = Date.now()) {
+  if (!order.assignedTo || order.acceptedAt == null) return ''
+  const minutes = Math.max(0, Math.floor((now - order.acceptedAt) / 60000))
+  if (minutes < 1) return 'recién'
+  if (minutes < 60) return `hace ${minutes} min`
+  if (minutes < 1440) return `hace ${Math.floor(minutes / 60)} h`
+  return `hace ${Math.floor(minutes / 1440)} d`
+}
+
 export function createDemoOrders(now = Date.now()) {
   const day = 86400000
   const seeds = [
-    { number: 'OS1042', brand: 'Samsung', model: 'Galaxy A54', customer: 'Ana Ruiz', issue: 'No carga. El cable queda flojo.', status: 'en_revision', days: 2, diagnosis: 'El conector USB-C tiene desgaste y contactos dañados.', work: 'Reemplazar conector de carga y comprobar carga rápida.' },
+    { number: 'OS1042', brand: 'Samsung', model: 'Galaxy A54', customer: 'Ana Ruiz', issue: 'No carga. El cable queda flojo.', status: 'en_revision', acceptedAt: now - 2 * 3600000, days: 2, diagnosis: 'El conector USB-C tiene desgaste y contactos dañados.', work: 'Reemplazar conector de carga y comprobar carga rápida.' },
     { number: 'OS1047', brand: 'Apple', model: 'iPhone 13', customer: 'Lucía Torres', issue: 'Se apaga aunque indique batería disponible.', status: 'recibido', assignedTo: null, days: 1, diagnosis: '', work: '' },
-    { number: 'OS1044', brand: 'Motorola', model: 'Moto G84', customer: 'Tomás Ríos', issue: 'Pantalla rota. El táctil no responde.', status: 'en_reparacion', days: 2, diagnosis: 'Módulo de pantalla dañado por golpe.', work: 'Cambiar módulo y probar imagen y táctil.', price: 65000, advance: 20000, pattern: [0, 3, 6, 7, 8] },
+    { number: 'OS1044', brand: 'Motorola', model: 'Moto G84', customer: 'Tomás Ríos', issue: 'Pantalla rota. El táctil no responde.', status: 'en_reparacion', acceptedAt: now - 45 * 60000, days: 2, diagnosis: 'Módulo de pantalla dañado por golpe.', work: 'Cambiar módulo y probar imagen y táctil.', price: 65000, advance: 20000, pattern: [0, 3, 6, 7, 8] },
     { number: 'OS1038', brand: 'HP', model: 'Notebook 14', customer: 'Marcos Vega', issue: 'Enciende pero no inicia Windows.', status: 'presupuesto', deviceType: 'Notebook', days: 3, diagnosis: 'El SSD presenta errores de lectura.', work: 'Reemplazar SSD de 500 GB e instalar el sistema.' },
     { number: 'OS1035', brand: 'Apple', model: 'iPhone 11', customer: 'Paula Díaz', issue: 'La batería dura menos de dos horas.', status: 'presupuesto', days: 4, diagnosis: 'Batería con capacidad degradada.', work: 'Cambiar batería y comprobar autonomía.', price: 45000, notified: true },
     { number: 'OS1031', brand: 'Sony', model: 'PlayStation 5', customer: 'Nicolás Costa', deviceType: 'Consola', issue: 'Se apaga al abrir un juego.', status: 'presupuesto', days: 5, diagnosis: 'Sobretemperatura por obstrucción de la ventilación.', work: 'Limpiar refrigeración y realizar prueba bajo carga.', price: 38000, notified: true, confirmed: true },
@@ -33,6 +42,7 @@ export function createDemoOrders(now = Date.now()) {
       deviceType: 'Celular', assignedTo: TECHNICIAN, price: 0, advance: 0,
       notified: false, confirmed: false, rejectedCharge: null, parts: [], notes: [],
       ...seed, id: `demo-${seed.number}`, createdAt, statusSince: createdAt + 3600000,
+      acceptedAt: seed.assignedTo === null ? null : seed.acceptedAt ?? createdAt + 3600000,
       workAuthor: seed.work ? seed.workAuthor || { name: seed.assignedTo === 'demo-diego' ? 'Diego' : 'Juan', role: 'tecnico' } : null,
       phone: `11 5555-${String(100 + i).padStart(4, '0')}`, access: '2580 (ejemplo)',
       accessories: 'Sin accesorios', conditions: 'Marcas de uso en carcasa',
@@ -131,7 +141,7 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
     text = 'Diagnóstico y trabajo guardados'
   } else if (['claim', 'startReview', 'sendQuote', 'startRepair', 'finish', 'resume'].includes(action)) {
     require(nextAction(order, role)?.id === action, 'Esta acción ya no está disponible para este equipo.')
-    if (action === 'claim') { next.assignedTo = TECHNICIAN; setStatus('en_revision'); text = 'Juan tomó el equipo e inició la revisión' }
+    if (action === 'claim') { next.assignedTo = TECHNICIAN; next.acceptedAt = now; setStatus('en_revision'); text = 'Juan tomó el equipo e inició la revisión' }
     if (action === 'startReview') { setStatus('en_revision'); text = 'Revisión iniciada' }
     if (action === 'sendQuote') {
       next.diagnosis = String(payload.diagnosis ?? next.diagnosis).trim()

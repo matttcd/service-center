@@ -11,7 +11,7 @@ import Modal from '../components/Modal.jsx'
 import logo from '../assets/gringologo-modified.png'
 import {
   TECHNICIAN, REVIEW_FEE, STATUS_LABELS, TECH_VIEWS, RECEPTION_VIEWS,
-  createDemoOrders, queueOrders, nextAction, waitingFor, receptionQueue, applyDemoAction, charges,
+  createDemoOrders, queueOrders, nextAction, waitingFor, receptionQueue, applyDemoAction, charges, workAge,
 } from './preview-model.js'
 
 const money = (value) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value)
@@ -180,6 +180,11 @@ export default function FlowPreview() {
     return () => { root.classList.toggle('dark', previousDark); root.style.colorScheme = previousScheme }
   }, [theme])
   const [orders, setOrders] = useState(createDemoOrders)
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60000)
+    return () => window.clearInterval(timer)
+  }, [])
   const [role, setRole] = useState('tecnico')
   const [views, setViews] = useState({ tecnico: 'mine', recepcion: 'presupuestar' })
   const [search, setSearch] = useState('')
@@ -225,7 +230,7 @@ export default function FlowPreview() {
   }
   const reset = () => {
     if (hasDrafts && !window.confirm('¿Reiniciar la demostración y descartar los borradores?')) return
-    setOrders(createDemoOrders()); setDrafts({}); setSearch(''); setSelectedId('demo-OS1042'); setRole('tecnico'); setViews({ tecnico: 'mine', recepcion: 'presupuestar' }); setMobileDetail(false)
+    setOrders(createDemoOrders()); setNow(Date.now()); setDrafts({}); setSearch(''); setSelectedId('demo-OS1042'); setRole('tecnico'); setViews({ tecnico: 'mine', recepcion: 'presupuestar' }); setMobileDetail(false)
     setGeneration((previous) => previous + 1)
     queueRef.current?.scrollTo({ top: 0 })
     notify('Demostración reiniciada.')
@@ -246,7 +251,7 @@ export default function FlowPreview() {
         <div className={`fp-workspace ${role === 'tecnico' ? 'fp-workspace-technical' : ''} ${mobileDetail ? 'fp-show-detail' : ''}`}>
           <section className="fp-queue" aria-label="Cola de equipos"><div className="fp-queue-tools"><div className="fp-queue-title"><h2>{role === 'tecnico' ? 'Equipos del taller' : 'Por hacer'}</h2><span>{list.length} equipo{list.length !== 1 ? 's' : ''}</span></div><label className="fp-search"><Search size={17} /><input aria-label="Buscar equipo" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="N.º, equipo o cliente" />{search && <button aria-label="Limpiar búsqueda" onClick={() => setSearch('')}>×</button>}</label><div className="fp-queue-filters" role="group" aria-label="Filtrar cola">{viewOptions.map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => changeView(key)}>{label}<span>{queueOrders(orders, role, key).length}</span></button>)}</div></div>
             <div className="fp-queue-list" ref={queueRef}>{list.length ? list.map((item, index) => <button key={item.id} data-order={item.number} className={`fp-queue-row ${selectedId === item.id ? 'selected' : ''}`} aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => openOrder(item.id)} onKeyDown={(event) => onQueueKey(event, index)}>
-                <div className="fp-row-device"><DeviceIcon type={item.deviceType} size={18} /><strong>{item.brand} {item.model}</strong><Status order={item} /></div><div className="fp-row-bottom"><p className="fp-row-issue">{item.issue}</p><ChevronRight size={14} /></div>
+                <div className="fp-row-device"><DeviceIcon type={item.deviceType} size={18} /><div className="fp-row-name"><strong>{item.brand} {item.model}</strong>{role === 'tecnico' && workAge(item, now) && <span className="fp-work-age">· {workAge(item, now)}</span>}</div><Status order={item} /></div><div className="fp-row-bottom"><p className="fp-row-issue">{item.issue}</p><ChevronRight size={14} /></div>
               </button>) : <div className="fp-empty"><Inbox size={30} /><h3>{search ? 'Sin coincidencias' : 'Sin equipos'}</h3></div>}</div>
           </section>
           {order ? <OrderWorkspace key={`${generation}-${order.id}-${role}`} order={order} role={role} draft={draft} setDraft={(fields) => setDrafts((previous) => ({ ...previous, [order.id]: { ...previous[order.id], ...fields } }))} onAction={mutate} onBack={() => setMobileDetail(false)} /> : <div className="fp-order fp-empty fp-select-empty"><ClipboardList size={36} /><h2>Elegí un equipo</h2><button className="fp-button secondary fp-back" onClick={() => setMobileDetail(false)}><ArrowLeft size={15} />Volver a la cola</button></div>}

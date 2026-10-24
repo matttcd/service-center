@@ -83,7 +83,9 @@ body.fp-preview {
 .fp-queue-row.selected { background: var(--fp-selection); border-left-color: var(--fp-blue-text); }
 .fp-row-device { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .fp-row-device > svg:first-child { color: var(--fp-muted); }
-.fp-row-device strong { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 400; }
+.fp-row-name { display: flex; align-items: center; flex: 1; min-width: 0; gap: 4px; }
+.fp-row-device strong { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 400; }
+.fp-work-age { flex-shrink: 0; white-space: nowrap; color: var(--fp-muted); }
 .fp-row-device .fp-status { flex-shrink: 0; }
 .fp-row-bottom { display: flex; align-items: center; gap: 8px; }
 .fp-row-bottom > svg { color: var(--fp-muted); }
