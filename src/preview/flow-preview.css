@@ -104,6 +104,9 @@ body.fp-preview {
 .fp-order-topline { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .fp-order-number { color: var(--fp-ink); font-weight: 400; font-size: 14px; }
 .fp-order-header h2 { font-size: 18px; font-weight: 700; letter-spacing: -.4px; margin-top: 6px; line-height: 1.3; }
+.fp-order-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-top: 6px; }
+.fp-order-title h2 { margin-top: 0; }
+.fp-order-title .fp-button { min-height: 38px; padding: 7px 10px; }
 .fp-order-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--fp-ink); margin-top: 10px; }
 .fp-order-meta > span { display: flex; align-items: center; gap: 7px; }
 .fp-technical-order { display: grid; grid-template-columns: minmax(0,1fr) 240px; grid-template-rows: auto minmax(0,1fr) auto; grid-template-areas: 'heading reference' 'body reference' 'actions reference'; }
@@ -111,12 +114,11 @@ body.fp-preview {
 .fp-technical-order > .fp-order-body { grid-area: body; }
 .fp-technical-order > .fp-action-dock { grid-area: actions; }
 .fp-reference { grid-area: reference; min-width: 0; min-height: 0; overflow-y: auto; padding: 20px 18px; border-left: 1px solid var(--fp-line); background: var(--fp-subtle); }
-.fp-reference > h3 { margin-bottom: 20px; }
 .fp-reference-client { margin-bottom: 16px; }
 .fp-reference-client > span, .fp-equipment-facts dt { font-size: 14px; color: var(--fp-ink); display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
 .fp-reference :is(dt, .fp-reference-client) svg { color: var(--fp-muted); margin-top: 2px; }
 .fp-reference-client p { overflow-wrap: anywhere; color: var(--fp-ink); padding-left: 24px; }
-.fp-reference-client .fp-reference-phone { display: flex; align-items: flex-start; gap: 8px; padding-left: 0; margin-top: 8px; }
+.fp-reference-client .fp-reference-phone { margin-top: 14px; }
 .fp-equipment-facts { display: grid; gap: 16px; margin: 0; }
 .fp-equipment-facts > div { border-top: 1px solid var(--fp-line); padding-top: 14px; min-width: 0; }
 .fp-equipment-facts dd { margin: 0; padding-left: 24px; overflow-wrap: anywhere; color: var(--fp-ink); }
@@ -241,7 +243,7 @@ body.fp-preview {
   .fp-workspace-technical.fp-show-detail { height: auto; min-height: 0; }
   .fp-technical-order { display: flex; overflow: visible; }
   .fp-reference { overflow: visible; padding: 16px 14px; border-left: 0; border-bottom: 1px solid var(--fp-line); }
-  .fp-reference > h3, .fp-reference-client { margin-bottom: 14px; }
+  .fp-reference-client { margin-bottom: 14px; }
   .fp-equipment-facts { grid-template-columns: 1fr 1fr; gap: 14px; }
   .fp-technical-order > .fp-order-body { overflow: visible; flex: none; }
   .fp-technical-order > .fp-action-dock { position: sticky; bottom: 0; z-index: 2; border-radius: 0 0 10px 10px; }

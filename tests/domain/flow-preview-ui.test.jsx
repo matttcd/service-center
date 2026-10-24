@@ -10,7 +10,7 @@ describe('Ficha de consulta del taller', () => {
     const order = createDemoOrders().find((item) => item.number === 'OS1042')
     const html = renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><FlowPreview /></NotificationContext.Provider>)
     const disclosures = [...html.matchAll(/<details\b[^>]*>[\s\S]*?<\/details>/g)].join('')
-    const reference = html.match(/<aside\b[^>]*aria-label="Referencia del equipo"[\s\S]*?<\/aside>/)?.[0] || ''
+    const reference = html.match(/<aside\b[^>]*aria-label="Datos del equipo"[\s\S]*?<\/aside>/)?.[0] || ''
     for (const value of [order.customer, order.phone, order.access, order.conditions, order.accessories]) {
       expect(reference).toContain(value)
       expect(html.split(value)).toHaveLength(2)

@@ -105,7 +105,7 @@ function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, 
     <header className="fp-order-header">
       <button className="fp-back fp-link" onClick={onBack}><ArrowLeft size={16} /> Volver a la cola</button>
       <div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} /></div>
-      <h2>{order.brand} {order.model}</h2>
+      <div className="fp-order-title"><h2>{order.brand} {order.model}</h2>{canWork && !!(order.diagnosis || order.work) && <button className="fp-button secondary" aria-label={showWorkEditor ? 'Ver diagnóstico y trabajo en modo consulta' : 'Editar diagnóstico y trabajo'} onClick={() => setEditingWork((value) => !value)}><Pencil size={14} />{showWorkEditor ? 'Volver a consulta' : 'Editar diagnóstico y trabajo'}</button>}</div>
       <div className="fp-tool-buttons" role="group" aria-label="Herramientas de la orden">
         {[['notes', 'Notas', StickyNote, order.notes.length, draft.note.trim()], ['parts', 'Repuestos', Package, order.parts.length, draft.partName.trim()], ['history', 'Historial', History, order.history.length, false]].map(([key, label, Icon, count, pending]) => <button key={key} aria-haspopup="dialog" onClick={() => setTool(key)}><Icon size={16} />{label}<span>{count}</span>{pending && <span className="fp-draft-indicator">· Borrador</span>}</button>)}
       </div>
@@ -114,9 +114,8 @@ function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, 
         <div className="fp-access"><span>Acceso del equipo</span><button className="fp-link" aria-expanded={showAccess} aria-controls="device-access" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={16} /> : <Eye size={16} />}{showAccess ? 'Ocultar contraseña' : 'Mostrar contraseña'}</button><strong id="device-access" hidden={!showAccess}>{showAccess ? order.access : ''}</strong></div>
       </>}
     </header>
-    {technical && <aside className="fp-reference" aria-label="Referencia del equipo">
-      <h3>Referencia</h3>
-      <div className="fp-reference-client"><span><UserRound size={16} aria-hidden="true" />Cliente</span><p>{order.customer}</p><p className="fp-reference-phone"><Phone size={16} aria-hidden="true" />{order.phone}</p></div>
+    {technical && <aside className="fp-reference" aria-label="Datos del equipo">
+      <div className="fp-reference-client"><span><UserRound size={16} aria-hidden="true" />Cliente</span><p>{order.customer}</p><span className="fp-reference-phone"><Phone size={16} aria-hidden="true" />Teléfono</span><p>{order.phone}</p></div>
       <dl className="fp-equipment-facts">
         <div><dt><KeyRound size={16} aria-hidden="true" />Contraseña o PIN</dt><dd>{order.access || 'Sin contraseña informada'}</dd></div>
         {order.pattern?.length > 0 && <div><dt><Grid3X3 size={16} aria-hidden="true" />Patrón de desbloqueo</dt><dd><div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((point) => point + 1).join(', ')}`}><PatternPreview value={order.pattern} size={112} /></div></dd></div>}
@@ -144,7 +143,7 @@ function OrderWorkspace({ order, role, draft, setDraft, onAction, outsideQueue, 
       <section className="fp-work" aria-label="Diagnóstico y trabajo">
           <div className={technical ? 'fp-work-fields' : undefined}>
             {technical && <div className="fp-current-diagnosis"><h3 id="diagnosis-title">Diagnóstico</h3>{showWorkEditor ? <textarea id="diagnosis" aria-labelledby="diagnosis-title" rows={3} value={draft.diagnosis} onChange={(e) => setDraft({ diagnosis: e.target.value })} placeholder="Qué encontraste al revisar el equipo…" /> : <p className="fp-read-value">{draft.diagnosis || 'Sin diagnóstico registrado'}</p>}</div>}
-            <div><div className="fp-section-heading"><h3 id="work-title">{order.status === 'terminado' || order.status === 'entregado' ? 'Trabajo realizado' : order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : 'Trabajo a realizar'}</h3>{canWork && !!(order.diagnosis || order.work) && <button className="fp-link" aria-label={showWorkEditor ? 'Ver diagnóstico y trabajo en modo consulta' : 'Editar diagnóstico y trabajo'} onClick={() => setEditingWork((value) => !value)}><Pencil size={14} />{showWorkEditor ? 'Ver ficha' : 'Editar'}</button>}</div>
+            <div><div className="fp-section-heading"><h3 id="work-title">{order.status === 'terminado' || order.status === 'entregado' ? 'Trabajo realizado' : order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : 'Trabajo a realizar'}</h3></div>
             {showWorkEditor ? <textarea id="work" aria-labelledby="work-title" rows={3} value={draft.work} onChange={(e) => setDraft({ work: e.target.value })} placeholder="Qué reparación o pruebas necesita el equipo…" /> : <p className="fp-read-value">{draft.work || 'Trabajo por definir'}</p>}</div>
           </div>
           {canWork && workDirty && <p className="fp-save-state">Borrador sin guardar</p>}
