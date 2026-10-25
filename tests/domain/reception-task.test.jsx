@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import ReceptionWorkspace from '../../src/preview/ReceptionWorkspace.jsx'
+import ReceptionWorkspace, { ReceptionTaskForm } from '../../src/preview/ReceptionWorkspace.jsx'
 import { RECEPTION_DRAFT, receptionTask } from '../../src/preview/reception-task.js'
 import { applyDemoAction, receptionQueue } from '../../src/preview/preview-model.js'
 import { applySystemAction, createSystemState } from '../../src/preview/system-model.js'
@@ -10,16 +10,17 @@ const getOrder = (number) => state.orders.find((o) => o.number === number)
 const getDraft = (order, patch = {}) => ({ ...RECEPTION_DRAFT, price: order.price || '', charge: '3500', note: '', partName: '', partQuantity: '1', ...patch })
 const render = (order, role = 'recepcion', patch = {}, customer = state.customers.find((c) => c.id === order.customerId)) => renderToStaticMarkup(<ReceptionWorkspace order={order} customer={customer} role={role} users={state.users} draft={getDraft(order, patch)} setDraft={() => {}} onAction={() => {}} onExtra={() => {}} onBack={() => {}} />)
 
-describe('Tarea al final de la ficha de Recepción', () => {
-  it('mantiene contexto y herramientas antes del formulario y la confirmación', () => {
+describe('Ficha informativa y tareas en ventana de Recepción', () => {
+  it('mantiene todos los datos visibles y abre la tarea desde el pie sin formulario en la ficha', () => {
     const order = getOrder('OS1038'), html = render(order)
     expect(html.indexOf('fp-reception-heading')).toBeLessThan(html.indexOf('reception-issue'))
     expect(html.indexOf('reception-issue')).toBeLessThan(html.indexOf('reception-work'))
     expect(html.indexOf('reception-work')).toBeLessThan(html.indexOf('Herramientas de la orden'))
-    expect(html.indexOf('Equipo e ingreso')).toBeLessThan(html.indexOf('id="reception-task-form"'))
-    expect(html.indexOf('</form>')).toBeLessThan(html.indexOf('<footer'))
-    expect(html).toContain('form="reception-task-form"')
-    expect(html.match(/<form\b/g)).toHaveLength(1)
+    expect(html).not.toMatch(/<(form|input|textarea|select)\b/)
+    expect(html).not.toContain('reception-task-form')
+    expect(html.match(/<footer[\s\S]*?<\/footer>/)[0]).toContain('aria-haspopup="dialog"')
+    expect(html.match(/<footer[\s\S]*?<\/footer>/)[0]).not.toContain('disabled')
+    expect(html).toContain('Importes')
     for (const text of [order.issue, order.work, order.phone]) expect(html.split(text)).toHaveLength(2)
     const header = html.match(/<header[\s\S]*?<\/header>/)[0]
     expect(header).not.toContain('Herramientas de la orden')
@@ -36,10 +37,14 @@ describe('Tarea al final de la ficha de Recepción', () => {
     ['OS1020', 'Registrar retiro', 'id="reception-pickup-by"'],
     ['OS1033', 'Registrar regreso', 'Reparación finalizada'],
     ['OS1048', 'Finalizar servicio', 'Finalizar servicio'],
-  ])('abre directamente el formulario de %s', (number, title, content) => {
-    const html = render(getOrder(number))
-    expect(html).toContain(`aria-label="${title}"`)
-    expect(html).toContain(content)
+  ])('conserva el formulario de %s para su ventana', (number, title, content) => {
+    const order = getOrder(number), html = render(order)
+    const form = renderToStaticMarkup(<ReceptionTaskForm order={order} draft={getDraft(order)} title={title} setDraft={() => {}} onAction={() => {}} onClose={() => {}} />)
+    expect(html.match(/<footer[\s\S]*?<\/footer>/)[0]).toContain(title)
+    expect(form).toContain(`aria-label="${title}"`)
+    expect(form).toContain(content)
+    expect(form).toContain('Cancelar')
+    expect(form).toContain('type="submit"')
   })
   it('muestra patrón, acceso y datos de ingreso sin repetirlos en el encabezado', () => {
     const html = render(getOrder('OS1044'))

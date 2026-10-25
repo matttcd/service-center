@@ -447,7 +447,7 @@ body.fp-preview {
   .fp-reception-page { height: calc(100dvh - 194px); min-height: 440px; }
 }
 
-/* La variante de Recepción mantiene el formulario al final del contenido. */
+/* Ficha informativa y tareas de Recepción en ventanas. */
 .fp-reception-order > .fp-order-header { padding: 14px 20px; }
 .fp-reception-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .fp-reception-heading h2 { margin: 0; min-width: 0; }
@@ -469,11 +469,11 @@ body.fp-preview {
 .fp-reception-secondary { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 12px; }
 .fp-reception-secondary .fp-tool-buttons { margin-top: 0; gap: 6px; }
 .fp-reception-secondary .fp-tool-buttons button { min-height: 34px; padding: 6px 8px; }
-.fp-reception-order dt { color: var(--fp-muted); }
-.fp-reception-order dd { margin: 3px 0 0; overflow-wrap: anywhere; }
-.fp-reception-task { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--fp-line); }
-.fp-reception-task > h3 { margin-bottom: 12px; }
+.fp-reception-order dt, .fp-reception-task dt { color: var(--fp-muted); }
+.fp-reception-order dd, .fp-reception-task dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.fp-reception-task > p:first-child { margin: 0 0 16px; }
 .fp-reception-task .fp-finance { padding-top: 0; margin: 0 0 12px; }
+.fp-reception-task .fp-form-actions { position: sticky; bottom: 0; background: var(--fp-paper); margin-top: 16px; padding-bottom: 2px; }
 .fp-reception-task > :last-child { margin-bottom: 0; }
 .fp-reception-task > p { margin: 8px 0; }
 .fp-reception-price { display: grid; grid-template-columns: minmax(0,300px) 1fr; gap: 20px; align-items: end; }
