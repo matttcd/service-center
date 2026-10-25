@@ -4,6 +4,8 @@ import { Activity, Archive, ArrowLeft, ChevronRight, ClipboardList, Calculator, 
 import { useNotify } from '../context/notifications.js'
 import logo from '../assets/gringologo-modified.png'
 import ProfileMenu from './ProfileMenu.jsx'
+import ReceptionWorkspace from './ReceptionWorkspace.jsx'
+import { RECEPTION_DRAFT } from './reception-task.js'
 import OrderWorkspace, { DeviceIcon, Status, ToolWindow } from './OrderWorkspace.jsx'
 import { TECH_VIEWS, RECEPTION_VIEWS, REVIEW_FEE, queueOrders, receptionQueue, workAge } from './preview-model.js'
 import { NAVIGATION, NEW_ORDER, PROFILES, applySystemAction, canVisit, createSystemState, initialProfile } from './system-model.js'
@@ -13,7 +15,7 @@ import { ActivityPage, BackupsPage, ClientsPage, Empty, OrdersTable, SearchBox, 
 const ICONS = { '/resumen': LayoutDashboard, '/recepcion': ClipboardList, '/taller': Wrench, '/terminados': Archive, '/ordenes': Inbox, '/clientes': Users, '/actividad': Activity, '/metricas': TrendingUp, '/usuarios': Shield, '/copias': DatabaseBackup, '/papelera': Trash2, '/configuracion': Settings }
 const TITLES = { ...Object.fromEntries(NAVIGATION.flatMap((g) => g.items.map(([url, name]) => [url.slice(1), name]))), ajustes: 'Ajustes' }
 const RECEPTION_ICONS = { presupuestar: Calculator, avisar: Bell, respuesta: MessageSquare, repuestos: Package, retiros: PackageCheck, externos: Truck, simples: Wrench }
-const defaultDraft = (o, fee) => ({ diagnosis: o.diagnosis, work: o.work, price: o.price || '', charge: String(fee ?? REVIEW_FEE), note: '', partName: '', partQuantity: '1' })
+const defaultDraft = (o, fee) => ({ ...RECEPTION_DRAFT, diagnosis: o.diagnosis, work: o.work, price: o.price || '', charge: String(fee ?? REVIEW_FEE), note: '', partName: '', partQuantity: '1' })
 
 export default function FlowPreview() {
   const location = useLocation(), navigate = useNavigate()
@@ -65,7 +67,7 @@ export default function FlowPreview() {
   const mutateOrder = (action, data) => {
     const next = dispatch('orderAction', { id: order.id, action, data })
     if (!next) return false
-    const clear = ['saveWork', 'sendQuote', 'finish'].includes(action) ? ['diagnosis', 'work'] : action === 'price' ? ['price'] : action === 'note' ? ['note'] : action === 'requestPart' ? ['partName', 'partQuantity'] : action === 'reject' ? ['charge'] : []
+    const clear = ['saveWork', 'sendQuote', 'finish'].includes(action) ? ['diagnosis', 'work'] : action === 'price' ? ['price'] : action === 'note' ? ['note'] : action === 'requestPart' ? ['partName', 'partQuantity'] : ['approve', 'reject'].includes(action) ? ['response', 'charge'] : action === 'pickup' ? ['pickupBy', 'pickupName', 'pickupDni', 'physical', 'withoutReceipt'] : action === 'returnExternal' ? ['repaired'] : []
     setDrafts((previous) => { const kept = { ...previous[order.id] }; clear.forEach((key) => delete kept[key]); return { ...previous, [order.id]: kept } })
     notify(next.orders.find((o) => o.id === order.id).history.at(-1).text)
     return true
@@ -90,7 +92,8 @@ export default function FlowPreview() {
     else if (type === 'warranty') confirm('Reingreso por garantía', `${order.number} · ${order.customer}`, () => { if (mutateOrder('warranty', {})) setModal(null) })
     else setModal({ type, initial: { name: state.settings.externals.split('\n')[0], repaired: true, technician: order?.assignedTo || state.users.find((u) => u.role === 'tecnico' && u.active)?.id } })
   }
-  const renderOrder = () => order ? <OrderWorkspace key={`${generation}-${order.id}-${role}-${page}`} order={order} role={role} technical={role === 'tecnico' || (role === 'admin' && !receptionQueue(order))} draft={{ ...defaultDraft(order, state.settings.revisionFee), ...drafts[order.id] }} setDraft={patchDraft} onAction={mutateOrder} onBack={() => isQueue ? patchQueue({ detail: false }) : navigate(location.state?.from || '/ordenes')} onExtra={extra} /> : <div className="fp-order"><Empty text="Elegí un equipo" /></div>
+  const Workspace = page === 'recepcion' ? ReceptionWorkspace : OrderWorkspace
+  const renderOrder = () => order ? <Workspace users={state.users} key={`${generation}-${order.id}-${role}-${page}`} order={order} role={role} technical={role === 'tecnico' || (role === 'admin' && !receptionQueue(order))} draft={{ ...defaultDraft(order, state.settings.revisionFee), ...drafts[order.id] }} setDraft={patchDraft} onAction={mutateOrder} onBack={() => isQueue ? patchQueue({ detail: false }) : navigate(location.state?.from || '/ordenes')} onExtra={extra} /> : <div className="fp-order"><Empty text="Elegí un equipo" /></div>
   const changeView = (view) => patchQueue({ view, selected: queueOrders(orders, queueRole, view, queue.search || '')[0]?.id, detail: false, scroll: 0 })
   const queueKey = (e, index) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return

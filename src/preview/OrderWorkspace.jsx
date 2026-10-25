@@ -42,6 +42,27 @@ export function ToolWindow({ title, onClose, children }) {
   }, [])
   return <Modal open onClose={onClose} title={<span id="preview-tool-title">{title}</span>} maxWidth="max-w-2xl"><div className="fp-tool-content" ref={contentRef}>{children}</div></Modal>
 }
+export function OrderTools({ order, role, technical = false, draft, setDraft, onAction, onExtra }) {
+  const [tool, setTool] = useState(null)
+  const own = role === 'admin' || order.assignedTo === TECHNICIAN
+  const canNote = order.status !== 'entregado' && (!technical || own)
+  const canRequest = technical && own && ['en_reparacion', 'falta_repuestos'].includes(order.status)
+  return <><div className="fp-tool-buttons" role="group" aria-label="Herramientas de la orden">
+        {[['notes', 'Notas', StickyNote, order.notes.length, draft.note.trim()], ['parts', 'Repuestos', Package, order.parts.length, draft.partName.trim()], ['history', 'Historial', History, order.history.length, false]].map(([key, label, Icon, count, pending]) => <button key={key} aria-haspopup="dialog" onClick={() => setTool(key)}><Icon size={16} />{label}<span>{count}</span>{pending && <span className="fp-draft-indicator">· Borrador</span>}</button>)}
+        {onExtra && <details className="fp-more"><summary>Más<ChevronDown size={14} /></summary><div><button onClick={() => onExtra('print')}>Comprobante</button><button onClick={() => onExtra('label')}>Etiqueta</button>{role !== 'tecnico' && order.status !== 'entregado' && <button onClick={() => onExtra('assign')}>Asignar técnico</button>}{['admin', 'recepcion'].includes(role) && ['recibido', 'en_revision', 'presupuesto', 'en_reparacion'].includes(order.status) && <button onClick={() => onExtra('sendExternal')}>Enviar a externo</button>}{['admin', 'recepcion'].includes(role) && order.status === 'entregado' && <button onClick={() => onExtra('warranty')}>Reingresar por garantía</button>}{role === 'admin' && <button onClick={() => onExtra('trash')}>Mover a Papelera</button>}</div></details>}
+      </div>{tool && <ToolWindow title={`${{ notes: 'Notas', parts: 'Repuestos', history: 'Historial' }[tool]} · ${order.number}`} onClose={() => setTool(null)}>
+        {tool === 'notes' && <div className="fp-section-content">
+          {order.notes.length ? <ul className="fp-notes">{order.notes.map((note) => <li key={note.id}><p>{note.text}</p><span>{note.by} · {date(note.at)}</span></li>)}</ul> : <div className="fp-inline-empty"><MessageSquare size={24} /><p>Sin notas.</p></div>}
+          {canNote && <form onSubmit={(e) => { e.preventDefault(); onAction('note', { text: draft.note }); e.currentTarget.querySelector('textarea').focus() }}><label htmlFor="new-note">Nueva nota</label><textarea id="new-note" rows={3} value={draft.note} onChange={(e) => setDraft({ note: e.target.value })} placeholder="Una observación útil para continuar el trabajo…" /><button className="fp-button secondary" type="submit" disabled={!draft.note.trim()}><Save size={15} />Guardar nota</button></form>}
+        </div>}
+        {tool === 'parts' && <div className="fp-section-content">
+          {order.parts.length ? <ul className="fp-parts">{order.parts.map((part) => <li key={part.id}><div className="fp-part-icon"><Package size={19} /></div><div><strong>{part.name}</strong><span>Cantidad: {part.quantity} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Pedido · esperando llegada' : 'Recibido'}</span></div>{!technical && order.status === 'falta_repuestos' && part.status !== 'recibido' && <button className="fp-button secondary" onClick={(e) => { onAction(part.status === 'necesario' ? 'partOrdered' : 'partArrived', { id: part.id }); e.currentTarget.closest('[role="dialog"]').focus() }}>{part.status === 'necesario' ? 'Registrar pedido' : 'Registrar llegada'}</button>}{part.status === 'recibido' && <CheckCircle2 size={19} className="fp-green" />}</li>)}</ul> : <div className="fp-inline-empty"><Package size={25} /><p>Sin repuestos.</p></div>}
+          {canRequest && <form className="fp-part-form" onSubmit={(e) => { e.preventDefault(); onAction('requestPart', { name: draft.partName, quantity: draft.partQuantity }); e.currentTarget.querySelector('input').focus() }}><h4>Solicitar un repuesto</h4><div className="fp-part-fields"><label>Repuesto<input value={draft.partName} onChange={(e) => setDraft({ partName: e.target.value })} placeholder="Ej.: módulo de pantalla Moto G84" /></label><label>Cantidad<input type="number" min="1" max="99" value={draft.partQuantity} onChange={(e) => setDraft({ partQuantity: e.target.value })} /></label></div><button type="submit" className="fp-button secondary" disabled={!draft.partName.trim()}><Package size={15} />Solicitar repuesto</button></form>}
+        </div>}
+        {tool === 'history' && <ol className="fp-history">{[...order.history].reverse().map((event, i) => <li key={`${event.at}-${i}`}><p>{event.text}</p>{event.previousWork !== undefined && <p className="fp-history-work">Antes: {event.previousWork || 'Trabajo por definir'}</p>}{event.work !== undefined && <p className="fp-history-work">{event.previousWork !== undefined ? 'Ahora' : 'Trabajo'}: {event.work || 'Trabajo por definir'}</p>}<span>{event.by} · {date(event.at)}</span></li>)}</ol>}
+      </ToolWindow>}</>
+}
+
 export default function OrderWorkspace({ order, role, technical = role === 'tecnico', draft, setDraft, onAction, onBack, onExtra }) {
   const [showAccess, setShowAccess] = useState(false)
   const [editingWork, setEditingWork] = useState(() => draft.diagnosis !== order.diagnosis || draft.work !== order.work || (!order.diagnosis && !order.work))
@@ -53,13 +74,10 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
   const [withoutReceipt, setWithoutReceipt] = useState(false)
   const [physical, setPhysical] = useState(false)
   const [checked, setChecked] = useState(false)
-  const [tool, setTool] = useState(null)
   const bodyRef = useRef(null)
   const own = role === 'admin' || order.assignedTo === TECHNICIAN
   const canWork = technical && own && ['en_revision', 'en_reparacion'].includes(order.status)
   const showWorkEditor = canWork && editingWork
-  const canNote = order.status !== 'entregado' && (!technical || own)
-  const canRequest = technical && own && ['en_reparacion', 'falta_repuestos'].includes(order.status)
   const workDirty = draft.diagnosis !== order.diagnosis || draft.work !== order.work
   const action = nextAction(order, role)
   const wait = waitingFor(order)
@@ -96,10 +114,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
       <div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} /></div>
       <h2>{order.brand} {order.model}</h2>
       {(order.warrantyReturn || order.isSimpleService) && <p className="fp-muted">{order.warrantyReturn ? 'Garantía' : 'Servicio simple'}</p>}
-      <div className="fp-tool-buttons" role="group" aria-label="Herramientas de la orden">
-        {[['notes', 'Notas', StickyNote, order.notes.length, draft.note.trim()], ['parts', 'Repuestos', Package, order.parts.length, draft.partName.trim()], ['history', 'Historial', History, order.history.length, false]].map(([key, label, Icon, count, pending]) => <button key={key} aria-haspopup="dialog" onClick={() => setTool(key)}><Icon size={16} />{label}<span>{count}</span>{pending && <span className="fp-draft-indicator">· Borrador</span>}</button>)}
-        {onExtra && <details className="fp-more"><summary>Más<ChevronDown size={14} /></summary><div><button onClick={() => onExtra('print')}>Comprobante</button><button onClick={() => onExtra('label')}>Etiqueta</button>{role !== 'tecnico' && order.status !== 'entregado' && <button onClick={() => onExtra('assign')}>Asignar técnico</button>}{['admin', 'recepcion'].includes(role) && ['recibido', 'en_revision', 'presupuesto', 'en_reparacion'].includes(order.status) && <button onClick={() => onExtra('sendExternal')}>Enviar a externo</button>}{['admin', 'recepcion'].includes(role) && order.status === 'entregado' && <button onClick={() => onExtra('warranty')}>Reingresar por garantía</button>}{role === 'admin' && <button onClick={() => onExtra('trash')}>Mover a Papelera</button>}</div></details>}
-      </div>
+      <OrderTools order={order} role={role} technical={technical} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} />
       {!technical && <>
         <div className="fp-order-meta"><span><UserRound size={16} />{order.customer}</span><span><Phone size={16} />{order.phone}</span></div>
         <div className="fp-access"><span>Acceso del equipo</span><button className="fp-link" aria-expanded={showAccess} aria-controls="device-access" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={16} /> : <Eye size={16} />}{showAccess ? 'Ocultar contraseña' : 'Mostrar contraseña'}</button><strong id="device-access" hidden={!showAccess}>{showAccess ? order.access : ''}</strong></div>
@@ -149,17 +164,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
           <div className="fp-finance"><div><span>{order.rejectedCharge !== null ? 'Importe de retiro' : 'Presupuesto'}</span><strong>{bill.total ? money(bill.total) : order.rejectedCharge === 0 ? money(0) : 'A definir'}</strong></div><div><span>Seña recibida</span><strong>{money(order.advance)}</strong></div><div><span>{bill.balance < 0 ? 'Saldo a favor' : 'Saldo pendiente'}</span><strong>{!bill.total && order.rejectedCharge === null ? '—' : money(Math.abs(bill.balance))}</strong></div></div>
           {order.rejectedCharge !== null && <p className="fp-finance-note">Presupuesto rechazado: {money(order.price)}.{bill.balance < 0 && ' Sin devolución registrada.'}</p>}
       </section>}
-      {tool && <ToolWindow title={`${{ notes: 'Notas', parts: 'Repuestos', history: 'Historial' }[tool]} · ${order.number}`} onClose={() => setTool(null)}>
-        {tool === 'notes' && <div className="fp-section-content">
-          {order.notes.length ? <ul className="fp-notes">{order.notes.map((note) => <li key={note.id}><p>{note.text}</p><span>{note.by} · {date(note.at)}</span></li>)}</ul> : <div className="fp-inline-empty"><MessageSquare size={24} /><p>Sin notas.</p></div>}
-          {canNote && <form onSubmit={(e) => { e.preventDefault(); onAction('note', { text: draft.note }); e.currentTarget.querySelector('textarea').focus() }}><label htmlFor="new-note">Nueva nota</label><textarea id="new-note" rows={3} value={draft.note} onChange={(e) => setDraft({ note: e.target.value })} placeholder="Una observación útil para continuar el trabajo…" /><button className="fp-button secondary" type="submit" disabled={!draft.note.trim()}><Save size={15} />Guardar nota</button></form>}
-        </div>}
-        {tool === 'parts' && <div className="fp-section-content">
-          {order.parts.length ? <ul className="fp-parts">{order.parts.map((part) => <li key={part.id}><div className="fp-part-icon"><Package size={19} /></div><div><strong>{part.name}</strong><span>Cantidad: {part.quantity} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Pedido · esperando llegada' : 'Recibido'}</span></div>{!technical && order.status === 'falta_repuestos' && part.status !== 'recibido' && <button className="fp-button secondary" onClick={(e) => { onAction(part.status === 'necesario' ? 'partOrdered' : 'partArrived', { id: part.id }); e.currentTarget.closest('[role="dialog"]').focus() }}>{part.status === 'necesario' ? 'Registrar pedido' : 'Registrar llegada'}</button>}{part.status === 'recibido' && <CheckCircle2 size={19} className="fp-green" />}</li>)}</ul> : <div className="fp-inline-empty"><Package size={25} /><p>Sin repuestos.</p></div>}
-          {canRequest && <form className="fp-part-form" onSubmit={(e) => { e.preventDefault(); onAction('requestPart', { name: draft.partName, quantity: draft.partQuantity }); e.currentTarget.querySelector('input').focus() }}><h4>Solicitar un repuesto</h4><div className="fp-part-fields"><label>Repuesto<input value={draft.partName} onChange={(e) => setDraft({ partName: e.target.value })} placeholder="Ej.: módulo de pantalla Moto G84" /></label><label>Cantidad<input type="number" min="1" max="99" value={draft.partQuantity} onChange={(e) => setDraft({ partQuantity: e.target.value })} /></label></div><button type="submit" className="fp-button secondary" disabled={!draft.partName.trim()}><Package size={15} />Solicitar repuesto</button></form>}
-        </div>}
-        {tool === 'history' && <ol className="fp-history">{[...order.history].reverse().map((event, i) => <li key={`${event.at}-${i}`}><p>{event.text}</p>{event.previousWork !== undefined && <p className="fp-history-work">Antes: {event.previousWork || 'Trabajo por definir'}</p>}{event.work !== undefined && <p className="fp-history-work">{event.previousWork !== undefined ? 'Ahora' : 'Trabajo'}: {event.work || 'Trabajo por definir'}</p>}<span>{event.by} · {date(event.at)}</span></li>)}</ol>}
-      </ToolWindow>}
+
       {!technical && <details className="fp-disclosure fp-device-details"><summary>Datos de ingreso<ChevronDown size={15} /></summary><div className="fp-device-grid"><div><span>Accesorios</span><p>{order.accessories}</p></div><div><span>Estado físico</span><p>{order.conditions}</p></div><div><span>Ingreso</span><p>{date(order.createdAt)}</p></div><div><span>Técnico</span><p>{order.assignedTo ? own ? 'Juan Pérez' : 'Diego Molina' : 'Sin asignar'}</p></div></div></details>}
     </div>
     <footer className="fp-action-dock">{blocked && <p className="fp-action-context fp-blocked">{blocked}</p>}<div className="fp-dock-buttons">

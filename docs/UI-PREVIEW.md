@@ -83,3 +83,6 @@ Recepción muestra las siete tareas y sus cantidades en una barra que ocupa el a
 
 
 Las tareas de Recepción funcionan como pestañas con icono y cantidad, integradas en el mismo panel que la cola y la ficha, con un divisor interno. Tab entra por la pestaña seleccionada; las flechas izquierda/derecha cambian de tarea y Home/End van a la primera/última. Volver a pulsar la pestaña activa conserva la ficha abierta. Los borradores y la búsqueda se conservan al cambiar de tarea.
+
+
+La ficha dentro de Recepción usa una variante propia: encabezado compacto, falla y trabajo visibles, herramientas y datos de ingreso secundarios, y formulario de tarea al final, antes de la confirmación fija. Respuesta, rechazo, retiro y regreso externo se completan directamente en la ficha. Sus borradores viven por orden y se conservan al cambiar de pestaña, equipo o página; se limpian solo los campos confirmados. El administrador ve la misma variante y no recibe acciones de Taller en esta pantalla al terminar una tarea. Las demás fichas conservan su presentación anterior.
