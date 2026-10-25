@@ -81,10 +81,16 @@ describe('Ficha informativa y tareas en ventana de Recepción', () => {
   it('muestra todos los datos de cliente guardados, con campos vacíos explícitos', () => {
     const order = getOrder('OS1038'), customer = state.customers.find((c) => c.id === order.customerId), html = render(order)
     for (const value of [customer.name, customer.dni, customer.phone, customer.phone2, customer.phone3, customer.email, customer.address]) expect(html.split(value)).toHaveLength(2)
-    for (const label of ['DNI', 'Teléfono', 'Teléfono 2', 'Teléfono 3', 'Correo', 'Domicilio', 'Tipo de dispositivo', 'Tipo de ingreso', 'Ingreso', 'Recibió', 'Técnico', 'Contraseña o PIN', 'Estado físico', 'Accesorios', 'Patrón', 'Aviso al cliente', 'Respuesta']) expect(html).toMatch(new RegExp(`<dt[^>]*>(?:<svg[\\s\\S]*?</svg>)?${label}</dt>`))
+    for (const label of ['DNI', 'Teléfono', 'Teléfono 2', 'Teléfono 3', 'Correo', 'Domicilio', 'Tipo de dispositivo', 'Tipo de ingreso', 'Ingreso', 'Recibió', 'Técnico', 'Contraseña o PIN', 'Estado físico', 'Accesorios', 'Aviso al cliente', 'Respuesta']) expect(html).toMatch(new RegExp(`<dt[^>]*>(?:<svg[\\s\\S]*?</svg>)?${label}</dt>`))
     expect(render(order, 'recepcion', {}, { name: 'Cliente nuevo', phone: order.phone })).toContain('—')
     expect(render({ ...order, noPin: true, access: '' })).toContain('Sin bloqueo')
     expect(render({ ...order, noPin: true, access: '' })).not.toContain('Sin contraseña informada')
+  })
+  it('reserva el espacio del patrón solo si está registrado y el equipo tiene bloqueo', () => {
+    const order = getOrder('OS1044')
+    expect(render(order)).toContain('class="fp-reception-pattern"')
+    expect(render({ ...order, pattern: [] })).not.toContain('class="fp-reception-pattern"')
+    expect(render({ ...order, noPin: true })).not.toContain('class="fp-reception-pattern"')
   })
   it('centraliza el equipo y deja cliente y seguimiento en el lateral sin duplicar datos', () => {
     const order = getOrder('OS1044'), html = render(order)
