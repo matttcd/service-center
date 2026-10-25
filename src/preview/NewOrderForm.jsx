@@ -8,16 +8,18 @@ import { Field, FormActions } from './PreviewForms.jsx'
 import { intakeChoices, intakeSuggestions, toggleIntakeChoice } from './intake-model.js'
 
 function IntakeChips({ label, options, value, onChange, custom = '', onCustomChange, limit }) {
+  const inputRef = useRef(null)
   const selected = intakeChoices(value), choices = [...new Set([...options, ...selected])]
   const add = () => {
     const name = custom.trim()
     if (!name || (selected.length >= limit && !selected.includes(name))) return
     if (!selected.includes(name)) onChange([...selected, name].join(', '))
     onCustomChange('')
+    inputRef.current?.focus()
   }
   return <fieldset className="fp-intake-field"><legend>{label}</legend><div className="fp-intake-chips" role="group" aria-label={label}>
     {choices.map((name) => <button type="button" key={name} aria-pressed={selected.includes(name)} disabled={!selected.includes(name) && selected.length >= limit} onClick={() => onChange(toggleIntakeChoice(value, name, limit))}>{selected.includes(name) && <Check size={14} />}{name}</button>)}
-  </div><div className="fp-intake-custom"><input aria-label={`Otra opción de ${label.toLowerCase()}`} placeholder="Otra opción…" value={custom} onChange={(event) => onCustomChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); add() } }} /><button type="button" className="fp-button secondary" aria-label={`Agregar opción de ${label.toLowerCase()}`} disabled={!custom.trim() || selected.length >= limit} onClick={add}><Plus size={16} /></button></div></fieldset>
+  </div><div className="fp-intake-custom"><input ref={inputRef} aria-label={`Otra opción de ${label.toLowerCase()}`} placeholder="Otra opción…" value={custom} onChange={(event) => onCustomChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); add() } }} /><button type="button" className="fp-button secondary" aria-label={`Agregar opción de ${label.toLowerCase()}`} disabled={!custom.trim() || selected.length >= limit} onClick={add}><Plus size={16} /></button></div></fieldset>
 }
 
 export default function NewOrderForm({ state, value, set, onSubmit, onClose }) {
@@ -41,7 +43,7 @@ export default function NewOrderForm({ state, value, set, onSubmit, onClose }) {
   return <form className="fp-form fp-intake-form" onSubmit={(event) => { event.preventDefault(); onSubmit(value) }}>
     <section className="fp-intake-section"><h3>Cliente</h3>
       {customer ? <div className="fp-intake-customer"><div><strong>{customer.name}</strong><p>{[customer.dni && `DNI ${customer.dni}`, customer.phone].filter(Boolean).join(' · ')}</p></div><button type="button" className="fp-button secondary" onClick={() => set({ customerId: '', customerQuery: '' })}><X size={14} />Cambiar</button></div> : <>
-        <div className="fp-intake-search"><Search size={16} /><input aria-label="Buscar cliente" placeholder="Buscar por nombre, DNI o teléfono…" value={value.customerQuery || ''} onChange={(event) => set({ customerQuery: event.target.value })} /></div>
+        <div className="fp-intake-search"><Search size={16} /><input data-initial-focus aria-label="Buscar cliente" placeholder="Buscar por nombre, DNI o teléfono…" value={value.customerQuery || ''} onChange={(event) => set({ customerQuery: event.target.value })} /></div>
         {matches.length > 0 && <div className="fp-intake-customers" role="group" aria-label="Clientes encontrados">{matches.map((item) => <button type="button" key={item.id} onClick={() => set({ customerId: item.id, customerQuery: '' })}><span>{item.name}</span><span>{[item.dni && `DNI ${item.dni}`, item.phone].filter(Boolean).join(' · ')}</span></button>)}</div>}
         <div className="fp-form-grid"><Field label="Nombre completo" required value={value.customer} onChange={(event) => set({ customer: event.target.value })} /><Field label="DNI" inputMode="numeric" value={value.dni || ''} onChange={(event) => set({ dni: event.target.value })} /><Field label="Teléfono" type="tel" required value={value.phone} onChange={(event) => set({ phone: event.target.value })} /><Field label="Domicilio" value={value.address || ''} onChange={(event) => set({ address: event.target.value })} /></div>
       </>}
@@ -54,7 +56,10 @@ export default function NewOrderForm({ state, value, set, onSubmit, onClose }) {
         <button type="button" className="fp-intake-other" ref={picker === key ? pickerTrigger : undefined} disabled={key === 'model' && !value.brand} aria-expanded={picker === key} onClick={() => openPicker(key)}><ListPlus size={15} />{key === 'brand' ? 'Otra marca' : 'Otro modelo'}</button>
       </div>{pickerPanel(key)}</fieldset>)}
       {chips('conditions', 'Estado del equipo', 8, 'customCondition')}
-      <div className="fp-intake-access"><div><Field label="Contraseña o PIN" disabled={value.noPin} value={value.access} onChange={(event) => set({ access: event.target.value })} /><label className="fp-checkbox"><input type="checkbox" checked={value.noPin} onChange={(event) => set({ noPin: event.target.checked })} />Sin bloqueo</label>{chips('accessories', 'Accesorios', 10, 'customAccessory')}</div><div><p className="fp-intake-label">Patrón de desbloqueo</p><PatternPad value={value.pattern} disabled={value.noPin} onChange={(pattern) => set({ pattern })} /></div></div>
+      <div className="fp-intake-access">
+        <div>{chips('accessories', 'Accesorios', 10, 'customAccessory')}</div>
+        <div><Field label="Contraseña o PIN" disabled={value.noPin} value={value.access} onChange={(event) => set({ access: event.target.value })} /><label className="fp-checkbox"><input type="checkbox" checked={value.noPin} onChange={(event) => set({ noPin: event.target.checked })} />Sin bloqueo</label><div><p className="fp-intake-label">Patrón de desbloqueo</p><PatternPad value={value.pattern} disabled={value.noPin} onChange={(pattern) => set({ pattern })} /></div></div>
+      </div>
     </section>
     <section className="fp-intake-section"><fieldset className="fp-intake-field"><legend>Tipo de ingreso</legend><div className="fp-intake-chips" role="group" aria-label="Tipo de ingreso">{[['repair', 'Reparación'], ['review', 'Revisión']].map(([key, label]) => <button type="button" key={key} aria-pressed={value.entry === key} onClick={() => set({ entry: key })}>{label}</button>)}</div></fieldset>
       <div className="fp-intake-flags"><label className="fp-checkbox"><input type="checkbox" checked={value.isSimpleService} onChange={(event) => set({ isSimpleService: event.target.checked })} />Servicio simple</label><label className="fp-checkbox"><input type="checkbox" checked={value.isExternal} onChange={(event) => set({ isExternal: event.target.checked, externalTech: value.externalTech || options('externals')[0] })} />Enviar a técnico externo</label></div>

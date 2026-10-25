@@ -29,7 +29,8 @@ export function ToolWindow({ title, onClose, children, maxWidth = 'max-w-2xl' })
     const dialog = contentRef.current.closest('[role="dialog"]')
     dialog.setAttribute('aria-labelledby', 'preview-tool-title')
     dialog.tabIndex = -1
-    dialog.focus({ preventScroll: true })
+    const initialFocus = contentRef.current.querySelector('[data-initial-focus]') || dialog
+    initialFocus.focus({ preventScroll: true })
     const trapFocus = (event) => {
       if (event.key !== 'Tab') return
       const controls = [...dialog.querySelectorAll('button, input, textarea, select, a[href], [tabindex="0"]')].filter((element) => !element.disabled && element.getClientRects().length)
