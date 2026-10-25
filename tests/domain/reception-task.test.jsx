@@ -3,12 +3,12 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import ReceptionWorkspace from '../../src/preview/ReceptionWorkspace.jsx'
 import { RECEPTION_DRAFT, receptionTask } from '../../src/preview/reception-task.js'
 import { applyDemoAction, receptionQueue } from '../../src/preview/preview-model.js'
-import { createSystemState } from '../../src/preview/system-model.js'
+import { applySystemAction, createSystemState } from '../../src/preview/system-model.js'
 
 const state = createSystemState(1800000000000)
 const getOrder = (number) => state.orders.find((o) => o.number === number)
 const getDraft = (order, patch = {}) => ({ ...RECEPTION_DRAFT, price: order.price || '', charge: '3500', note: '', partName: '', partQuantity: '1', ...patch })
-const render = (order, role = 'recepcion', patch = {}) => renderToStaticMarkup(<ReceptionWorkspace order={order} role={role} users={state.users} draft={getDraft(order, patch)} setDraft={() => {}} onAction={() => {}} onExtra={() => {}} onBack={() => {}} />)
+const render = (order, role = 'recepcion', patch = {}, customer = state.customers.find((c) => c.id === order.customerId)) => renderToStaticMarkup(<ReceptionWorkspace order={order} customer={customer} role={role} users={state.users} draft={getDraft(order, patch)} setDraft={() => {}} onAction={() => {}} onExtra={() => {}} onBack={() => {}} />)
 
 describe('Tarea al final de la ficha de Recepción', () => {
   it('mantiene contexto y herramientas antes del formulario y la confirmación', () => {
@@ -16,7 +16,7 @@ describe('Tarea al final de la ficha de Recepción', () => {
     expect(html.indexOf('fp-reception-heading')).toBeLessThan(html.indexOf('reception-issue'))
     expect(html.indexOf('reception-issue')).toBeLessThan(html.indexOf('reception-work'))
     expect(html.indexOf('reception-work')).toBeLessThan(html.indexOf('Herramientas de la orden'))
-    expect(html.indexOf('Datos de ingreso')).toBeLessThan(html.indexOf('id="reception-task-form"'))
+    expect(html.indexOf('Equipo e ingreso')).toBeLessThan(html.indexOf('id="reception-task-form"'))
     expect(html.indexOf('</form>')).toBeLessThan(html.indexOf('<footer'))
     expect(html).toContain('form="reception-task-form"')
     expect(html.match(/<form\b/g)).toHaveLength(1)
@@ -24,10 +24,9 @@ describe('Tarea al final de la ficha de Recepción', () => {
     const header = html.match(/<header[\s\S]*?<\/header>/)[0]
     expect(header).not.toContain('Herramientas de la orden')
     expect(header).not.toContain(order.access)
-    const details = [...html.matchAll(/<details\b[\s\S]*?<\/details>/g)].map((m) => m[0]).join('')
-    expect(details).toContain(order.access)
-    expect(details).not.toContain(order.work)
-    expect(details).not.toContain(order.issue)
+    expect(html).not.toMatch(/<(details|summary|select)\b/)
+    expect(html).toContain(order.access)
+    expect(html).toContain(order.diagnosis)
   })
   it.each([
     ['OS1038', 'Presupuestar', 'id="reception-price"'],
@@ -45,9 +44,40 @@ describe('Tarea al final de la ficha de Recepción', () => {
   it('muestra patrón, acceso y datos de ingreso sin repetirlos en el encabezado', () => {
     const html = render(getOrder('OS1044'))
     expect(html).toContain('Patrón de desbloqueo: 1, 4, 7, 8, 9')
-    expect(html).toContain('Datos de ingreso')
+    expect(html).toContain('Equipo e ingreso')
     expect(html).toContain('Tomás Ríos')
     expect(html).not.toContain('fp-technical-order')
+  })
+  it('muestra todos los datos de cliente guardados, con campos vacíos explícitos', () => {
+    const order = getOrder('OS1038'), customer = state.customers.find((c) => c.id === order.customerId), html = render(order)
+    for (const value of [customer.name, customer.dni, customer.phone, customer.phone2, customer.phone3, customer.email, customer.address]) expect(html.split(value)).toHaveLength(2)
+    for (const label of ['Nombre', 'DNI', 'Teléfono', 'Teléfono alternativo 1', 'Teléfono alternativo 2', 'Correo electrónico', 'Domicilio', 'Tipo de dispositivo', 'Tipo de ingreso', 'Ingreso', 'Recibió', 'Técnico encargado', 'Contraseña o PIN', 'Estado físico', 'Accesorios', 'Patrón de desbloqueo', 'Aviso al cliente', 'Respuesta al presupuesto']) expect(html).toContain(`<dt>${label}</dt>`)
+    expect(render(order, 'recepcion', {}, { name: 'Cliente nuevo', phone: order.phone })).toContain('Sin registrar')
+    expect(render({ ...order, noPin: true, access: '' })).toContain('Sin bloqueo')
+    expect(render({ ...order, noPin: true, access: '' })).not.toContain('Sin contraseña informada')
+  })
+  it('consulta el cliente vigente y conserva DNI y teléfonos al editar otros datos', () => {
+    const order = getOrder('OS1038'), customer = state.customers.find((c) => c.id === order.customerId)
+    const updated = applySystemAction(state, 'customer', { id: customer.id, name: 'Marcos actualizado', phone: customer.phone, email: customer.email, address: 'Dirección actualizada' }, 'recepcion')
+    const saved = updated.customers.find((c) => c.id === customer.id)
+    expect(saved).toMatchObject({ dni: customer.dni, phone2: customer.phone2, phone3: customer.phone3 })
+    const html = render(order, 'recepcion', {}, saved)
+    expect(html).toContain('Marcos actualizado')
+    expect(html).toContain('Dirección actualizada')
+    expect(html).not.toContain(customer.address)
+  })
+  it('conserva el ingreso sin bloqueo y registra los datos de seguimiento de la demo', () => {
+    const now = 1800000000000
+    const created = applySystemAction(state, 'createOrder', { customerId: state.customers[0].id, brand: 'Equipo', model: 'De prueba', issue: 'No inicia', noPin: true, entry: 'review' }, 'recepcion', now).orders.at(-1)
+    expect(created).toMatchObject({ noPin: true, entry: 'review', receivedByName: 'Sofía Martín' })
+    let order = applyDemoAction(getOrder('OS1038'), 'price', { price: '50000' }, 'recepcion', now)
+    order = applyDemoAction(order, 'notify', {}, 'recepcion', now)
+    order = applyDemoAction(order, 'approve', {}, 'recepcion', now + 1)
+    expect(order).toMatchObject({ notifiedAt: now, notifiedByName: 'Sofía · Recepción', confirmedAt: now + 1, confirmedByName: 'Sofía · Recepción' })
+    const html = render(order)
+    expect(html).toContain('Avisado')
+    expect(html).toContain('Aprobado')
+    expect(html).toContain('Sofía · Recepción')
   })
   it('mantiene Recepción después de aprobar como administrador', () => {
     const order = getOrder('OS1035'), draft = getDraft(order, { response: 'approve' })
@@ -88,6 +118,7 @@ describe('Tarea al final de la ficha de Recepción', () => {
     expect(action.blocked).toBe('')
     const delivered = applyDemoAction(pickup, action.id, action.data, 'recepcion')
     expect(delivered.pickup).toMatchObject({ by: 'third', withoutReceipt: true })
+    expect(delivered.deliveredByName).toBe('Sofía · Recepción')
     expect(render(delivered)).toContain('Trabajo propuesto · sin realizar')
     expect(render(delivered)).not.toContain('Trabajo realizado')
     expect(render(delivered)).toContain('Importe de retiro')
@@ -98,7 +129,9 @@ describe('Tarea al final de la ficha de Recepción', () => {
     order = applyDemoAction(order, action.id, action.data, 'recepcion')
     expect(receptionTask(order, getDraft(order)).queue).toBeNull()
     order = getOrder('OS1033'); action = receptionTask(order, getDraft(order, { repaired: false }))
-    expect(applyDemoAction(order, action.id, action.data, 'admin').status).toBe('recibido')
+    const returned = applyDemoAction(order, action.id, action.data, 'admin', 1800000000000)
+    expect(returned.status).toBe('recibido')
+    expect(returned.externalReturnAt).toBe(1800000000000)
     order = getOrder('OS1048'); action = receptionTask(order, getDraft(order))
     order = applyDemoAction(order, action.id, action.data, 'recepcion')
     expect(receptionTask(order, getDraft(order)).queue).toBe('avisar')

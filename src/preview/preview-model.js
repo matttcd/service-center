@@ -39,7 +39,7 @@ export function createDemoOrders(now = Date.now()) {
   return seeds.map((seed, i) => {
     const createdAt = now - seed.days * day
     return {
-      deviceType: 'Celular', assignedTo: TECHNICIAN, price: 0, advance: 0,
+      deviceType: 'Celular', assignedTo: TECHNICIAN, price: 0, advance: 0, entry: seed.workAuthor?.role === 'recepcion' ? 'repair' : 'review', noPin: false, receivedByName: 'Sofía Martín',
       notified: false, confirmed: false, rejectedCharge: null, parts: [], notes: [],
       ...seed, id: `demo-${seed.number}`, createdAt, statusSince: createdAt + 3600000,
       acceptedAt: seed.assignedTo === null ? null : seed.acceptedAt ?? createdAt + 3600000,
@@ -162,18 +162,18 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
     if (action === 'finish') {
       next.diagnosis = String(payload.diagnosis ?? next.diagnosis).trim()
       next.work = String(payload.work ?? next.work).trim()
-      setStatus('terminado'); next.notified = false; text = 'Reparación finalizada. Recepción debe avisar al cliente'
+      setStatus('terminado'); next.notified = false; next.repairedByName = ROLE_NAMES[role]; text = 'Reparación finalizada. Recepción debe avisar al cliente'
     }
   } else if (action === 'finishSimple') {
     require(counter && order.isSimpleService && order.status === 'recibido', 'Servicio no disponible.')
-    setStatus('terminado'); next.notified = false; text = 'Servicio finalizado'
+    setStatus('terminado'); next.notified = false; next.repairedByName = ROLE_NAMES[role]; text = 'Servicio finalizado'
   } else if (action === 'sendExternal') {
     require(counter && ['recibido', 'en_revision', 'en_reparacion', 'presupuesto'].includes(order.status), 'No se puede enviar este equipo.')
     require(String(payload.name || '').trim(), 'Elegí el técnico externo.')
-    next.externalTech = payload.name.trim(); setStatus('en_tercero'); text = `Enviado a ${next.externalTech}`
+    next.externalTech = payload.name.trim(); next.externalSentAt = now; setStatus('en_tercero'); text = `Enviado a ${next.externalTech}`
   } else if (action === 'returnExternal') {
     require(counter && order.status === 'en_tercero', 'El equipo no está en un técnico externo.')
-    setStatus(payload.repaired ? 'terminado' : 'recibido'); next.notified = false; text = `Regreso de ${order.externalTech}`
+    setStatus(payload.repaired ? 'terminado' : 'recibido'); next.externalReturnAt = now; next.notified = false; text = `Regreso de ${order.externalTech}`
   } else if (action === 'warranty') {
     require(counter && order.status === 'entregado', 'Solo se reingresan equipos entregados.')
     setStatus('recibido'); next.warrantyReturn = true; next.assignedTo = null; next.acceptedAt = null; next.notified = false; next.confirmed = false; text = 'Reingreso por garantía'
@@ -183,10 +183,10 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
     next.price = Number(payload.price); next.notified = false; text = 'Presupuesto guardado'
   } else if (action === 'notify') {
     require(counter && receptionQueue(order) === 'avisar', 'No hay un aviso pendiente para esta orden.')
-    next.notified = true; text = 'Recepción registró que avisó al cliente'
+    next.notified = true; next.notifiedAt = now; next.notifiedByName = ROLE_NAMES[role]; text = 'Recepción registró que avisó al cliente'
   } else if (action === 'approve' || action === 'reject') {
     require(counter && receptionQueue(order) === 'respuesta', 'Primero cargá el presupuesto y registrá el aviso.')
-    if (action === 'approve') { next.confirmed = true; text = 'El cliente aprobó el presupuesto. Taller puede continuar' }
+    if (action === 'approve') { next.confirmed = true; next.confirmedAt = now; next.confirmedByName = ROLE_NAMES[role]; text = 'El cliente aprobó el presupuesto. Taller puede continuar' }
     else {
       require(payload.charge !== '' && payload.charge !== undefined && Number.isFinite(Number(payload.charge)) && Number(payload.charge) >= 0, 'Ingresá el importe de revisión, incluso si es cero.')
       next.rejectedCharge = Number(payload.charge); next.confirmed = false; setStatus('presupuesto_rechazado')
@@ -213,7 +213,7 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
     require(counter && receptionQueue(order) === 'retiros' && payload.physical === true, 'Confirmá el retiro físico del equipo.')
     require(['client', 'third'].includes(payload.by), 'Indicá quién retira.')
     if (payload.by === 'third') require(String(payload.name || '').trim() && /^\d{6,8}$/.test(String(payload.dni || '')), 'Ingresá nombre y DNI válido de quien retira.')
-    next.pickup = payload; next.deliveredAt = now; setStatus('entregado'); text = payload.withoutReceipt ? 'Retiro sin comprobante registrado' : 'Entrega física registrada'
+    next.pickup = payload; next.deliveredAt = now; next.deliveredByName = ROLE_NAMES[role]; setStatus('entregado'); text = payload.withoutReceipt ? 'Retiro sin comprobante registrado' : 'Entrega física registrada'
   } else throw new Error('Acción desconocida.')
   const workChanged = next.work !== order.work
   if (workChanged) next.workAuthor = next.work ? { name: { tecnico: 'Juan', recepcion: 'Sofía', admin: 'Martín' }[role], role } : null

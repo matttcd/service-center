@@ -24,7 +24,7 @@ export function createSystemState(now = Date.now()) {
     { ...structuredClone(orders[1]), id: 'demo-OS1048', number: 'OS1048', customer: 'Lucía Torres', model: 'iPhone SE', isSimpleService: true, work: 'Limpieza de conector', price: 8000, history: [{ text: 'Servicio simple recibido', by: 'Sofía · Recepción', at: now }] },
     { ...structuredClone(orders[7]), id: 'demo-OS1010', number: 'OS1010', customer: 'Gabriel Paz', status: 'entregado', notified: true, deliveredAt: now - 86400000, history: [{ text: 'Equipo entregado', by: 'Sofía · Recepción', at: now - 86400000 }] },
   )
-  const customers = [...new Set(orders.map((o) => o.customer))].map((name, i) => ({ id: `client-${i}`, name, phone: orders.find((o) => o.customer === name).phone, email: '', address: '' }))
+  const customers = [...new Set(orders.map((o) => o.customer))].map((name, i) => ({ id: `client-${i}`, name, dni: String(30000100 + i), phone: orders.find((o) => o.customer === name).phone, phone2: i === 3 ? '11 5555-0203' : '', phone3: i === 3 ? '11 5555-0303' : '', email: i === 3 ? 'marcos.vega@example.invalid' : '', address: `Calle de Ejemplo ${120 + i}` }))
   for (const o of orders) o.customerId = customers.find((c) => c.name === o.customer).id
   return {
     orders, customers,
@@ -59,7 +59,7 @@ export function applySystemAction(state, action, payload, role, now = Date.now()
     next.orders[index] = applyDemoAction(next.orders[index], payload.action, payload.data, role, now)
   } else if (action === 'customer') {
     require(counter, 'Solo Recepción o Administración pueden editar clientes.')
-    const customer = { id: payload.id || `client-${now}`, name: requiredText(payload.name, 'el nombre'), phone: requiredText(payload.phone, 'el teléfono'), email: String(payload.email || '').trim(), address: String(payload.address || '').trim() }
+    const customer = { ...next.customers.find((c) => c.id === payload.id), id: payload.id || `client-${now}`, name: requiredText(payload.name, 'el nombre'), phone: requiredText(payload.phone, 'el teléfono'), email: String(payload.email || '').trim(), address: String(payload.address || '').trim() }
     if (payload.id) {
       const index = next.customers.findIndex((c) => c.id === payload.id && !c.deletedAt)
       require(index >= 0, 'Cliente no encontrado.')
@@ -88,7 +88,7 @@ export function applySystemAction(state, action, payload, role, now = Date.now()
       deviceType: payload.deviceType || 'Celular', brand: requiredText(payload.brand, 'la marca'), model: requiredText(payload.model, 'el modelo'),
       issue: requiredText(payload.issue, 'la falla informada'), access: payload.noPin ? '' : String(payload.access || ''), pattern: payload.noPin ? [] : payload.pattern || [],
       conditions: payload.conditions || 'Sin registrar', accessories: payload.accessories || 'Sin accesorios', assignedTo: null, acceptedAt: null,
-      createdAt: now, statusSince: now, status: payload.isExternal ? 'en_tercero' : repair && !payload.isSimpleService ? 'presupuesto' : 'recibido', externalTech: payload.isExternal ? payload.externalTech : null, diagnosis: '', work, workAuthor: work ? { name: user.name.split(' ')[0], role } : null,
+      createdAt: now, entry: repair ? 'repair' : 'review', noPin: !!payload.noPin, receivedByName: user.name, externalSentAt: payload.isExternal ? now : null, statusSince: now, status: payload.isExternal ? 'en_tercero' : repair && !payload.isSimpleService ? 'presupuesto' : 'recibido', externalTech: payload.isExternal ? payload.externalTech : null, diagnosis: '', work, workAuthor: work ? { name: user.name.split(' ')[0], role } : null,
       price, advance, confirmed: repair && !!payload.confirmed, notified: repair && !!payload.confirmed, rejectedCharge: null, notes: [], parts: [],
       isSimpleService: !!payload.isSimpleService, warrantyReturn: false,
       history: [{ text: work ? 'Equipo ingresado para reparación' : 'Equipo ingresado para revisión', ...(work ? { work } : {}), by: `${user.name} · ${user.label}`, at: now }],

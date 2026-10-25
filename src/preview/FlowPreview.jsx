@@ -93,7 +93,7 @@ export default function FlowPreview() {
     else setModal({ type, initial: { name: state.settings.externals.split('\n')[0], repaired: true, technician: order?.assignedTo || state.users.find((u) => u.role === 'tecnico' && u.active)?.id } })
   }
   const Workspace = page === 'recepcion' ? ReceptionWorkspace : OrderWorkspace
-  const renderOrder = () => order ? <Workspace users={state.users} key={`${generation}-${order.id}-${role}-${page}`} order={order} role={role} technical={role === 'tecnico' || (role === 'admin' && !receptionQueue(order))} draft={{ ...defaultDraft(order, state.settings.revisionFee), ...drafts[order.id] }} setDraft={patchDraft} onAction={mutateOrder} onBack={() => isQueue ? patchQueue({ detail: false }) : navigate(location.state?.from || '/ordenes')} onExtra={extra} /> : <div className="fp-order"><Empty text="Elegí un equipo" /></div>
+  const renderOrder = () => order ? <Workspace users={state.users} customer={state.customers.find((customer) => customer.id === order.customerId)} key={`${generation}-${order.id}-${role}-${page}`} order={order} role={role} technical={role === 'tecnico' || (role === 'admin' && !receptionQueue(order))} draft={{ ...defaultDraft(order, state.settings.revisionFee), ...drafts[order.id] }} setDraft={patchDraft} onAction={mutateOrder} onBack={() => isQueue ? patchQueue({ detail: false }) : navigate(location.state?.from || '/ordenes')} onExtra={extra} /> : <div className="fp-order"><Empty text="Elegí un equipo" /></div>
   const changeView = (view) => patchQueue({ view, selected: queueOrders(orders, queueRole, view, queue.search || '')[0]?.id, detail: false, scroll: 0 })
   const queueKey = (e, index) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
