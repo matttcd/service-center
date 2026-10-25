@@ -13,9 +13,10 @@ const render = (order, role = 'recepcion', patch = {}, customer = state.customer
 describe('Ficha informativa y tareas en ventana de Recepción', () => {
   it('mantiene todos los datos visibles y abre la tarea desde el pie sin formulario en la ficha', () => {
     const order = getOrder('OS1038'), html = render(order)
-    expect(html.indexOf('fp-reception-heading')).toBeLessThan(html.indexOf('reception-issue'))
+    expect(html.indexOf('fp-reception-identity')).toBeGreaterThan(0)
+    expect(html.indexOf('fp-reception-identity')).toBeLessThan(html.indexOf('reception-issue'))
     expect(html.indexOf('reception-issue')).toBeLessThan(html.indexOf('reception-work'))
-    expect(html.indexOf('reception-work')).toBeLessThan(html.indexOf('Herramientas de la orden'))
+    expect(html.indexOf('Herramientas de la orden')).toBeLessThan(html.indexOf('reception-customer'))
     expect(html).not.toMatch(/<(form|input|textarea|select)\b/)
     expect(html).not.toContain('reception-task-form')
     expect(html.match(/<footer[\s\S]*?<\/footer>/)[0]).toContain('aria-haspopup="dialog"')
@@ -49,17 +50,34 @@ describe('Ficha informativa y tareas en ventana de Recepción', () => {
   it('muestra patrón, acceso y datos de ingreso sin repetirlos en el encabezado', () => {
     const html = render(getOrder('OS1044'))
     expect(html).toContain('Patrón de desbloqueo: 1, 4, 7, 8, 9')
-    expect(html).toContain('Equipo e ingreso')
+    expect(html).toContain('Acceso y estado')
     expect(html).toContain('Tomás Ríos')
     expect(html).not.toContain('fp-technical-order')
   })
   it('muestra todos los datos de cliente guardados, con campos vacíos explícitos', () => {
     const order = getOrder('OS1038'), customer = state.customers.find((c) => c.id === order.customerId), html = render(order)
     for (const value of [customer.name, customer.dni, customer.phone, customer.phone2, customer.phone3, customer.email, customer.address]) expect(html.split(value)).toHaveLength(2)
-    for (const label of ['Nombre', 'DNI', 'Teléfono', 'Teléfono alternativo 1', 'Teléfono alternativo 2', 'Correo electrónico', 'Domicilio', 'Tipo de dispositivo', 'Tipo de ingreso', 'Ingreso', 'Recibió', 'Técnico encargado', 'Contraseña o PIN', 'Estado físico', 'Accesorios', 'Patrón de desbloqueo', 'Aviso al cliente', 'Respuesta al presupuesto']) expect(html).toContain(`<dt>${label}</dt>`)
-    expect(render(order, 'recepcion', {}, { name: 'Cliente nuevo', phone: order.phone })).toContain('Sin registrar')
+    for (const label of ['DNI', 'Teléfono', 'Teléfono 2', 'Teléfono 3', 'Correo', 'Domicilio', 'Tipo de dispositivo', 'Tipo de ingreso', 'Ingreso', 'Recibió', 'Técnico', 'Contraseña o PIN', 'Estado físico', 'Accesorios', 'Patrón', 'Aviso al cliente', 'Respuesta']) expect(html).toMatch(new RegExp(`<dt[^>]*>(?:<svg[\\s\\S]*?</svg>)?${label}</dt>`))
+    expect(render(order, 'recepcion', {}, { name: 'Cliente nuevo', phone: order.phone })).toContain('—')
     expect(render({ ...order, noPin: true, access: '' })).toContain('Sin bloqueo')
     expect(render({ ...order, noPin: true, access: '' })).not.toContain('Sin contraseña informada')
+  })
+  it('separa la lectura del trabajo de la referencia de cliente y acceso sin duplicar información', () => {
+    const order = getOrder('OS1044'), html = render(order)
+    const reference = html.match(/<aside[\s\S]*?<\/aside>/)[0]
+    for (const value of [order.customer, order.phone, order.access, order.conditions, order.accessories]) expect(reference).toContain(value)
+    for (const value of [order.issue, order.diagnosis, order.work]) expect(reference).not.toContain(value)
+    expect(html.match(/<header[\s\S]*?<\/header>/)[0]).toContain(order.deviceType)
+    expect(html).toContain('aria-label="Cliente y equipo"')
+  })
+  it('mantiene el técnico externo y las fechas visibles sin abrir la tarea', () => {
+    const order = { ...getOrder('OS1033'), externalSentAt: 1800000000000, externalReturnAt: 1800000060000 }
+    const html = render(order), header = html.match(/<header[\s\S]*?<\/header>/)[0]
+    expect(header).toContain(order.externalTech)
+    expect(header).toMatch(/<dt>Envío<\/dt><dd>(?!—)[^<]+<\/dd>/)
+    expect(header).toMatch(/<dt>Regreso<\/dt><dd>(?!—)[^<]+<\/dd>/)
+    expect(html.split(order.externalTech)).toHaveLength(2)
+    expect(html).not.toContain('reception-task-form')
   })
   it('consulta el cliente vigente y conserva DNI y teléfonos al editar otros datos', () => {
     const order = getOrder('OS1038'), customer = state.customers.find((c) => c.id === order.customerId)

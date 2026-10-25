@@ -20,7 +20,7 @@ export const date = (n) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short'
 export function createSystemState(now = Date.now()) {
   const orders = createDemoOrders(now)
   orders.push(
-    { ...structuredClone(orders[0]), id: 'demo-OS1033', number: 'OS1033', customer: 'Ana Ruiz', brand: 'Apple', model: 'iPad 9', status: 'en_tercero', externalTech: 'Laboratorio Sur', createdAt: now - 3 * 86400000, statusSince: now - 86400000, work: 'Revisar placa de carga.', history: [{ text: 'Enviado a Laboratorio Sur', by: 'Sofía · Recepción', at: now - 86400000 }] },
+    { ...structuredClone(orders[0]), id: 'demo-OS1033', number: 'OS1033', customer: 'Ana Ruiz', brand: 'Apple', model: 'iPad 9', deviceType: 'Tablet', status: 'en_tercero', externalTech: 'Laboratorio Sur', createdAt: now - 3 * 86400000, statusSince: now - 86400000, work: 'Revisar placa de carga.', history: [{ text: 'Enviado a Laboratorio Sur', by: 'Sofía · Recepción', at: now - 86400000 }] },
     { ...structuredClone(orders[1]), id: 'demo-OS1048', number: 'OS1048', customer: 'Lucía Torres', model: 'iPhone SE', isSimpleService: true, work: 'Limpieza de conector', price: 8000, history: [{ text: 'Servicio simple recibido', by: 'Sofía · Recepción', at: now }] },
     { ...structuredClone(orders[7]), id: 'demo-OS1010', number: 'OS1010', customer: 'Gabriel Paz', status: 'entregado', notified: true, deliveredAt: now - 86400000, history: [{ text: 'Equipo entregado', by: 'Sofía · Recepción', at: now - 86400000 }] },
   )
