@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, Clock3, Phone, Mail, MapPin, KeyRound } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Clock3, Phone, Mail, MapPin, KeyRound, IdCard, Grid3X3, Smartphone, Cable } from 'lucide-react'
 import { PatternPreview } from '../components/PatternPad.jsx'
 import { OrderTools, Status, ToolWindow } from './OrderWorkspace.jsx'
 import { charges } from './preview-model.js'
@@ -67,16 +67,16 @@ export default function ReceptionWorkspace({ order, customer, role, draft: saved
     </div>
     <aside className="fp-reception-reference" aria-label="Cliente y equipo">
       <section aria-labelledby="reception-customer">
-        <div className="fp-reception-customer-identity"><span className="fp-avatar" aria-hidden="true">{name.split(' ').filter(Boolean).slice(0, 2).map((word) => word[0]).join('')}</span><div><h3 id="reception-customer"><span className="sr-only">Cliente: </span>{name}</h3><dl className="fp-reception-customer-id"><div><dt>DNI</dt><dd>{customer?.dni || '—'}</dd></div></dl></div></div>
+        <div className="fp-reception-customer-identity"><span className="fp-avatar" aria-hidden="true">{name.split(' ').filter(Boolean).slice(0, 2).map((word) => word[0]).join('')}</span><div><h3 id="reception-customer"><span className="sr-only">Cliente: </span>{name}</h3><dl className="fp-reception-customer-id"><div><dt><IdCard size={14} aria-hidden="true" />DNI</dt><dd>{customer?.dni || '—'}</dd></div></dl></div></div>
         <dl className="fp-reception-contacts">
-          <div><dt><Phone size={14} />Teléfono</dt><dd>{customer?.phone || order.phone || '—'}</dd></div><div><dt>Teléfono 2</dt><dd>{customer?.phone2 || '—'}</dd></div><div><dt>Teléfono 3</dt><dd>{customer?.phone3 || '—'}</dd></div>
+          <div><dt><Phone size={14} />Teléfono</dt><dd>{customer?.phone || order.phone || '—'}</dd></div><div><dt><Phone size={14} aria-hidden="true" />Teléfono 2</dt><dd>{customer?.phone2 || '—'}</dd></div><div><dt><Phone size={14} aria-hidden="true" />Teléfono 3</dt><dd>{customer?.phone3 || '—'}</dd></div>
           <div className="fp-contact-address"><dt><Mail size={14} />Correo</dt><dd>{customer?.email || '—'}</dd></div><div className="fp-contact-address"><dt><MapPin size={14} />Domicilio</dt><dd>{customer?.address || '—'}</dd></div>
         </dl>
       </section>
       <section className="fp-reception-device" aria-labelledby="reception-ingress"><h3 id="reception-ingress" className="sr-only">Acceso y estado</h3><dl>
         <div className="fp-reception-access"><dt><KeyRound size={14} />Contraseña o PIN</dt><dd>{order.noPin ? 'Sin bloqueo' : order.access || 'Sin contraseña informada'}</dd></div>
-        <div className="fp-reception-pattern"><dt>Patrón</dt><dd>{!order.noPin && order.pattern?.length > 0 ? <div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((n) => n + 1).join(', ')}`}><PatternPreview value={order.pattern} size={80} /></div> : order.noPin ? 'Sin bloqueo' : '—'}</dd></div>
-        <div><dt>Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div><div><dt>Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
+        <div className="fp-reception-pattern"><dt><Grid3X3 size={14} aria-hidden="true" />Patrón</dt><dd>{!order.noPin && order.pattern?.length > 0 ? <div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((n) => n + 1).join(', ')}`}><PatternPreview value={order.pattern} size={80} /></div> : order.noPin ? 'Sin bloqueo' : '—'}</dd></div>
+        <div><dt><Smartphone size={14} aria-hidden="true" />Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div><div><dt><Cable size={14} aria-hidden="true" />Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
       </dl></section>
 
     </aside>
