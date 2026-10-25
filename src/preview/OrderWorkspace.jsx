@@ -129,6 +129,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
       </dl>
     </aside>}
     <div className="fp-order-body" ref={bodyRef}>
+      <div className="fp-order-secondary"><OrderTools order={order} role={role} technical={technical} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} /></div>
       {actionForm === 'response' && <section className="fp-action-form" aria-label="Respuesta del cliente">
         <h3>¿Qué respondió el cliente?</h3><p>Presupuesto comunicado: <strong>{money(order.price)}</strong></p>
         <div className="fp-response-options" role="group" aria-label="Respuesta al presupuesto">
@@ -155,7 +156,6 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
           {canWork && workDirty && <p className="fp-save-state">Borrador sin guardar</p>}
           {order.status === 'falta_repuestos' && <div className="fp-parts-wait"><Package size={17} /><div><p>{wait.ready ? 'Repuestos recibidos' : 'Repuestos pendientes'}</p><ul>{order.parts.map((part) => <li key={part.id}>{part.name} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Esperando llegada' : 'Recibido'}</li>)}</ul></div></div>}
       </section>
-      <div className="fp-order-secondary"><OrderTools order={order} role={role} technical={technical} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} /></div>
       {!technical && <section className="fp-counter" aria-label="Presupuesto y retiro">
           {priceEditor}
           <div className="fp-finance"><div><span>{order.rejectedCharge !== null ? 'Importe de retiro' : 'Presupuesto'}</span><strong>{bill.total ? money(bill.total) : order.rejectedCharge === 0 ? money(0) : 'A definir'}</strong></div><div><span>Seña recibida</span><strong>{money(order.advance)}</strong></div><div><span>{bill.balance < 0 ? 'Saldo a favor' : 'Saldo pendiente'}</span><strong>{!bill.total && order.rejectedCharge === null ? '—' : money(Math.abs(bill.balance))}</strong></div></div>
