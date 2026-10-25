@@ -479,7 +479,7 @@ body.fp-preview {
 .fp-reception-header-facts dd { margin: 0; }
 .fp-reception-header-facts > div { display: flex; align-items: baseline; gap: 6px; }
 .fp-reception-header-facts > div + div::before { content: '·'; margin-right: 2px; }
-.fp-reception-order > .fp-order-body { grid-area: body; display: flex; flex-direction: column; gap: 16px; padding: 12px 20px 16px; }
+.fp-reception-order > .fp-order-body { grid-area: body; display: flex; flex-direction: column; gap: 12px; padding: 12px 20px 8px; scrollbar-gutter: stable; }
 .fp-reception-order h3 { display: flex; align-items: center; gap: 7px; }
 .fp-reception-order h3 > svg { color: var(--fp-muted); }
 .fp-reception-context { display: grid; gap: 14px; }
@@ -508,11 +508,9 @@ body.fp-preview {
 .fp-reception-contacts dt { display: flex; align-items: center; gap: 6px; }
 .fp-reception-contacts svg { color: var(--fp-muted); }
 .fp-reception-order .fp-reception-contacts dd { margin: 0; }
-.fp-reception-device > dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 20px; }
-.fp-reception-device > dl > div { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.fp-reception-device > dl:has(.fp-reception-pattern) { grid-template-columns: minmax(0,1fr) 100px; align-items: start; gap: 10px 16px; }
-.fp-reception-device > dl:has(.fp-reception-pattern) > div:not(.fp-reception-pattern) { grid-column: 1; display: grid; grid-template-columns: 116px minmax(0,1fr); gap: 10px; }
-.fp-reception-pattern { grid-column: 2; grid-row: 1 / span 3; }
+.fp-reception-device-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: start; gap: 20px; }
+.fp-reception-device-grid > dl { min-width: 0; display: grid; gap: 12px; }
+.fp-reception-device-grid > dl > div { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .fp-reception-device dt { display: flex; align-items: flex-start; gap: 6px; }
 .fp-reception-device dt > svg { flex-shrink: 0; margin-top: 3px; color: var(--fp-muted); }
 .fp-reception-reference dt > svg { flex-shrink: 0; color: var(--fp-muted); }
@@ -558,6 +556,5 @@ body.fp-preview {
   .fp-reception-order > .fp-action-dock { position: sticky; bottom: 0; z-index: 2; flex-shrink: 0; padding: 10px 12px; order: 3; }
   .fp-reception-price { grid-template-columns: minmax(0,1fr) auto; gap: 14px; }
   .fp-reception-work { padding: 10px 12px; }
-  .fp-reception-device > dl { column-gap: 16px; }
-  .fp-reception-device > dl:has(.fp-reception-pattern) > div:not(.fp-reception-pattern) { grid-template-columns: minmax(0,1fr); gap: 2px; }
+  .fp-reception-device-grid { gap: 16px; }
 }

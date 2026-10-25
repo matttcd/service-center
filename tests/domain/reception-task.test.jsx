@@ -86,10 +86,14 @@ describe('Ficha informativa y tareas en ventana de Recepción', () => {
     expect(render({ ...order, noPin: true, access: '' })).toContain('Sin bloqueo')
     expect(render({ ...order, noPin: true, access: '' })).not.toContain('Sin contraseña informada')
   })
-  it('reserva el espacio del patrón solo si está registrado y el equipo tiene bloqueo', () => {
+  it('agrupa el patrón con el acceso sin reorganizar estado físico y accesorios', () => {
     const order = getOrder('OS1044')
-    expect(render(order)).toContain('class="fp-reception-pattern"')
-    expect(render({ ...order, pattern: [] })).not.toContain('class="fp-reception-pattern"')
+    const withPattern = render(order), withoutPattern = render({ ...order, pattern: [] })
+    const accessGroup = withPattern.match(/<dl class="fp-reception-access-group">[\s\S]*?<\/dl>/)[0]
+    expect(accessGroup).toContain('Contraseña o PIN')
+    expect(accessGroup).toContain('class="fp-reception-pattern"')
+    expect(withPattern.match(/<dl class="fp-reception-condition-group">[\s\S]*?<\/dl>/)[0]).toBe(withoutPattern.match(/<dl class="fp-reception-condition-group">[\s\S]*?<\/dl>/)[0])
+    expect(withoutPattern).not.toContain('class="fp-reception-pattern"')
     expect(render({ ...order, noPin: true })).not.toContain('class="fp-reception-pattern"')
   })
   it('centraliza el equipo y deja cliente y seguimiento en el lateral sin duplicar datos', () => {

@@ -56,11 +56,12 @@ export default function ReceptionWorkspace({ order, customer, role, draft: saved
     </header>
     <div className="fp-order-body">
       <div className="fp-reception-secondary"><OrderTools order={order} role={role} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} actionsInWindow /></div>
-      <section className="fp-reception-device" aria-labelledby="reception-ingress"><h3 id="reception-ingress" className="sr-only">Acceso y estado</h3><dl>
+      <section className="fp-reception-device" aria-labelledby="reception-ingress"><h3 id="reception-ingress" className="sr-only">Acceso y estado</h3><div className="fp-reception-device-grid"><dl className="fp-reception-access-group">
         <div className="fp-reception-access"><dt><KeyRound size={14} />Contraseña o PIN</dt><dd>{order.noPin ? 'Sin bloqueo' : order.access || 'Sin contraseña informada'}</dd></div>
-        <div><dt><Smartphone size={14} aria-hidden="true" />Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div><div><dt><Cable size={14} aria-hidden="true" />Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
         {!order.noPin && order.pattern?.length > 0 && <div className="fp-reception-pattern"><dt><Grid3X3 size={14} aria-hidden="true" />Patrón</dt><dd><div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((n) => n + 1).join(', ')}`}><PatternPreview value={order.pattern} size={96} /></div></dd></div>}
-      </dl></section>
+      </dl><dl className="fp-reception-condition-group">
+        <div><dt><Smartphone size={14} aria-hidden="true" />Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div><div><dt><Cable size={14} aria-hidden="true" />Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
+      </dl></div></section>
       <div className="fp-reception-context">
         <section aria-labelledby="reception-issue"><h3 id="reception-issue">Falla informada</h3><p className="fp-read-value">{order.issue}</p></section>
         <section className="fp-reception-work" aria-labelledby="reception-work"><h3 id="reception-work">{order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : ['terminado', 'entregado'].includes(order.status) ? 'Trabajo realizado' : 'Trabajo a realizar'}</h3><p className="fp-read-value">{order.work || 'Trabajo por definir'}</p>{order.workAuthor && <p className="fp-work-origin">Por {order.workAuthor.name} · {order.workAuthor.role === 'recepcion' ? 'Recepción' : order.workAuthor.role === 'admin' ? 'Administrador' : 'Técnico'}</p>}</section>
