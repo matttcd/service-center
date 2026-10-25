@@ -86,13 +86,23 @@ describe('Ficha informativa y tareas en ventana de Recepción', () => {
     expect(render({ ...order, noPin: true, access: '' })).toContain('Sin bloqueo')
     expect(render({ ...order, noPin: true, access: '' })).not.toContain('Sin contraseña informada')
   })
-  it('separa la lectura del trabajo de la referencia de cliente y acceso sin duplicar información', () => {
+  it('centraliza el equipo y deja cliente y seguimiento en el lateral sin duplicar datos', () => {
     const order = getOrder('OS1044'), html = render(order)
     const reference = html.match(/<aside[\s\S]*?<\/aside>/)[0]
-    for (const value of [order.customer, order.phone, order.access, order.conditions, order.accessories]) expect(reference).toContain(value)
-    for (const value of [order.issue, order.work]) expect(reference).not.toContain(value)
+    const body = html.slice(html.indexOf('<div class="fp-order-body">'), html.indexOf('<aside'))
+    for (const value of [order.customer, order.phone]) expect(reference).toContain(value)
+    for (const value of [order.issue, order.work, order.access, order.conditions, order.accessories]) {
+      expect(reference).not.toContain(value)
+      expect(body).toContain(value)
+      expect(html.split(value)).toHaveLength(2)
+    }
+    expect(body).toContain('Patrón de desbloqueo: 1, 4, 7, 8, 9')
+    expect(body).not.toContain('fp-reception-tracking')
+    expect(reference).not.toContain('fp-reception-device')
+    expect(reference).toContain('fp-reception-tracking')
+    for (const label of ['Ingreso', 'Recibió', 'Técnico', 'Aceptado', 'Aviso al cliente', 'Respuesta']) expect(reference).toContain(`<dt>${label}</dt>`)
     expect(html.match(/<header[\s\S]*?<\/header>/)[0]).toContain(order.deviceType)
-    expect(html).toContain('aria-label="Cliente y equipo"')
+    expect(html).toContain('aria-label="Cliente y seguimiento"')
   })
   it('mantiene el técnico externo y las fechas visibles sin abrir la tarea', () => {
     const order = { ...getOrder('OS1033'), externalSentAt: 1800000000000, externalReturnAt: 1800000060000 }

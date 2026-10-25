@@ -56,10 +56,24 @@ export default function ReceptionWorkspace({ order, customer, role, draft: saved
     </header>
     <div className="fp-order-body">
       <div className="fp-reception-secondary"><OrderTools order={order} role={role} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} actionsInWindow /></div>
+      <section className="fp-reception-device" aria-labelledby="reception-ingress"><h3 id="reception-ingress" className="sr-only">Acceso y estado</h3><dl>
+        <div className="fp-reception-access"><dt><KeyRound size={14} />Contraseña o PIN</dt><dd>{order.noPin ? 'Sin bloqueo' : order.access || 'Sin contraseña informada'}</dd></div>
+        <div className="fp-reception-pattern"><dt><Grid3X3 size={14} aria-hidden="true" />Patrón</dt><dd>{!order.noPin && order.pattern?.length > 0 ? <div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((n) => n + 1).join(', ')}`}><PatternPreview value={order.pattern} size={80} /></div> : order.noPin ? 'Sin bloqueo' : '—'}</dd></div>
+        <div><dt><Smartphone size={14} aria-hidden="true" />Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div><div><dt><Cable size={14} aria-hidden="true" />Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
+      </dl></section>
       <div className="fp-reception-context">
         <section aria-labelledby="reception-issue"><h3 id="reception-issue">Falla informada</h3><p className="fp-read-value">{order.issue}</p></section>
         <section className="fp-reception-work" aria-labelledby="reception-work"><h3 id="reception-work">{order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : ['terminado', 'entregado'].includes(order.status) ? 'Trabajo realizado' : 'Trabajo a realizar'}</h3><p className="fp-read-value">{order.work || 'Trabajo por definir'}</p>{order.workAuthor && <p className="fp-work-origin">Por {order.workAuthor.name} · {order.workAuthor.role === 'recepcion' ? 'Recepción' : order.workAuthor.role === 'admin' ? 'Administrador' : 'Técnico'}</p>}</section>
       </div>
+    </div>
+    <aside className="fp-reception-reference" aria-label="Cliente y seguimiento">
+      <section aria-labelledby="reception-customer">
+        <div className="fp-reception-customer-identity"><span className="fp-avatar" aria-hidden="true">{name.split(' ').filter(Boolean).slice(0, 2).map((word) => word[0]).join('')}</span><div><h3 id="reception-customer"><span className="sr-only">Cliente: </span>{name}</h3><dl className="fp-reception-customer-id"><div><dt><IdCard size={14} aria-hidden="true" />DNI</dt><dd>{customer?.dni || '—'}</dd></div></dl></div></div>
+        <dl className="fp-reception-contacts">
+          <div><dt><Phone size={14} />Teléfono</dt><dd>{customer?.phone || order.phone || '—'}</dd></div><div><dt><Phone size={14} aria-hidden="true" />Teléfono 2</dt><dd>{customer?.phone2 || '—'}</dd></div><div><dt><Phone size={14} aria-hidden="true" />Teléfono 3</dt><dd>{customer?.phone3 || '—'}</dd></div>
+          <div className="fp-contact-address"><dt><Mail size={14} />Correo</dt><dd>{customer?.email || '—'}</dd></div><div className="fp-contact-address"><dt><MapPin size={14} />Domicilio</dt><dd>{customer?.address || '—'}</dd></div>
+        </dl>
+      </section>
       <section className="fp-reception-tracking" aria-labelledby="reception-followup"><h3 id="reception-followup" className="sr-only"><Clock3 size={16} />Seguimiento</h3><dl>
         <div><dt>Ingreso</dt><dd>{date(order.createdAt)}</dd></div><div><dt>Recibió</dt><dd>{person(order.receivedBy, order.receivedByName)}</dd></div>
         <div><dt>Técnico</dt><dd>{order.assignedTo ? person(order.assignedTo) : 'Sin asignar'}</dd></div><div><dt>Aceptado</dt><dd>{order.acceptedAt ? date(order.acceptedAt) : 'Sin aceptar'}</dd></div>
@@ -69,21 +83,6 @@ export default function ReceptionWorkspace({ order, customer, role, draft: saved
 
         {order.deliveredAt && <><div><dt>Entrega</dt><dd>{eventInfo(order.deliveredAt, order.deliveredBy, order.deliveredByName)}</dd></div><div><dt>Retiró</dt><dd>{order.pickup ? order.pickup.by === 'third' ? `${order.pickup.name} · DNI: ${order.pickup.dni}` : 'Cliente titular' : 'Sin registrar'}</dd></div><div><dt>Comprobante de retiro</dt><dd>{order.pickup ? order.pickup.withoutReceipt ? 'Sin comprobante' : 'Con comprobante' : 'Sin registrar'}</dd></div></>}
       </dl></section>
-    </div>
-    <aside className="fp-reception-reference" aria-label="Cliente y equipo">
-      <section aria-labelledby="reception-customer">
-        <div className="fp-reception-customer-identity"><span className="fp-avatar" aria-hidden="true">{name.split(' ').filter(Boolean).slice(0, 2).map((word) => word[0]).join('')}</span><div><h3 id="reception-customer"><span className="sr-only">Cliente: </span>{name}</h3><dl className="fp-reception-customer-id"><div><dt><IdCard size={14} aria-hidden="true" />DNI</dt><dd>{customer?.dni || '—'}</dd></div></dl></div></div>
-        <dl className="fp-reception-contacts">
-          <div><dt><Phone size={14} />Teléfono</dt><dd>{customer?.phone || order.phone || '—'}</dd></div><div><dt><Phone size={14} aria-hidden="true" />Teléfono 2</dt><dd>{customer?.phone2 || '—'}</dd></div><div><dt><Phone size={14} aria-hidden="true" />Teléfono 3</dt><dd>{customer?.phone3 || '—'}</dd></div>
-          <div className="fp-contact-address"><dt><Mail size={14} />Correo</dt><dd>{customer?.email || '—'}</dd></div><div className="fp-contact-address"><dt><MapPin size={14} />Domicilio</dt><dd>{customer?.address || '—'}</dd></div>
-        </dl>
-      </section>
-      <section className="fp-reception-device" aria-labelledby="reception-ingress"><h3 id="reception-ingress" className="sr-only">Acceso y estado</h3><dl>
-        <div className="fp-reception-access"><dt><KeyRound size={14} />Contraseña o PIN</dt><dd>{order.noPin ? 'Sin bloqueo' : order.access || 'Sin contraseña informada'}</dd></div>
-        <div className="fp-reception-pattern"><dt><Grid3X3 size={14} aria-hidden="true" />Patrón</dt><dd>{!order.noPin && order.pattern?.length > 0 ? <div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((n) => n + 1).join(', ')}`}><PatternPreview value={order.pattern} size={80} /></div> : order.noPin ? 'Sin bloqueo' : '—'}</dd></div>
-        <div><dt><Smartphone size={14} aria-hidden="true" />Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div><div><dt><Cable size={14} aria-hidden="true" />Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
-      </dl></section>
-
     </aside>
     <footer className="fp-action-dock"><section className="fp-reception-amounts" aria-labelledby="reception-amounts"><h3 id="reception-amounts" className="sr-only">Importes</h3><ReceptionAmounts order={order} compact /></section>{task.id ? <div className="fp-dock-buttons"><button className="fp-button primary" aria-haspopup="dialog" onClick={() => setTaskOpen(true)}>{title}<ArrowRight size={16} /></button></div> : <p className="fp-muted">Sin pendientes de recepción</p>}</footer>
     {taskOpen && task.id && <ToolWindow title={`${title} · ${order.number}`} onClose={() => setTaskOpen(false)}><ReceptionTaskForm order={order} draft={draft} setDraft={setDraft} onAction={onAction} onClose={() => setTaskOpen(false)} title={title} /></ToolWindow>}
