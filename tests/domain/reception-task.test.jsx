@@ -74,27 +74,34 @@ describe('Ficha informativa y tareas en ventana de Recepción', () => {
   it('muestra patrón, acceso y datos de ingreso sin repetirlos en el encabezado', () => {
     const html = render(getOrder('OS1044'))
     expect(html).toContain('Patrón de desbloqueo: 1, 4, 7, 8, 9')
-    expect(html).toContain('Acceso y estado')
+    expect(html).toContain('Datos del equipo')
     expect(html).toContain('Tomás Ríos')
     expect(html).not.toContain('fp-technical-order')
   })
   it('muestra todos los datos de cliente guardados, con campos vacíos explícitos', () => {
     const order = getOrder('OS1038'), customer = state.customers.find((c) => c.id === order.customerId), html = render(order)
     for (const value of [customer.name, customer.dni, customer.phone, customer.phone2, customer.phone3, customer.email, customer.address]) expect(html.split(value)).toHaveLength(2)
-    for (const label of ['DNI', 'Teléfono', 'Teléfono 2', 'Teléfono 3', 'Correo', 'Domicilio', 'Tipo de dispositivo', 'Tipo de ingreso', 'Ingreso', 'Recibió', 'Técnico', 'Contraseña o PIN', 'Estado físico', 'Accesorios', 'Aviso al cliente', 'Respuesta']) expect(html).toMatch(new RegExp(`<dt[^>]*>(?:<svg[\\s\\S]*?</svg>)?${label}</dt>`))
+    for (const label of ['DNI', 'Teléfono', 'Teléfono 2', 'Teléfono 3', 'Correo', 'Domicilio', 'Tipo de dispositivo', 'Tipo de ingreso', 'Ingreso', 'Recibió', 'Técnico', 'Contraseña o PIN', 'Estado del equipo', 'Accesorios', 'Aviso al cliente', 'Respuesta']) expect(html).toMatch(new RegExp(`<dt[^>]*>(?:<svg[\\s\\S]*?</svg>)?${label}</dt>`))
     expect(render(order, 'recepcion', {}, { name: 'Cliente nuevo', phone: order.phone })).toContain('—')
     expect(render({ ...order, noPin: true, access: '' })).toContain('Sin bloqueo')
     expect(render({ ...order, noPin: true, access: '' })).not.toContain('Sin contraseña informada')
   })
-  it('agrupa el patrón con el acceso sin reorganizar estado físico y accesorios', () => {
+  it('mantiene el patrón con los demás datos del equipo y lo omite cuando no corresponde', () => {
     const order = getOrder('OS1044')
     const withPattern = render(order), withoutPattern = render({ ...order, pattern: [] })
-    const accessGroup = withPattern.match(/<dl class="fp-reception-access-group">[\s\S]*?<\/dl>/)[0]
-    expect(accessGroup).toContain('Contraseña o PIN')
-    expect(accessGroup).toContain('class="fp-reception-pattern"')
-    expect(withPattern.match(/<dl class="fp-reception-condition-group">[\s\S]*?<\/dl>/)[0]).toBe(withoutPattern.match(/<dl class="fp-reception-condition-group">[\s\S]*?<\/dl>/)[0])
+    const facts = withPattern.match(/<dl class="fp-reception-facts">[\s\S]*?<\/dl>/)[0]
+    for (const value of ['Contraseña o PIN', 'class="fp-reception-pattern"', order.conditions, order.accessories]) expect(facts).toContain(value)
     expect(withoutPattern).not.toContain('class="fp-reception-pattern"')
     expect(render({ ...order, noPin: true })).not.toContain('class="fp-reception-pattern"')
+  })
+  it('usa las notas de recepción como notas generales y conserva el estado del equipo por separado', () => {
+    const order = { ...getOrder('OS1044'), issue: 'Revisar con el cable del cliente. Avisar por la tarde.', conditions: 'Carcasa rayada, sin bandeja SIM' }, html = render(order)
+    const notes = html.match(/<section aria-labelledby="reception-issue">[\s\S]*?<\/section>/)[0]
+    expect(notes).toContain('Notas generales')
+    expect(notes).toContain(order.issue)
+    expect(notes).not.toContain(order.conditions)
+    expect(html.match(/<dl class="fp-reception-facts">[\s\S]*?<\/dl>/)[0]).toContain(order.conditions)
+    expect(html).not.toContain('Estado físico')
   })
   it('centraliza el equipo y deja cliente y seguimiento en el lateral sin duplicar datos', () => {
     const order = getOrder('OS1044'), html = render(order)

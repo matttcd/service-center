@@ -25,7 +25,7 @@ describe('Ficha de consulta del taller', () => {
     expect(html).toContain('aria-label="Herramientas de la orden"')
     expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(3)
     expect(disclosures).toContain('Comprobante')
-    expect(html).toContain('Falla informada · Recepción')
+    expect(html).toContain('Notas generales · Recepción')
     expect(html).not.toContain('Diagnóstico · Técnico')
     expect(html).not.toContain('Realicé la prueba de funcionamiento')
     expect(html).toContain('Actualizado por Juan · Técnico')

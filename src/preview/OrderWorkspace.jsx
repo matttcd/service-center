@@ -124,7 +124,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
       <dl className="fp-equipment-facts">
         <div><dt><KeyRound size={16} aria-hidden="true" />Contraseña o PIN</dt><dd>{order.access || 'Sin contraseña informada'}</dd></div>
         {order.pattern?.length > 0 && <div><dt><Grid3X3 size={16} aria-hidden="true" />Patrón de desbloqueo</dt><dd><div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((point) => point + 1).join(', ')}`}><PatternPreview value={order.pattern} size={112} /></div></dd></div>}
-        <div><dt><Smartphone size={16} aria-hidden="true" />Estado físico</dt><dd>{order.conditions || 'Sin registrar'}</dd></div>
+        <div><dt><Smartphone size={16} aria-hidden="true" />Estado del equipo</dt><dd>{order.conditions || 'Sin registrar'}</dd></div>
         <div><dt><Cable size={16} aria-hidden="true" />Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
       </dl>
     </aside>}
@@ -146,7 +146,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
         <label className="fp-checkbox"><input type="checkbox" checked={physical} onChange={(e) => setPhysical(e.target.checked)} />Confirmo que el equipo se retira físicamente ahora</label>
         <label className="fp-checkbox"><input type="checkbox" checked={withoutReceipt} onChange={(e) => setWithoutReceipt(e.target.checked)} />Retiro sin comprobante</label>
       </section>}
-      <section className="fp-issue" aria-labelledby="issue-title"><h3 id="issue-title">Falla informada · Recepción</h3><p>{order.issue}</p></section>
+      <section className="fp-issue" aria-labelledby="issue-title"><h3 id="issue-title">Notas generales · Recepción</h3><p>{order.issue}</p></section>
       <section className="fp-work" aria-label="Reparación">
           <div className={technical ? 'fp-work-fields' : undefined}>
             <div><div className="fp-section-heading"><h3 id="work-title">{order.status === 'terminado' || order.status === 'entregado' ? 'Trabajo realizado' : order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : 'Trabajo a realizar'}</h3>{canWork && <button className="fp-button secondary" aria-expanded={showWorkEditor} onClick={() => { if (showWorkEditor) { if (!workDirty || onAction('saveWork', { work: draft.work })) setEditingWork(false) } else setEditingWork(true) }}>{showWorkEditor ? <Save size={14} /> : <Pencil size={14} />}{showWorkEditor ? 'Guardar' : 'Editar'}</button>}</div>
@@ -162,7 +162,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
           {order.rejectedCharge !== null && <p className="fp-finance-note">Presupuesto rechazado: {money(order.price)}.{bill.balance < 0 && ' Sin devolución registrada.'}</p>}
       </section>}
 
-      {!technical && <details className="fp-disclosure fp-device-details"><summary>Datos de ingreso<ChevronDown size={15} /></summary><div className="fp-device-grid"><div><span>Accesorios</span><p>{order.accessories}</p></div><div><span>Estado físico</span><p>{order.conditions}</p></div><div><span>Ingreso</span><p>{date(order.createdAt)}</p></div><div><span>Técnico</span><p>{order.assignedTo ? own ? 'Juan Pérez' : 'Diego Molina' : 'Sin asignar'}</p></div></div></details>}
+      {!technical && <details className="fp-disclosure fp-device-details"><summary>Datos de ingreso<ChevronDown size={15} /></summary><div className="fp-device-grid"><div><span>Accesorios</span><p>{order.accessories}</p></div><div><span>Estado del equipo</span><p>{order.conditions}</p></div><div><span>Ingreso</span><p>{date(order.createdAt)}</p></div><div><span>Técnico</span><p>{order.assignedTo ? own ? 'Juan Pérez' : 'Diego Molina' : 'Sin asignar'}</p></div></div></details>}
     </div>
     <footer className="fp-action-dock">{blocked && <p className="fp-action-context fp-blocked">{blocked}</p>}<div className="fp-dock-buttons">
       {actionForm && <button className="fp-button secondary" onClick={() => { setActionForm(null); setResponse('') }}>Cancelar</button>}

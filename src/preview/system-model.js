@@ -86,7 +86,7 @@ export function applySystemAction(state, action, payload, role, now = Date.now()
     const order = {
       id: `demo-${number}`, number, customerId: customer.id, customer: customer.name, phone: customer.phone,
       deviceType: payload.deviceType || 'Celular', brand: requiredText(payload.brand, 'la marca'), model: requiredText(payload.model, 'el modelo'),
-      issue: requiredText(payload.issue, 'la falla informada'), access: payload.noPin ? '' : String(payload.access || ''), pattern: payload.noPin ? [] : payload.pattern || [],
+      issue: requiredText(payload.issue, 'las notas generales'), access: payload.noPin ? '' : String(payload.access || ''), pattern: payload.noPin ? [] : payload.pattern || [],
       conditions: payload.conditions || 'Sin registrar', accessories: payload.accessories || 'Sin accesorios', assignedTo: null, acceptedAt: null,
       createdAt: now, entry: repair ? 'repair' : 'review', noPin: !!payload.noPin, receivedByName: user.name, externalSentAt: payload.isExternal ? now : null, statusSince: now, status: payload.isExternal ? 'en_tercero' : 'recibido', externalTech: payload.isExternal ? payload.externalTech : null, work, workAuthor: work ? { name: user.name.split(' ')[0], role } : null,
       price, advance, confirmed: false, notified: false, rejectedCharge: null, notes: [], parts: [],
