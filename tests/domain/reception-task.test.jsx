@@ -11,6 +11,19 @@ const getDraft = (order, patch = {}) => ({ ...RECEPTION_DRAFT, price: order.pric
 const render = (order, role = 'recepcion', patch = {}, customer = state.customers.find((c) => c.id === order.customerId)) => renderToStaticMarkup(<ReceptionWorkspace order={order} customer={customer} role={role} users={state.users} draft={getDraft(order, patch)} setDraft={() => {}} onAction={() => {}} onExtra={() => {}} onBack={() => {}} />)
 
 describe('Ficha informativa y tareas en ventana de Recepción', () => {
+  it.each([
+    ['OS1038', {}, ['Presupuesto a definir', 'Seña $ 0', 'Saldo —']],
+    ['OS1035', {}, ['Presupuesto $ 45.000', 'Seña $ 0', 'Saldo $ 45.000']],
+    ['OS1044', {}, ['Presupuesto $ 65.000', 'Seña $ 20.000', 'Saldo $ 45.000']],
+    ['OS1020', {}, ['Importe de retiro $ 3.500', 'Seña $ 5.000', 'Saldo a favor $ 1.500', 'Presupuesto rechazado $ 30.000']],
+    ['OS1020', { rejectedCharge: 0, advance: 0 }, ['Importe de retiro $ 0', 'Seña $ 0', 'Saldo $ 0', 'Presupuesto rechazado $ 30.000']],
+    ['OS1020', { rejectedCharge: 0 }, ['Importe de retiro $ 0', 'Saldo a favor $ 5.000', 'Presupuesto rechazado $ 30.000']],
+  ])('resume los importes de %s sin alterar los cálculos con %j', (number, patch, values) => {
+    const footer = render({ ...getOrder(number), ...patch }).match(/<footer[\s\S]*?<\/footer>/)[0]
+    const text = footer.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ')
+    expect(footer).toContain('fp-finance-summary')
+    for (const value of values) expect(text).toContain(value)
+  })
   it('permite ajustar el presupuesto antes del nuevo aviso, sin avisar el importe anterior', () => {
     const order = { ...getOrder('OS1035'), notified: false }
     expect(receptionTask(order, getDraft(order))).toMatchObject({ id: 'notify' })
@@ -56,6 +69,7 @@ describe('Ficha informativa y tareas en ventana de Recepción', () => {
     expect(form).toContain(content)
     expect(form).toContain('Cancelar')
     expect(form).toContain('type="submit"')
+    expect(form).not.toContain('fp-finance-summary')
   })
   it('muestra patrón, acceso y datos de ingreso sin repetirlos en el encabezado', () => {
     const html = render(getOrder('OS1044'))

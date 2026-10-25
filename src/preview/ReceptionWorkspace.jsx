@@ -8,8 +8,13 @@ import { RECEPTION_DRAFT, receptionTask } from './reception-task.js'
 
 const date = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short', hourCycle: 'h23' }).format
 
-function ReceptionAmounts({ order }) {
+function ReceptionAmounts({ order, compact = false }) {
   const bill = charges(order)
+  if (compact) return <div className="fp-finance-summary">
+    <p className="fp-finance-main">{order.rejectedCharge !== null ? 'Importe de retiro' : 'Presupuesto'} <strong>{bill.total || order.rejectedCharge === 0 ? money(bill.total) : 'a definir'}</strong></p>
+    <div className="fp-finance-secondary"><p>Seña <strong>{money(order.advance)}</strong></p><p>{bill.balance < 0 ? 'Saldo a favor' : 'Saldo'} <strong>{bill.total || order.rejectedCharge === 0 ? money(Math.abs(bill.balance)) : '—'}</strong></p></div>
+    {order.rejectedCharge !== null && <p className="fp-finance-original">Presupuesto rechazado <strong>{money(order.price)}</strong></p>}
+  </div>
   return <dl className="fp-finance">{order.rejectedCharge !== null && <div><dt>Presupuesto rechazado</dt><dd>{money(order.price)}</dd></div>}<div><dt>{order.rejectedCharge !== null ? 'Importe de retiro' : 'Presupuesto'}</dt><dd>{bill.total || order.rejectedCharge === 0 ? money(bill.total) : 'A definir'}</dd></div><div><dt>Seña</dt><dd>{money(order.advance)}</dd></div><div><dt>{bill.balance < 0 ? 'Saldo a favor' : 'Saldo pendiente'}</dt><dd>{bill.total || order.rejectedCharge === 0 ? money(Math.abs(bill.balance)) : '—'}</dd></div></dl>
 }
 
@@ -80,7 +85,7 @@ export default function ReceptionWorkspace({ order, customer, role, draft: saved
       </dl></section>
 
     </aside>
-    <footer className="fp-action-dock"><section className="fp-reception-amounts" aria-labelledby="reception-amounts"><h3 id="reception-amounts" className="sr-only">Importes</h3><ReceptionAmounts order={order} /></section>{task.id ? <div className="fp-dock-buttons"><button className="fp-button primary" aria-haspopup="dialog" onClick={() => setTaskOpen(true)}>{title}<ArrowRight size={16} /></button></div> : <p className="fp-muted">Sin pendientes de recepción</p>}</footer>
+    <footer className="fp-action-dock"><section className="fp-reception-amounts" aria-labelledby="reception-amounts"><h3 id="reception-amounts" className="sr-only">Importes</h3><ReceptionAmounts order={order} compact /></section>{task.id ? <div className="fp-dock-buttons"><button className="fp-button primary" aria-haspopup="dialog" onClick={() => setTaskOpen(true)}>{title}<ArrowRight size={16} /></button></div> : <p className="fp-muted">Sin pendientes de recepción</p>}</footer>
     {taskOpen && task.id && <ToolWindow title={`${title} · ${order.number}`} onClose={() => setTaskOpen(false)}><ReceptionTaskForm order={order} draft={draft} setDraft={setDraft} onAction={onAction} onClose={() => setTaskOpen(false)} title={title} /></ToolWindow>}
   </article>
 }

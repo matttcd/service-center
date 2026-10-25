@@ -525,13 +525,17 @@ body.fp-preview {
 .fp-reception-order dt, .fp-reception-task dt { color: var(--fp-muted); }
 .fp-reception-order dd { margin: 0; overflow-wrap: anywhere; }
 .fp-reception-task dd { margin: 3px 0 0; overflow-wrap: anywhere; }
-.fp-reception-order > .fp-action-dock { grid-area: footer; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 11px 20px; background: var(--fp-subtle); }
-.fp-reception-amounts { min-width: 0; }
-.fp-reception-amounts .fp-finance { padding: 0; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px 16px; }
-.fp-reception-amounts .fp-finance:has(> div:nth-child(4)) { grid-template-columns: repeat(2,minmax(0,1fr)); }
-.fp-reception-amounts .fp-finance > div { display: flex; flex-direction: column; align-items: flex-start; }
-.fp-reception-amounts .fp-finance dd { margin-top: auto; padding-top: 3px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.fp-reception-order .fp-dock-buttons { flex: none; width: 100%; }
+.fp-reception-order > .fp-action-dock { grid-area: footer; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding: 12px 20px; background: var(--fp-subtle); }
+.fp-reception-amounts { flex: 1 1 220px; min-width: 0; }
+.fp-finance-summary { font-size: 14px; line-height: 1.5; }
+.fp-finance-summary p { margin: 0; }
+.fp-finance-summary strong { color: var(--fp-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.fp-finance-main { display: flex; flex-wrap: wrap; gap: 0 5px; }
+.fp-finance-secondary { display: flex; flex-wrap: wrap; gap: 0 8px; margin-top: 3px; color: var(--fp-muted); }
+.fp-finance-secondary > p { display: inline-flex; gap: 5px; }
+.fp-finance-secondary > p + p::before { content: '·'; margin-right: 3px; }
+.fp-finance-summary .fp-finance-original { margin-top: 3px; color: var(--fp-muted); }
+.fp-reception-order .fp-dock-buttons { flex: 0 1 auto; width: auto; max-width: 100%; margin-left: auto; }
 .fp-reception-order .fp-dock-buttons > .primary { flex: 0 1 auto; width: auto; max-width: 100%; min-height: 44px; }
 .fp-reception-task > p:first-child { margin: 0 0 16px; }
 .fp-reception-task .fp-finance { padding-top: 0; margin: 0 0 12px; }
@@ -554,7 +558,6 @@ body.fp-preview {
   .fp-reception-reference { overflow: visible; flex: none; border-left: 0; border-bottom: 1px solid var(--fp-line); order: 1; }
   .fp-reception-order > .fp-order-header { order: 0; }
   .fp-reception-order > .fp-action-dock { position: sticky; bottom: 0; z-index: 2; flex-shrink: 0; padding: 10px 12px; order: 3; }
-  .fp-reception-order .fp-dock-buttons { width: 100%; }
   .fp-reception-price { grid-template-columns: minmax(0,1fr) auto; gap: 14px; }
   .fp-reception-context > section, .fp-reception-tracking > dl > div { grid-template-columns: 96px minmax(0,1fr); gap: 6px 12px; }
 }
