@@ -16,7 +16,7 @@ describe('Ficha de consulta del taller', () => {
       expect(reference).toContain(value)
       expect(html.split(value)).toHaveLength(2)
     }
-    for (const value of [order.customer, order.phone, order.access, order.conditions, order.accessories, order.issue, order.diagnosis, order.work]) {
+    for (const value of [order.customer, order.phone, order.access, order.conditions, order.accessories, order.issue, order.work]) {
       expect(html).toContain(value)
       expect(disclosures).not.toContain(value)
     }
@@ -26,7 +26,8 @@ describe('Ficha de consulta del taller', () => {
     expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(3)
     expect(disclosures).toContain('Comprobante')
     expect(html).toContain('Falla informada · Recepción')
-    expect(html).toContain('Diagnóstico · Técnico')
+    expect(html).not.toContain('Diagnóstico · Técnico')
+    expect(html).not.toContain('Realicé la prueba de funcionamiento')
     expect(html).toContain('Actualizado por Juan · Técnico')
     const header = html.match(/<header class="fp-order-header"[\s\S]*?<\/header>/)[0]
     const technical = html.match(/<section class="fp-work"[\s\S]*?<\/section>/)[0]

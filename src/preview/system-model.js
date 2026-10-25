@@ -1,6 +1,6 @@
 import { applyDemoAction, createDemoOrders, receptionQueue, TECHNICIAN } from './preview-model.js'
 
-export const NEW_ORDER = { customerId: '', customer: '', phone: '', brand: '', model: '', deviceType: 'Celular', issue: '', access: '', noPin: false, pattern: [], conditions: '', accessories: '', entry: 'review', work: '', price: '', advance: '', confirmed: false, isSimpleService: false, isExternal: false, externalTech: '' }
+export const NEW_ORDER = { customerId: '', customer: '', phone: '', brand: '', model: '', deviceType: 'Celular', issue: '', access: '', noPin: false, pattern: [], conditions: '', accessories: '', entry: 'review', work: '', price: '', advance: '', isSimpleService: false, isExternal: false, externalTech: '' }
 
 export const PROFILES = {
   tecnico: { name: 'Juan Pérez', label: 'Técnico', home: '/taller' },
@@ -88,8 +88,8 @@ export function applySystemAction(state, action, payload, role, now = Date.now()
       deviceType: payload.deviceType || 'Celular', brand: requiredText(payload.brand, 'la marca'), model: requiredText(payload.model, 'el modelo'),
       issue: requiredText(payload.issue, 'la falla informada'), access: payload.noPin ? '' : String(payload.access || ''), pattern: payload.noPin ? [] : payload.pattern || [],
       conditions: payload.conditions || 'Sin registrar', accessories: payload.accessories || 'Sin accesorios', assignedTo: null, acceptedAt: null,
-      createdAt: now, entry: repair ? 'repair' : 'review', noPin: !!payload.noPin, receivedByName: user.name, externalSentAt: payload.isExternal ? now : null, statusSince: now, status: payload.isExternal ? 'en_tercero' : repair && !payload.isSimpleService ? 'presupuesto' : 'recibido', externalTech: payload.isExternal ? payload.externalTech : null, diagnosis: '', work, workAuthor: work ? { name: user.name.split(' ')[0], role } : null,
-      price, advance, confirmed: repair && !!payload.confirmed, notified: repair && !!payload.confirmed, rejectedCharge: null, notes: [], parts: [],
+      createdAt: now, entry: repair ? 'repair' : 'review', noPin: !!payload.noPin, receivedByName: user.name, externalSentAt: payload.isExternal ? now : null, statusSince: now, status: payload.isExternal ? 'en_tercero' : 'recibido', externalTech: payload.isExternal ? payload.externalTech : null, work, workAuthor: work ? { name: user.name.split(' ')[0], role } : null,
+      price, advance, confirmed: false, notified: false, rejectedCharge: null, notes: [], parts: [],
       isSimpleService: !!payload.isSimpleService, warrantyReturn: false,
       history: [{ text: work ? 'Equipo ingresado para reparación' : 'Equipo ingresado para revisión', ...(work ? { work } : {}), by: `${user.name} · ${user.label}`, at: now }],
     }
@@ -101,7 +101,7 @@ export function applySystemAction(state, action, payload, role, now = Date.now()
     const technician = next.users.find((u) => u.id === payload.technician && u.active && u.role === 'tecnico')
     require(technician, 'Elegí un técnico activo.')
     if (order.assignedTo !== technician.id) {
-      order.assignedTo = technician.id; order.acceptedAt = null; order.needsAcceptance = true
+      order.assignedTo = technician.id; order.acceptedAt = ['en_revision', 'en_reparacion', 'falta_repuestos'].includes(order.status) ? now : null
       order.history.push({ text: `Asignado a ${technician.name}`, by: `${user.name} · ${user.label}`, at: now })
     }
   } else if (action === 'user') {

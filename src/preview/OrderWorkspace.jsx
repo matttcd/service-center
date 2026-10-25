@@ -68,7 +68,7 @@ export function OrderTools({ order, role, technical = false, draft, setDraft, on
 
 export default function OrderWorkspace({ order, role, technical = role === 'tecnico', draft, setDraft, onAction, onBack, onExtra }) {
   const [showAccess, setShowAccess] = useState(false)
-  const [editingWork, setEditingWork] = useState(() => draft.diagnosis !== order.diagnosis || draft.work !== order.work || (!order.diagnosis && !order.work))
+  const [editingWork, setEditingWork] = useState(() => draft.work !== order.work || !order.work)
   const [actionForm, setActionForm] = useState(null)
   const [response, setResponse] = useState('')
   const [pickupBy, setPickupBy] = useState('client')
@@ -76,20 +76,19 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
   const [pickupDni, setPickupDni] = useState('')
   const [withoutReceipt, setWithoutReceipt] = useState(false)
   const [physical, setPhysical] = useState(false)
-  const [checked, setChecked] = useState(false)
   const bodyRef = useRef(null)
   const own = role === 'admin' || order.assignedTo === TECHNICIAN
-  const canWork = technical && own && ['en_revision', 'en_reparacion'].includes(order.status)
+  const canWork = technical && own && ['en_revision', 'presupuesto', 'en_reparacion'].includes(order.status)
   const showWorkEditor = canWork && editingWork
-  const workDirty = draft.diagnosis !== order.diagnosis || draft.work !== order.work
+  const workDirty = draft.work !== order.work
   const action = nextAction(order, role)
   const wait = waitingFor(order)
   const bill = charges(order)
   let blocked = ''
-  if (action?.id === 'sendQuote' && (!draft.diagnosis.trim() || !draft.work.trim())) blocked = 'Completá diagnóstico y trabajo.'
+  if (action?.id === 'sendQuote' && !draft.work.trim()) blocked = 'Definí el tipo de reparación.'
+  if (technical && action?.id !== 'sendQuote' && workDirty) blocked = 'Guardá el cambio de reparación antes de continuar.'
   if (action?.id === 'price' && (!draft.price || !Number.isFinite(Number(draft.price)) || Number(draft.price) <= 0)) blocked = 'Ingresá un presupuesto válido.'
   if (!technical && order.status === 'presupuesto' && action?.id !== 'price' && Number(draft.price) !== order.price) blocked = 'Guardá el nuevo precio.'
-  if (action?.id === 'finish' && !checked) blocked = 'Confirmá la prueba de funcionamiento.'
   if (draft.note.trim() || draft.partName.trim()) blocked = 'Hay notas o repuestos sin guardar.'
   if (actionForm === 'response' && (!response || (response === 'reject' && (draft.charge === '' || !Number.isFinite(Number(draft.charge)) || Number(draft.charge) < 0)))) blocked = 'Completá la respuesta y el importe.'
   if (actionForm === 'pickup' && (!physical || (pickupBy === 'third' && (!pickupName.trim() || !/^\d{6,8}$/.test(pickupDni))))) blocked = 'Completá y confirmá el retiro.'
@@ -104,7 +103,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
     } else if (action?.id === 'response' || action?.id === 'pickup') {
       setActionForm(action.id)
       bodyRef.current?.scrollTo({ top: 0, behavior: 'instant' })
-    } else if (action) onAction(action.id, { diagnosis: draft.diagnosis, work: draft.work, price: draft.price, id: action.partId })
+    } else if (action) onAction(action.id, { work: draft.work, price: draft.price, id: action.partId })
   }
   const primaryLabel = actionForm === 'response' ? response === 'reject' ? 'Confirmar rechazo' : 'Confirmar aprobación'
     : actionForm === 'pickup' ? 'Confirmar entrega' : action?.label
@@ -150,17 +149,14 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
         <label className="fp-checkbox"><input type="checkbox" checked={withoutReceipt} onChange={(e) => setWithoutReceipt(e.target.checked)} />Retiro sin comprobante</label>
       </section>}
       <section className="fp-issue" aria-labelledby="issue-title"><h3 id="issue-title">Falla informada · Recepción</h3><p>{order.issue}</p></section>
-      <section className="fp-work" aria-label="Diagnóstico y trabajo">
+      <section className="fp-work" aria-label="Reparación">
           <div className={technical ? 'fp-work-fields' : undefined}>
-            {technical && <div className="fp-current-diagnosis"><div className="fp-section-heading"><h3 id="diagnosis-title">Diagnóstico · Técnico</h3>{canWork && <button className="fp-button secondary" aria-expanded={showWorkEditor} onClick={() => { if (showWorkEditor) { if (!workDirty || onAction('saveWork', { diagnosis: draft.diagnosis, work: draft.work })) setEditingWork(false) } else setEditingWork(true) }}>{showWorkEditor ? <Save size={14} /> : <Pencil size={14} />}{showWorkEditor ? 'Guardar' : 'Editar'}</button>}</div>{showWorkEditor ? <textarea id="diagnosis" aria-labelledby="diagnosis-title" rows={3} value={draft.diagnosis} onChange={(e) => setDraft({ diagnosis: e.target.value })} /> : <p className="fp-read-value">{draft.diagnosis || 'Sin diagnóstico registrado'}</p>}</div>}
-            <div><div className="fp-section-heading"><h3 id="work-title">{order.status === 'terminado' || order.status === 'entregado' ? 'Trabajo realizado' : order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : 'Trabajo a realizar'}</h3></div>
+            <div><div className="fp-section-heading"><h3 id="work-title">{order.status === 'terminado' || order.status === 'entregado' ? 'Trabajo realizado' : order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : 'Trabajo a realizar'}</h3>{canWork && <button className="fp-button secondary" aria-expanded={showWorkEditor} onClick={() => { if (showWorkEditor) { if (!workDirty || onAction('saveWork', { work: draft.work })) setEditingWork(false) } else setEditingWork(true) }}>{showWorkEditor ? <Save size={14} /> : <Pencil size={14} />}{showWorkEditor ? 'Guardar' : 'Editar'}</button>}</div>
             {showWorkEditor ? <textarea id="work" aria-labelledby="work-title" rows={3} value={draft.work} onChange={(e) => setDraft({ work: e.target.value })} /> : <p className="fp-read-value">{draft.work || 'Trabajo por definir'}</p>}
             {order.workAuthor && <p className="fp-work-origin">{order.workAuthor.role === 'recepcion' ? `Definido en recepción por ${order.workAuthor.name}` : `Actualizado por ${order.workAuthor.name} · ${order.workAuthor.role === 'admin' ? 'Administrador' : 'Técnico'}`}</p>}</div>
           </div>
           {canWork && workDirty && <p className="fp-save-state">Borrador sin guardar</p>}
-          {!technical && <details className="fp-diagnosis"><summary>Ver diagnóstico<ChevronDown size={15} /></summary><p className="fp-read-value">{order.diagnosis || 'Sin diagnóstico registrado'}</p></details>}
           {order.status === 'falta_repuestos' && <div className="fp-parts-wait"><Package size={17} /><div><p>{wait.ready ? 'Repuestos recibidos' : 'Repuestos pendientes'}</p><ul>{order.parts.map((part) => <li key={part.id}>{part.name} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Esperando llegada' : 'Recibido'}</li>)}</ul></div></div>}
-          {action?.id === 'finish' && <label className="fp-checkbox fp-test-check"><input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />Realicé la prueba de funcionamiento del trabajo registrado</label>}
       </section>
       {!technical && <section className="fp-counter" aria-label="Presupuesto y retiro">
           {priceEditor}

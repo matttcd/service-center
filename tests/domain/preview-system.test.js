@@ -29,7 +29,7 @@ describe('Demo completa en memoria', () => {
     let state = create(createSystemState(now)), id = state.orders.at(-1).id
     state = act(state, id, 'claim', 'tecnico')
     const acceptedAt = state.orders.at(-1).acceptedAt
-    state = act(state, id, 'sendQuote', 'tecnico', { diagnosis: 'Conector dañado', work: 'Cambiar conector' })
+    state = act(state, id, 'sendQuote', 'tecnico', { work: 'Cambiar conector' })
     state = act(state, id, 'price', 'recepcion', { price: '50000' })
     state = act(state, id, 'notify', 'recepcion')
     state = act(state, id, 'approve', 'recepcion')
@@ -46,11 +46,13 @@ describe('Demo completa en memoria', () => {
     expect(overview(state).delivered).toBe(2)
   })
   it('permite reparación definida sin obligar a diagnosticar, y rechazo con importe de retiro', () => {
-    let state = create(createSystemState(now), { entry: 'repair', work: 'Cambiar módulo', price: 60000, advance: 10000, confirmed: true })
+    let state = create(createSystemState(now), { entry: 'repair', work: 'Cambiar módulo', price: 60000, advance: 10000 })
     const id = state.orders.at(-1).id
+    expect(state.orders.at(-1)).toMatchObject({ status: 'recibido', notified: false, confirmed: false })
     expect(nextAction(state.orders.at(-1), 'tecnico').id).toBe('claimRepair')
     state = act(state, id, 'claimRepair', 'tecnico')
-    expect(state.orders.at(-1)).toMatchObject({ diagnosis: '', status: 'en_reparacion', assignedTo: TECHNICIAN, workAuthor: { role: 'recepcion' } })
+    expect(state.orders.at(-1)).toMatchObject({ status: 'en_reparacion', assignedTo: TECHNICIAN, workAuthor: { role: 'recepcion' } })
+    expect(state.orders.at(-1)).not.toHaveProperty('diagnosis')
     state = act(state, 'demo-OS1035', 'reject', 'recepcion', { charge: 4000 })
     expect(state.orders.find((o) => o.id === 'demo-OS1035')).toMatchObject({ rejectedCharge: 4000, status: 'presupuesto_rechazado' })
   })
@@ -70,9 +72,9 @@ describe('Demo completa en memoria', () => {
     state = applySystemAction(state, 'assign', { id: 'demo-OS1047', technician: TECHNICIAN }, 'admin', now)
     const assigned = state.orders.find((o) => o.id === 'demo-OS1047')
     expect(assigned.acceptedAt).toBeNull()
-    expect(nextAction(assigned, 'tecnico').id).toBe('acceptAssigned')
-    state = act(state, assigned.id, 'acceptAssigned', 'tecnico')
-    expect(state.orders.find((o) => o.id === assigned.id)).toMatchObject({ needsAcceptance: false, status: 'en_revision' })
+    expect(nextAction(assigned, 'tecnico').id).toBe('startReview')
+    state = act(state, assigned.id, 'startReview', 'tecnico')
+    expect(state.orders.find((o) => o.id === assigned.id).status).toBe('en_revision')
     state = create(state, { isExternal: true, externalTech: 'Laboratorio Sur' })
     expect(receptionQueue(state.orders.at(-1))).toBe('externos')
   })

@@ -11,6 +11,16 @@ const getDraft = (order, patch = {}) => ({ ...RECEPTION_DRAFT, price: order.pric
 const render = (order, role = 'recepcion', patch = {}, customer = state.customers.find((c) => c.id === order.customerId)) => renderToStaticMarkup(<ReceptionWorkspace order={order} customer={customer} role={role} users={state.users} draft={getDraft(order, patch)} setDraft={() => {}} onAction={() => {}} onExtra={() => {}} onBack={() => {}} />)
 
 describe('Ficha informativa y tareas en ventana de Recepción', () => {
+  it('permite ajustar el presupuesto antes del nuevo aviso, sin avisar el importe anterior', () => {
+    const order = { ...getOrder('OS1035'), notified: false }
+    expect(receptionTask(order, getDraft(order))).toMatchObject({ id: 'notify' })
+    expect(receptionTask(order, getDraft(order, { price: '78000' }))).toMatchObject({ id: 'price', label: 'Guardar presupuesto', data: { price: '78000' } })
+    expect(receptionTask(order, getDraft(order, { price: '-1' })).blocked).toBeTruthy()
+    const form = renderToStaticMarkup(<ReceptionTaskForm order={order} draft={getDraft(order, { price: '78000' })} setDraft={() => {}} onAction={() => {}} onClose={() => {}} />)
+    expect(form).toContain('id="reception-price"')
+    expect(form).toContain('Guardar presupuesto')
+    expect(form).not.toContain('Registrar aviso al cliente')
+  })
   it('mantiene todos los datos visibles y abre la tarea desde el pie sin formulario en la ficha', () => {
     const order = getOrder('OS1038'), html = render(order)
     expect(html.indexOf('fp-reception-identity')).toBeGreaterThan(0)
@@ -28,7 +38,7 @@ describe('Ficha informativa y tareas en ventana de Recepción', () => {
     expect(header).not.toContain(order.access)
     expect(html).not.toMatch(/<(details|summary|select)\b/)
     expect(html).toContain(order.access)
-    expect(html).toContain(order.diagnosis)
+    expect(html).not.toContain('reception-diagnosis')
   })
   it.each([
     ['OS1038', 'Presupuestar', 'id="reception-price"'],
@@ -66,7 +76,7 @@ describe('Ficha informativa y tareas en ventana de Recepción', () => {
     const order = getOrder('OS1044'), html = render(order)
     const reference = html.match(/<aside[\s\S]*?<\/aside>/)[0]
     for (const value of [order.customer, order.phone, order.access, order.conditions, order.accessories]) expect(reference).toContain(value)
-    for (const value of [order.issue, order.diagnosis, order.work]) expect(reference).not.toContain(value)
+    for (const value of [order.issue, order.work]) expect(reference).not.toContain(value)
     expect(html.match(/<header[\s\S]*?<\/header>/)[0]).toContain(order.deviceType)
     expect(html).toContain('aria-label="Cliente y equipo"')
   })

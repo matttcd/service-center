@@ -24,17 +24,17 @@ export function workAge(order, now = Date.now()) {
 export function createDemoOrders(now = Date.now()) {
   const day = 86400000
   const seeds = [
-    { number: 'OS1042', brand: 'Samsung', model: 'Galaxy A54', customer: 'Ana Ruiz', issue: 'No carga. El cable queda flojo.', status: 'en_revision', acceptedAt: now - 2 * 3600000, days: 2, diagnosis: 'El conector USB-C tiene desgaste y contactos dañados.', work: 'Reemplazar conector de carga y comprobar carga rápida.' },
-    { number: 'OS1047', brand: 'Apple', model: 'iPhone 13', customer: 'Lucía Torres', issue: 'Se apaga aunque indique batería disponible.', status: 'recibido', assignedTo: null, days: 1, diagnosis: '', work: '' },
-    { number: 'OS1044', brand: 'Motorola', model: 'Moto G84', customer: 'Tomás Ríos', issue: 'Pantalla rota. El táctil no responde.', status: 'en_reparacion', acceptedAt: now - 45 * 60000, days: 2, diagnosis: 'Módulo de pantalla dañado por golpe.', work: 'Cambiar módulo y probar imagen y táctil.', price: 65000, advance: 20000, pattern: [0, 3, 6, 7, 8] },
-    { number: 'OS1038', brand: 'HP', model: 'Notebook 14', customer: 'Marcos Vega', issue: 'Enciende pero no inicia Windows.', status: 'presupuesto', deviceType: 'Notebook', days: 3, diagnosis: 'El SSD presenta errores de lectura.', work: 'Reemplazar SSD de 500 GB e instalar el sistema.' },
-    { number: 'OS1035', brand: 'Apple', model: 'iPhone 11', customer: 'Paula Díaz', issue: 'La batería dura menos de dos horas.', status: 'presupuesto', days: 4, diagnosis: 'Batería con capacidad degradada.', work: 'Cambiar batería y comprobar autonomía.', price: 45000, notified: true },
-    { number: 'OS1031', brand: 'Sony', model: 'PlayStation 5', customer: 'Nicolás Costa', deviceType: 'Consola', issue: 'Se apaga al abrir un juego.', status: 'presupuesto', days: 5, diagnosis: 'Sobretemperatura por obstrucción de la ventilación.', work: 'Limpiar refrigeración y realizar prueba bajo carga.', price: 38000, notified: true, confirmed: true },
-    { number: 'OS1029', brand: 'Lenovo', model: 'IdeaPad 3', customer: 'Carla Luna', deviceType: 'Notebook', issue: 'Muy lenta al iniciar y abrir programas.', status: 'falta_repuestos', days: 5, diagnosis: 'Disco mecánico con sectores defectuosos.', work: 'Reemplazar disco por SSD.', price: 58000, advance: 15000, parts: [{ id: 'part-1029', name: 'SSD SATA 500 GB', quantity: 1, status: 'pedido' }] },
-    { number: 'OS1024', brand: 'Samsung', model: 'Galaxy A32', customer: 'Gabriel Paz', issue: 'No se escucha durante las llamadas.', status: 'terminado', days: 6, assignedTo: 'demo-diego', diagnosis: 'Auricular interno dañado.', work: 'Reemplazar auricular y comprobar llamadas.', price: 42000, advance: 10000 },
-    { number: 'OS1020', brand: 'LG', model: 'Monitor 24MP', customer: 'Valeria Sol', deviceType: 'Monitor', issue: 'Imagen intermitente.', status: 'presupuesto_rechazado', days: 7, assignedTo: 'demo-diego', diagnosis: 'Falla de alimentación del panel.', work: 'Reemplazar placa de alimentación.', price: 30000, advance: 5000, rejectedCharge: 3500, notified: true },
-    { number: 'OS1040', brand: 'Xiaomi', model: 'Redmi Note 13', customer: 'Mateo Gil', issue: 'La cámara no enfoca.', status: 'en_reparacion', days: 3, assignedTo: 'demo-diego', diagnosis: 'Módulo de cámara defectuoso.', work: 'Cambiar cámara y probar enfoque.', price: 49000 },
-    { number: 'OS1045', brand: 'Samsung', model: 'Galaxy A15', customer: 'Elena Castro', issue: 'Se cayó. La pantalla está rota y no da imagen.', status: 'presupuesto', days: 1, diagnosis: '', work: 'Cambiar módulo y probar imagen y táctil.', workAuthor: { name: 'Sofía', role: 'recepcion' }, price: 65000, advance: 20000, notified: true, confirmed: true },
+    { number: 'OS1042', brand: 'Samsung', model: 'Galaxy A54', customer: 'Ana Ruiz', issue: 'No carga. El cable queda flojo.', status: 'en_revision', acceptedAt: now - 2 * 3600000, days: 2, work: 'Reemplazar conector de carga y comprobar carga rápida.' },
+    { number: 'OS1047', brand: 'Apple', model: 'iPhone 13', customer: 'Lucía Torres', issue: 'Se apaga aunque indique batería disponible.', status: 'recibido', assignedTo: null, days: 1, work: '' },
+    { number: 'OS1044', brand: 'Motorola', model: 'Moto G84', customer: 'Tomás Ríos', issue: 'Pantalla rota. El táctil no responde.', status: 'en_reparacion', acceptedAt: now - 45 * 60000, days: 2, work: 'Cambiar módulo y probar imagen y táctil.', price: 65000, advance: 20000, pattern: [0, 3, 6, 7, 8] },
+    { number: 'OS1038', brand: 'HP', model: 'Notebook 14', customer: 'Marcos Vega', issue: 'Enciende pero no inicia Windows.', status: 'presupuesto', deviceType: 'Notebook', days: 3, work: 'Reemplazar SSD de 500 GB e instalar el sistema.' },
+    { number: 'OS1035', brand: 'Apple', model: 'iPhone 11', customer: 'Paula Díaz', issue: 'La batería dura menos de dos horas.', status: 'presupuesto', days: 4, work: 'Cambiar batería y comprobar autonomía.', price: 45000, notified: true },
+    { number: 'OS1031', brand: 'Sony', model: 'PlayStation 5', customer: 'Nicolás Costa', deviceType: 'Consola', issue: 'Se apaga al abrir un juego.', status: 'presupuesto', days: 5, work: 'Limpiar refrigeración y realizar prueba bajo carga.', price: 38000, notified: true, confirmed: true },
+    { number: 'OS1029', brand: 'Lenovo', model: 'IdeaPad 3', customer: 'Carla Luna', deviceType: 'Notebook', issue: 'Muy lenta al iniciar y abrir programas.', status: 'falta_repuestos', days: 5, work: 'Reemplazar disco por SSD.', price: 58000, advance: 15000, parts: [{ id: 'part-1029', name: 'SSD SATA 500 GB', quantity: 1, status: 'pedido' }] },
+    { number: 'OS1024', brand: 'Samsung', model: 'Galaxy A32', customer: 'Gabriel Paz', issue: 'No se escucha durante las llamadas.', status: 'terminado', days: 6, assignedTo: 'demo-diego', work: 'Reemplazar auricular y comprobar llamadas.', price: 42000, advance: 10000 },
+    { number: 'OS1020', brand: 'LG', model: 'Monitor 24MP', customer: 'Valeria Sol', deviceType: 'Monitor', issue: 'Imagen intermitente.', status: 'presupuesto_rechazado', days: 7, assignedTo: 'demo-diego', work: 'Reemplazar placa de alimentación.', price: 30000, advance: 5000, rejectedCharge: 3500, notified: true },
+    { number: 'OS1040', brand: 'Xiaomi', model: 'Redmi Note 13', customer: 'Mateo Gil', issue: 'La cámara no enfoca.', status: 'en_reparacion', days: 3, assignedTo: 'demo-diego', work: 'Cambiar cámara y probar enfoque.', price: 49000 },
+    { number: 'OS1045', brand: 'Samsung', model: 'Galaxy A15', customer: 'Elena Castro', issue: 'Se cayó. La pantalla está rota y no da imagen.', status: 'recibido', days: 1, work: 'Cambiar módulo y probar imagen y táctil.', workAuthor: { name: 'Sofía', role: 'recepcion' }, price: 65000, advance: 20000 },
   ]
   return seeds.map((seed, i) => {
     const createdAt = now - seed.days * day
@@ -71,11 +71,11 @@ export function receptionQueue(order) {
 export function nextAction(order, role) {
   if (order.status === 'entregado') return null
   if (role === 'tecnico' || (role === 'admin' && !receptionQueue(order))) {
-    if (order.needsAcceptance && (role === 'admin' || order.assignedTo === TECHNICIAN)) return { id: 'acceptAssigned', label: 'Aceptar equipo' }
     if (order.status === 'presupuesto' && order.confirmed && !order.assignedTo) return { id: 'claimRepair', label: 'Tomar e iniciar reparación' }
+    if (order.status === 'recibido' && order.entry === 'repair' && !order.assignedTo) return { id: 'claimRepair', label: 'Tomar e iniciar reparación' }
     if (order.status === 'recibido' && !order.assignedTo) return { id: 'claim', label: 'Tomar e iniciar revisión' }
     if (role !== 'admin' && order.assignedTo !== TECHNICIAN) return null
-    if (order.status === 'recibido') return { id: 'startReview', label: 'Iniciar revisión' }
+    if (order.status === 'recibido') return order.entry === 'repair' ? { id: 'startRepair', label: 'Iniciar reparación' } : { id: 'startReview', label: 'Iniciar revisión' }
     if (order.status === 'en_revision') return { id: 'sendQuote', label: 'Enviar a recepción' }
     if (order.status === 'presupuesto' && order.confirmed) return { id: 'startRepair', label: 'Iniciar reparación' }
     if (order.status === 'en_reparacion') return { id: 'finish', label: 'Finalizar reparación' }
@@ -141,27 +141,24 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
   const require = (condition, message) => { if (!condition) throw new Error(message) }
   const setStatus = (status) => { next.status = status; next.statusSince = now }
   if (action === 'saveWork') {
-    require(own && ['en_revision', 'en_reparacion'].includes(order.status), 'Este trabajo corresponde a otro técnico o está en espera.')
-    next.diagnosis = String(payload.diagnosis || '').trim()
+    require(own && ['en_revision', 'presupuesto', 'en_reparacion'].includes(order.status), 'Este trabajo corresponde a otro técnico o está en espera.')
     next.work = String(payload.work || '').trim()
-    text = 'Diagnóstico y trabajo guardados'
-  } else if (['claim', 'claimRepair', 'acceptAssigned', 'startReview', 'sendQuote', 'startRepair', 'finish', 'resume'].includes(action)) {
+    require(next.work, 'Definí el tipo de reparación.')
+    text = 'Reparación guardada'
+  } else if (['claim', 'claimRepair', 'startReview', 'sendQuote', 'startRepair', 'finish', 'resume'].includes(action)) {
     require(nextAction(order, role)?.id === action, 'Esta acción ya no está disponible para este equipo.')
     if (action === 'claim') { next.assignedTo = TECHNICIAN; next.acceptedAt = now; setStatus('en_revision'); text = 'Juan tomó el equipo e inició la revisión' }
     if (action === 'claimRepair') { next.assignedTo = TECHNICIAN; next.acceptedAt = now; setStatus('en_reparacion'); text = 'Juan tomó el equipo e inició la reparación' }
-    if (action === 'acceptAssigned') { next.needsAcceptance = false; next.acceptedAt = now; if (order.status === 'recibido') setStatus('en_revision'); text = 'Equipo aceptado por el técnico' }
     if (action === 'startReview') { next.acceptedAt ??= now; setStatus('en_revision'); text = 'Revisión iniciada' }
     if (action === 'sendQuote') {
-      next.diagnosis = String(payload.diagnosis ?? next.diagnosis).trim()
       next.work = String(payload.work ?? next.work).trim()
-      require(next.diagnosis && next.work, 'Completá el diagnóstico y el trabajo propuesto.')
-      setStatus('presupuesto'); next.price = 0; next.notified = false; next.confirmed = false
-      text = 'Diagnóstico enviado a recepción para presupuestar'
+      require(next.work, 'Definí el tipo de reparación.')
+      setStatus('presupuesto'); next.notified = false; next.confirmed = false
+      text = 'Reparación enviada a recepción para presupuestar'
     }
     if (action === 'startRepair' || action === 'resume') { next.acceptedAt ??= now; setStatus('en_reparacion'); text = action === 'resume' ? 'Reparación retomada' : 'Reparación iniciada' }
     if (action === 'finish') {
-      next.diagnosis = String(payload.diagnosis ?? next.diagnosis).trim()
-      next.work = String(payload.work ?? next.work).trim()
+      require(payload.work === undefined || String(payload.work).trim() === order.work, 'Guardá el cambio de reparación antes de continuar.')
       setStatus('terminado'); next.notified = false; next.repairedByName = ROLE_NAMES[role]; text = 'Reparación finalizada. Recepción debe avisar al cliente'
     }
   } else if (action === 'finishSimple') {
@@ -216,6 +213,12 @@ export function applyDemoAction(order, action, payload = {}, role = 'tecnico', n
     next.pickup = payload; next.deliveredAt = now; next.deliveredByName = ROLE_NAMES[role]; setStatus('entregado'); text = payload.withoutReceipt ? 'Retiro sin comprobante registrado' : 'Entrega física registrada'
   } else throw new Error('Acción desconocida.')
   const workChanged = next.work !== order.work
+  if (workChanged && ['presupuesto', 'en_reparacion'].includes(order.status)) {
+    setStatus('presupuesto')
+    next.confirmed = false; next.confirmedAt = null; next.confirmedByName = null
+    next.notified = false; next.notifiedAt = null; next.notifiedByName = null
+    text = 'Reparación modificada. Presupuesto pendiente de aviso y aprobación'
+  }
   if (workChanged) next.workAuthor = next.work ? { name: { tecnico: 'Juan', recepcion: 'Sofía', admin: 'Martín' }[role], role } : null
   next.history.push({ text, by: ROLE_NAMES[role], at: now, ...(workChanged ? { previousWork: order.work, work: next.work } : {}) })
   return next

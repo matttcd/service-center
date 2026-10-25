@@ -15,7 +15,7 @@ import { ActivityPage, BackupsPage, ClientsPage, Empty, OrdersTable, SearchBox, 
 const ICONS = { '/resumen': LayoutDashboard, '/recepcion': ClipboardList, '/taller': Wrench, '/terminados': Archive, '/ordenes': Inbox, '/clientes': Users, '/actividad': Activity, '/metricas': TrendingUp, '/usuarios': Shield, '/copias': DatabaseBackup, '/papelera': Trash2, '/configuracion': Settings }
 const TITLES = { ...Object.fromEntries(NAVIGATION.flatMap((g) => g.items.map(([url, name]) => [url.slice(1), name]))), ajustes: 'Ajustes' }
 const RECEPTION_ICONS = { presupuestar: Calculator, avisar: Bell, respuesta: MessageSquare, repuestos: Package, retiros: PackageCheck, externos: Truck, simples: Wrench }
-const defaultDraft = (o, fee) => ({ ...RECEPTION_DRAFT, diagnosis: o.diagnosis, work: o.work, price: o.price || '', charge: String(fee ?? REVIEW_FEE), note: '', partName: '', partQuantity: '1' })
+const defaultDraft = (o, fee) => ({ ...RECEPTION_DRAFT, work: o.work, price: o.price || '', charge: String(fee ?? REVIEW_FEE), note: '', partName: '', partQuantity: '1' })
 
 export default function FlowPreview() {
   const location = useLocation(), navigate = useNavigate()
@@ -67,7 +67,7 @@ export default function FlowPreview() {
   const mutateOrder = (action, data) => {
     const next = dispatch('orderAction', { id: order.id, action, data })
     if (!next) return false
-    const clear = ['saveWork', 'sendQuote', 'finish'].includes(action) ? ['diagnosis', 'work'] : action === 'price' ? ['price'] : action === 'note' ? ['note'] : action === 'requestPart' ? ['partName', 'partQuantity'] : ['approve', 'reject'].includes(action) ? ['response', 'charge'] : action === 'pickup' ? ['pickupBy', 'pickupName', 'pickupDni', 'physical', 'withoutReceipt'] : action === 'returnExternal' ? ['repaired'] : []
+    const clear = ['saveWork', 'sendQuote', 'finish'].includes(action) ? ['work'] : action === 'price' ? ['price'] : action === 'note' ? ['note'] : action === 'requestPart' ? ['partName', 'partQuantity'] : ['approve', 'reject'].includes(action) ? ['response', 'charge'] : action === 'pickup' ? ['pickupBy', 'pickupName', 'pickupDni', 'physical', 'withoutReceipt'] : action === 'returnExternal' ? ['repaired'] : []
     setDrafts((previous) => { const kept = { ...previous[order.id] }; clear.forEach((key) => delete kept[key]); return { ...previous, [order.id]: kept } })
     notify(next.orders.find((o) => o.id === order.id).history.at(-1).text)
     return true

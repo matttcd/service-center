@@ -4,7 +4,8 @@ export const RECEPTION_DRAFT = { response: '', pickupBy: 'client', pickupName: '
 
 export function receptionTask(order, draft) {
   const queue = receptionQueue(order)
-  const action = nextAction(order, 'recepcion')
+  const action = queue === 'avisar' && order.status === 'presupuesto' && Number(draft.price) !== order.price
+    ? { id: 'price', label: 'Guardar presupuesto' } : nextAction(order, 'recepcion')
   if (!queue || !action) return { queue: null, id: null, label: null, data: {}, blocked: '' }
   const result = { queue, id: action.id, label: action.label, data: {}, blocked: '' }
   if (action.id === 'price') {
