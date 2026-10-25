@@ -9,7 +9,8 @@ import { RECEPTION_DRAFT } from './reception-task.js'
 import OrderWorkspace, { DeviceIcon, Status, ToolWindow } from './OrderWorkspace.jsx'
 import { TECH_VIEWS, RECEPTION_VIEWS, REVIEW_FEE, queueOrders, receptionQueue, workAge } from './preview-model.js'
 import { NAVIGATION, NEW_ORDER, PROFILES, applySystemAction, canVisit, createSystemState, initialProfile } from './system-model.js'
-import { AccountForm, CustomerForm, DocumentPreview, Field, FormActions, NewOrderForm, UserForm } from './PreviewForms.jsx'
+import NewOrderForm from './NewOrderForm.jsx'
+import { AccountForm, CustomerForm, DocumentPreview, Field, FormActions, UserForm } from './PreviewForms.jsx'
 import { ActivityPage, BackupsPage, ClientsPage, Empty, OrdersTable, SearchBox, SettingsPage, SummaryPage, TrashPage, UsersPage } from './SystemPages.jsx'
 
 const ICONS = { '/resumen': LayoutDashboard, '/recepcion': ClipboardList, '/taller': Wrench, '/terminados': Archive, '/ordenes': Inbox, '/clientes': Users, '/actividad': Activity, '/metricas': TrendingUp, '/usuarios': Shield, '/copias': DatabaseBackup, '/papelera': Trash2, '/configuracion': Settings }
@@ -44,7 +45,7 @@ export default function FlowPreview() {
   const patchDraft = (patch) => setDrafts((previous) => ({ ...previous, [order.id]: { ...previous[order.id], ...patch } }))
   const formKey = modal?.key || modal?.type
   const formValue = forms[formKey] || modal?.initial || {}
-  const patchForm = (patch) => setForms((previous) => ({ ...previous, [formKey]: { ...formValue, ...patch } }))
+  const patchForm = (patch) => setForms((previous) => ({ ...previous, [formKey]: { ...(previous[formKey] || modal?.initial || {}), ...patch } }))
   const clearForm = (key = formKey) => setForms((previous) => { const next = { ...previous }; delete next[key]; return next })
 
   useEffect(() => {
@@ -137,7 +138,7 @@ export default function FlowPreview() {
       <aside id="preview-navigation" className={`fp-sidebar ${menu ? 'fp-menu-open' : ''}`}><div className="fp-brand"><img src={logo} alt="" /><div><strong>{state.settings.business}</strong><span>Service Center</span></div></div><nav aria-label="Navegación de demostración" className="fp-navigation">{NAVIGATION.map(({ group, items }) => <div key={group}>{items.some(([, , roles]) => !roles || roles.includes(role)) && <span className="fp-nav-group">{group}</span>}{items.filter(([, , roles]) => !roles || roles.includes(role)).map(([url, label]) => { const Icon = ICONS[url]; return <Link className={location.pathname === url || location.pathname.startsWith(`${url}/`) ? 'active' : ''} aria-current={location.pathname === url ? 'page' : undefined} key={url} to={url}><Icon size={17} />{label}</Link> })}</div>)}</nav><div className="fp-account"><ProfileMenu role={role} onChange={changeRole} /><div className="fp-account-actions"><Link className="fp-button secondary" to="/ajustes"><Settings size={15} />Ajustes</Link><Link className="fp-button secondary" to="/acceso"><LogIn size={15} />Salir</Link></div></div></aside>
       <main className="fp-main"><header className="fp-page-heading"><div><p>Service Center<ChevronRight size={12} />{TITLES[page]}</p><h1>{page === 'taller' ? 'Mesa de trabajo' : page === 'recepcion' ? 'Pendientes de recepción' : id && page === 'ordenes' ? 'Detalle de orden' : TITLES[page]}</h1></div><div className="fp-inline-actions">{counter && ['recepcion', 'ordenes', 'resumen'].includes(page) && !id && <button className="fp-button primary" onClick={openNewOrder}><Plus size={16} />Nueva orden</button>}{page === 'clientes' && !id && <button className="fp-button primary" onClick={() => openCustomer()}><Plus size={16} />Nuevo cliente</button>}{page === 'usuarios' && <button className="fp-button primary" onClick={() => openUser()}><Plus size={16} />Nuevo usuario</button>}</div></header>{canVisit(location.pathname, role) && pageContent()}</main>
     </div>}
-    {modal && <ToolWindow title={modalTitle} onClose={() => setModal(null)}>
+    {modal && <ToolWindow title={modalTitle} maxWidth={modal.type === 'newOrder' ? 'max-w-3xl' : undefined} onClose={() => setModal(null)}>
       {modal.type === 'newOrder' && <NewOrderForm state={state} value={formValue} set={patchForm} onClose={() => setModal(null)} onSubmit={(data) => { const next = saveForm('createOrder', data, 'Orden creada'); if (next) navigate(`/ordenes/${next.orders.at(-1).id}`, { state: { from: '/recepcion' } }) }} />}
       {modal.type === 'customer' && <CustomerForm value={formValue} set={patchForm} onClose={() => setModal(null)} onSubmit={(data) => saveForm('customer', data, 'Cliente guardado')} />}
       {modal.type === 'user' && <UserForm value={formValue} set={patchForm} onClose={() => setModal(null)} onSubmit={(data) => saveForm('user', data, 'Usuario guardado')} />}

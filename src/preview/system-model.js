@@ -1,6 +1,7 @@
+import { COMMON_ACCESSORIES, COMMON_CONDITIONS, COMMON_FIXES } from '../utils/constants.js'
 import { applyDemoAction, createDemoOrders, receptionQueue, TECHNICIAN } from './preview-model.js'
 
-export const NEW_ORDER = { customerId: '', customer: '', phone: '', brand: '', model: '', deviceType: 'Celular', issue: '', access: '', noPin: false, pattern: [], conditions: '', accessories: '', entry: 'review', work: '', price: '', advance: '', isSimpleService: false, isExternal: false, externalTech: '' }
+export const NEW_ORDER = { customerId: '', customerQuery: '', customer: '', dni: '', address: '', phone: '', customDeviceType: '', customAccessory: '', customCondition: '', customFix: '', pickerQuery: '', brand: '', model: '', deviceType: 'Celular', issue: '', access: '', noPin: false, pattern: [], conditions: '', accessories: '', entry: 'review', work: '', price: '', advance: '', isSimpleService: false, isExternal: false, externalTech: '' }
 
 export const PROFILES = {
   tecnico: { name: 'Juan Pérez', label: 'Técnico', home: '/taller' },
@@ -29,7 +30,7 @@ export function createSystemState(now = Date.now()) {
   return {
     orders, customers,
     users: [{ id: TECHNICIAN, name: 'Juan Pérez', role: 'tecnico', active: true }, { id: 'demo-diego', name: 'Diego Molina', role: 'tecnico', active: true }, { id: 'demo-sofia', name: 'Sofía Martín', role: 'recepcion', active: true }, { id: 'demo-admin', name: 'Martín López', role: 'admin', active: true }],
-    settings: { revisionFee: 3500, business: 'El Gringo', phone: '11 5555-0100', address: 'Av. de ejemplo 123', orderPrinter: 'Impresora de comprobantes (demo)', labelPrinter: 'Etiquetadora (demo)', paper: 'A4', labelWidth: '50', labelHeight: '30', labelFormat: 'PDF', accessories: 'Funda\nCargador\nTarjeta SIM', conditions: 'Marcas de uso\nPantalla rota\nGolpeado', fixes: 'Cambio de módulo\nCambio de batería\nPin de carga', terms: 'Presupuesto sujeto a revisión. Conservar el comprobante para retirar el equipo.', externals: 'Laboratorio Sur\nElectrónica Centro', catalog: ['Samsung Galaxy A54', 'Apple iPhone 13', 'Motorola Moto G84'] },
+    settings: { revisionFee: 3500, business: 'El Gringo', phone: '11 5555-0100', address: 'Av. de ejemplo 123', orderPrinter: 'Impresora de comprobantes (demo)', labelPrinter: 'Etiquetadora (demo)', paper: 'A4', labelWidth: '50', labelHeight: '30', labelFormat: 'PDF', accessories: COMMON_ACCESSORIES.join('\n'), conditions: COMMON_CONDITIONS.join('\n'), fixes: COMMON_FIXES.join('\n'), terms: 'Presupuesto sujeto a revisión. Conservar el comprobante para retirar el equipo.', externals: 'Laboratorio Sur\nElectrónica Centro', catalog: ['Samsung Galaxy A54', 'Apple iPhone 13', 'Motorola Moto G84'] },
     backups: [], audit: [],
   }
 }
@@ -71,7 +72,7 @@ export function applySystemAction(state, action, payload, role, now = Date.now()
     require(counter, 'Solo Recepción o Administración pueden ingresar equipos.')
     let customer = next.customers.find((c) => c.id === payload.customerId && !c.deletedAt)
     if (!customer) {
-      customer = { id: `client-${now}`, name: requiredText(payload.customer, 'el cliente'), phone: requiredText(payload.phone, 'el teléfono'), email: '', address: '' }
+      customer = { id: `client-${now}`, name: requiredText(payload.customer, 'el cliente'), phone: requiredText(payload.phone, 'el teléfono'), dni: String(payload.dni || '').trim(), email: '', address: String(payload.address || '').trim() }
       next.customers.push(customer)
     }
     const repair = payload.entry === 'repair' || payload.isSimpleService
@@ -85,7 +86,7 @@ export function applySystemAction(state, action, payload, role, now = Date.now()
     const work = repair ? requiredText(payload.work, 'el trabajo') : ''
     const order = {
       id: `demo-${number}`, number, customerId: customer.id, customer: customer.name, phone: customer.phone,
-      deviceType: payload.deviceType || 'Celular', brand: requiredText(payload.brand, 'la marca'), model: requiredText(payload.model, 'el modelo'),
+      deviceType: payload.deviceType === 'Otro' ? String(payload.customDeviceType || '').trim() || 'Otro' : payload.deviceType || 'Celular', brand: requiredText(payload.brand, 'la marca'), model: requiredText(payload.model, 'el modelo'),
       issue: requiredText(payload.issue, 'las notas generales'), access: payload.noPin ? '' : String(payload.access || ''), pattern: payload.noPin ? [] : payload.pattern || [],
       conditions: payload.conditions || 'Sin registrar', accessories: payload.accessories || 'Sin accesorios', assignedTo: null, acceptedAt: null,
       createdAt: now, entry: repair ? 'repair' : 'review', noPin: !!payload.noPin, receivedByName: user.name, externalSentAt: payload.isExternal ? now : null, statusSince: now, status: payload.isExternal ? 'en_tercero' : 'recibido', externalTech: payload.isExternal ? payload.externalTech : null, work, workAuthor: work ? { name: user.name.split(' ')[0], role } : null,

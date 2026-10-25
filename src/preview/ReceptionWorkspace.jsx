@@ -55,7 +55,7 @@ export default function ReceptionWorkspace({ order, customer, role, draft: saved
       {order.externalTech && <section className="fp-reception-external" aria-label="Técnico externo"><dl><div><dt>Externo</dt><dd>{order.externalTech}</dd></div><div><dt>Envío</dt><dd>{order.externalSentAt ? date(order.externalSentAt) : '—'}</dd></div><div><dt>Regreso</dt><dd>{order.externalReturnAt ? date(order.externalReturnAt) : '—'}</dd></div></dl></section>}
     </header>
     <div className="fp-order-body">
-      <div className="fp-reception-secondary"><OrderTools order={order} role={role} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} actionsInWindow /></div>
+      <div className="fp-reception-secondary"><OrderTools order={order} role={role} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} actionsLabel="Acciones" /></div>
       <section className="fp-reception-device" aria-labelledby="reception-ingress"><h3 id="reception-ingress" className="sr-only">Datos del equipo</h3><dl className="fp-reception-facts">
         <div className="fp-reception-access"><dt><KeyRound size={14} />Contraseña o PIN</dt><dd>{order.noPin ? 'Sin bloqueo' : order.access || 'Sin contraseña informada'}</dd></div>
         {!order.noPin && order.pattern?.length > 0 && <div className="fp-reception-pattern"><dt><Grid3X3 size={14} aria-hidden="true" />Patrón</dt><dd><div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((n) => n + 1).join(', ')}`}><PatternPreview value={order.pattern} size={96} /></div></dd></div>}

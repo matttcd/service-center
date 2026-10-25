@@ -3,16 +3,17 @@ import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown,
   Clock3, Eye, EyeOff, History, MessageSquare,
   Package, Pencil, Phone, Save, Smartphone,
-  StickyNote, UserRound, Laptop, Monitor, Gamepad2, KeyRound, Grid3X3, Cable, Ellipsis,
+  StickyNote, UserRound, Laptop, Monitor, Gamepad2, KeyRound, Grid3X3, Cable, Printer, Tablet, HelpCircle, Tag, Truck, RotateCcw, Trash2,
 } from 'lucide-react'
 import { PatternPreview } from '../components/PatternPad.jsx'
 import Modal from '../components/Modal.jsx'
+import OrderActionsMenu from './OrderActionsMenu.jsx'
 import { TECHNICIAN, STATUS_LABELS, nextAction, waitingFor, charges } from './preview-model.js'
 
 const money = (value) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value)
 const date = (value) => new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(value)
 export function DeviceIcon({ type, ...props }) {
-  const Icon = { Celular: Smartphone, Notebook: Laptop, Monitor, Consola: Gamepad2 }[type] || Smartphone
+  const Icon = { Celular: Smartphone, Tablet, Notebook: Laptop, 'Notebook / PC': Laptop, Monitor, 'Smart TV': Monitor, Consola: Gamepad2, Impresora: Printer, Otro: HelpCircle }[type] || Smartphone
   return <Icon {...props} />
 }
 export function Status({ order }) {
@@ -21,7 +22,7 @@ export function Status({ order }) {
       : order.status === 'recibido' ? 'neutral' : 'blue'
   return <span className={`fp-status fp-status-${tone}`}><span />{STATUS_LABELS[order.status]}</span>
 }
-export function ToolWindow({ title, onClose, children }) {
+export function ToolWindow({ title, onClose, children, maxWidth = 'max-w-2xl' }) {
   const contentRef = useRef(null)
   useEffect(() => {
     const opener = document.activeElement
@@ -40,20 +41,18 @@ export function ToolWindow({ title, onClose, children }) {
     document.addEventListener('keydown', trapFocus)
     return () => { document.removeEventListener('keydown', trapFocus); if (opener?.isConnected) opener.focus({ preventScroll: true }) }
   }, [])
-  return <Modal open onClose={onClose} title={<span id="preview-tool-title">{title}</span>} maxWidth="max-w-2xl"><div className="fp-tool-content" ref={contentRef}>{children}</div></Modal>
+  return <Modal open onClose={onClose} title={<span id="preview-tool-title">{title}</span>} maxWidth={maxWidth}><div className="fp-tool-content" ref={contentRef}>{children}</div></Modal>
 }
-export function OrderTools({ order, role, technical = false, draft, setDraft, onAction, onExtra, actionsInWindow = false }) {
+export function OrderTools({ order, role, technical = false, draft, setDraft, onAction, onExtra, actionsLabel = 'Más' }) {
   const [tool, setTool] = useState(null)
   const own = role === 'admin' || order.assignedTo === TECHNICIAN
   const canNote = order.status !== 'entregado' && (!technical || own)
   const canRequest = technical && own && ['en_reparacion', 'falta_repuestos'].includes(order.status)
-  const runExtra = (type) => { if (actionsInWindow) setTool(null); onExtra(type) }
-  const extraActions = <><button onClick={() => runExtra('print')}>Comprobante</button><button onClick={() => runExtra('label')}>Etiqueta</button>{role !== 'tecnico' && order.status !== 'entregado' && <button onClick={() => runExtra('assign')}>Asignar técnico</button>}{['admin', 'recepcion'].includes(role) && ['recibido', 'en_revision', 'presupuesto', 'en_reparacion'].includes(order.status) && <button onClick={() => runExtra('sendExternal')}>Enviar a externo</button>}{['admin', 'recepcion'].includes(role) && order.status === 'entregado' && <button onClick={() => runExtra('warranty')}>Reingresar por garantía</button>}{role === 'admin' && <button onClick={() => runExtra('trash')}>Mover a Papelera</button>}</>
+  const extraActions = <><button role="menuitem" onClick={() => onExtra('print')}><Printer size={16} />Comprobante</button><button role="menuitem" onClick={() => onExtra('label')}><Tag size={16} />Etiqueta</button>{role !== 'tecnico' && order.status !== 'entregado' && <button role="menuitem" onClick={() => onExtra('assign')}><UserRound size={16} />Asignar técnico</button>}{['admin', 'recepcion'].includes(role) && ['recibido', 'en_revision', 'presupuesto', 'en_reparacion'].includes(order.status) && <button role="menuitem" onClick={() => onExtra('sendExternal')}><Truck size={16} />Enviar a externo</button>}{['admin', 'recepcion'].includes(role) && order.status === 'entregado' && <button role="menuitem" onClick={() => onExtra('warranty')}><RotateCcw size={16} />Reingresar por garantía</button>}{role === 'admin' && <button role="menuitem" onClick={() => onExtra('trash')}><Trash2 size={16} />Mover a Papelera</button>}</>
   return <><div className="fp-tool-buttons" role="group" aria-label="Herramientas de la orden">
         {[['notes', 'Notas', StickyNote, order.notes.length, draft.note.trim()], ['parts', 'Repuestos', Package, order.parts.length, draft.partName.trim()], ['history', 'Historial', History, order.history.length, false]].map(([key, label, Icon, count, pending]) => <button key={key} aria-haspopup="dialog" onClick={() => setTool(key)}><Icon size={16} />{label}<span>{count}</span>{pending && <span className="fp-draft-indicator">· Borrador</span>}</button>)}
-        {onExtra && (actionsInWindow ? <button aria-haspopup="dialog" onClick={() => setTool('actions')}><Ellipsis size={16} />Acciones</button> : <details className="fp-more"><summary><Ellipsis size={16} />Más</summary><div>{extraActions}</div></details>)}
-      </div>{tool && <ToolWindow title={`${{ notes: 'Notas', parts: 'Repuestos', history: 'Historial', actions: 'Acciones' }[tool]} · ${order.number}`} onClose={() => setTool(null)}>
-        {tool === 'actions' && <div className="fp-response-options">{extraActions}</div>}
+        {onExtra && <OrderActionsMenu label={actionsLabel}>{extraActions}</OrderActionsMenu>}
+      </div>{tool && <ToolWindow title={`${{ notes: 'Notas', parts: 'Repuestos', history: 'Historial' }[tool]} · ${order.number}`} onClose={() => setTool(null)}>
         {tool === 'notes' && <div className="fp-section-content">
           {order.notes.length ? <ul className="fp-notes">{order.notes.map((note) => <li key={note.id}><p>{note.text}</p><span>{note.by} · {date(note.at)}</span></li>)}</ul> : <div className="fp-inline-empty"><MessageSquare size={24} /><p>Sin notas.</p></div>}
           {canNote && <form onSubmit={(e) => { e.preventDefault(); onAction('note', { text: draft.note }); e.currentTarget.querySelector('textarea').focus() }}><label htmlFor="new-note">Nueva nota</label><textarea id="new-note" rows={3} value={draft.note} onChange={(e) => setDraft({ note: e.target.value })} placeholder="Una observación útil para continuar el trabajo…" /><button className="fp-button secondary" type="submit" disabled={!draft.note.trim()}><Save size={15} />Guardar nota</button></form>}
