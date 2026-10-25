@@ -532,7 +532,7 @@ body.fp-preview {
 .fp-reception-amounts .fp-finance > div { display: flex; flex-direction: column; align-items: flex-start; }
 .fp-reception-amounts .fp-finance dd { margin-top: auto; padding-top: 3px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .fp-reception-order .fp-dock-buttons { flex: none; width: 100%; }
-.fp-reception-order .fp-dock-buttons > .primary { width: 100%; min-height: 44px; justify-content: space-between; padding-inline: 14px; }
+.fp-reception-order .fp-dock-buttons > .primary { flex: 0 1 auto; width: auto; max-width: 100%; min-height: 44px; }
 .fp-reception-task > p:first-child { margin: 0 0 16px; }
 .fp-reception-task .fp-finance { padding-top: 0; margin: 0 0 12px; }
 .fp-reception-task .fp-form-actions { position: sticky; bottom: 0; background: var(--fp-paper); margin-top: 16px; padding-bottom: 2px; }
