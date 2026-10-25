@@ -43,19 +43,19 @@ export default function ReceptionWorkspace({ order, customer, role, draft: saved
       <button className="fp-back fp-link" onClick={onBack}><ArrowLeft size={18} /><span className="sr-only">Volver a la cola</span></button>
       <div className="fp-reception-identity">
         <span className="fp-reception-device-icon"><DeviceIcon type={order.deviceType} size={23} /></span>
-        <div><h2>{order.brand} {order.model}<span className="fp-order-number"> · {order.number}</span></h2>
-          <dl className="fp-reception-header-facts"><div><dt className="sr-only">Tipo de dispositivo</dt><dd>{order.deviceType || 'Sin registrar'}</dd></div><div><dt className="sr-only">Tipo de ingreso</dt><dd>{order.isSimpleService ? 'Servicio simple' : order.entry === 'repair' ? 'Reparación definida' : order.entry === 'review' ? 'Para revisión' : 'Sin registrar'}{order.warrantyReturn && ' · Garantía'}</dd></div></dl>
+        <div><h2>{order.brand} {order.model}</h2>
+          <dl className="fp-reception-header-facts"><div><dt className="sr-only">Orden</dt><dd>{order.number}</dd></div><div><dt className="sr-only">Tipo de dispositivo</dt><dd>{order.deviceType || 'Sin registrar'}</dd></div><div><dt className="sr-only">Tipo de ingreso</dt><dd>{order.isSimpleService ? 'Servicio simple' : order.entry === 'repair' ? 'Reparación definida' : order.entry === 'review' ? 'Para revisión' : 'Sin registrar'}{order.warrantyReturn && ' · Garantía'}</dd></div></dl>
         </div>
       </div>
       <Status order={order} />
       {order.externalTech && <section className="fp-reception-external" aria-label="Técnico externo"><dl><div><dt>Externo</dt><dd>{order.externalTech}</dd></div><div><dt>Envío</dt><dd>{order.externalSentAt ? date(order.externalSentAt) : '—'}</dd></div><div><dt>Regreso</dt><dd>{order.externalReturnAt ? date(order.externalReturnAt) : '—'}</dd></div></dl></section>}
     </header>
     <div className="fp-order-body">
-      <div className="fp-reception-secondary"><OrderTools order={order} role={role} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} actionsInWindow /></div>
       <div className="fp-reception-context">
         <section aria-labelledby="reception-issue"><h3 id="reception-issue"><ClipboardList size={16} />Falla informada</h3><p className="fp-read-value">{order.issue}</p></section>
         <section className="fp-reception-work" aria-labelledby="reception-work"><h3 id="reception-work"><Wrench size={16} />{order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : ['terminado', 'entregado'].includes(order.status) ? 'Trabajo realizado' : 'Trabajo a realizar'}</h3><p className="fp-read-value">{order.work || 'Trabajo por definir'}</p>{order.workAuthor && <p className="fp-work-origin">Por {order.workAuthor.name} · {order.workAuthor.role === 'recepcion' ? 'Recepción' : order.workAuthor.role === 'admin' ? 'Administrador' : 'Técnico'}</p>}</section>
       </div>
+      <div className="fp-reception-secondary"><OrderTools order={order} role={role} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} actionsInWindow /></div>
       <section className="fp-reception-tracking" aria-labelledby="reception-followup"><h3 id="reception-followup" className="sr-only"><Clock3 size={16} />Seguimiento</h3><dl>
         <div><dt>Ingreso</dt><dd>{date(order.createdAt)}</dd></div><div><dt>Recibió</dt><dd>{person(order.receivedBy, order.receivedByName)}</dd></div>
         <div><dt>Técnico</dt><dd>{order.assignedTo ? person(order.assignedTo) : 'Sin asignar'}</dd></div><div><dt>Aceptado</dt><dd>{order.acceptedAt ? date(order.acceptedAt) : 'Sin aceptar'}</dd></div>

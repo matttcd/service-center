@@ -3,7 +3,7 @@ import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown,
   Clock3, Eye, EyeOff, History, MessageSquare,
   Package, Pencil, Phone, Save, Smartphone,
-  StickyNote, UserRound, Laptop, Monitor, Gamepad2, KeyRound, Grid3X3, Cable,
+  StickyNote, UserRound, Laptop, Monitor, Gamepad2, KeyRound, Grid3X3, Cable, Ellipsis,
 } from 'lucide-react'
 import { PatternPreview } from '../components/PatternPad.jsx'
 import Modal from '../components/Modal.jsx'
@@ -51,7 +51,7 @@ export function OrderTools({ order, role, technical = false, draft, setDraft, on
   const extraActions = <><button onClick={() => runExtra('print')}>Comprobante</button><button onClick={() => runExtra('label')}>Etiqueta</button>{role !== 'tecnico' && order.status !== 'entregado' && <button onClick={() => runExtra('assign')}>Asignar técnico</button>}{['admin', 'recepcion'].includes(role) && ['recibido', 'en_revision', 'presupuesto', 'en_reparacion'].includes(order.status) && <button onClick={() => runExtra('sendExternal')}>Enviar a externo</button>}{['admin', 'recepcion'].includes(role) && order.status === 'entregado' && <button onClick={() => runExtra('warranty')}>Reingresar por garantía</button>}{role === 'admin' && <button onClick={() => runExtra('trash')}>Mover a Papelera</button>}</>
   return <><div className="fp-tool-buttons" role="group" aria-label="Herramientas de la orden">
         {[['notes', 'Notas', StickyNote, order.notes.length, draft.note.trim()], ['parts', 'Repuestos', Package, order.parts.length, draft.partName.trim()], ['history', 'Historial', History, order.history.length, false]].map(([key, label, Icon, count, pending]) => <button key={key} aria-haspopup="dialog" onClick={() => setTool(key)}><Icon size={16} />{label}<span>{count}</span>{pending && <span className="fp-draft-indicator">· Borrador</span>}</button>)}
-        {onExtra && (actionsInWindow ? <button aria-haspopup="dialog" onClick={() => setTool('actions')}>Acciones</button> : <details className="fp-more"><summary>Más<ChevronDown size={14} /></summary><div>{extraActions}</div></details>)}
+        {onExtra && (actionsInWindow ? <button aria-haspopup="dialog" onClick={() => setTool('actions')}><Ellipsis size={16} />Acciones</button> : <details className="fp-more"><summary><Ellipsis size={16} />Más</summary><div>{extraActions}</div></details>)}
       </div>{tool && <ToolWindow title={`${{ notes: 'Notas', parts: 'Repuestos', history: 'Historial', actions: 'Acciones' }[tool]} · ${order.number}`} onClose={() => setTool(null)}>
         {tool === 'actions' && <div className="fp-response-options">{extraActions}</div>}
         {tool === 'notes' && <div className="fp-section-content">
@@ -112,11 +112,8 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
   </div>
   return <article className={`fp-order ${technical ? 'fp-technical-order' : ''}`} aria-label={`Orden ${order.number}`}>
     <header className="fp-order-header">
-      <button className="fp-back fp-link" onClick={onBack}><ArrowLeft size={16} /> Volver a la cola</button>
-      <div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} /></div>
-      <h2>{order.brand} {order.model}</h2>
-      {(order.warrantyReturn || order.isSimpleService) && <p className="fp-muted">{order.warrantyReturn ? 'Garantía' : 'Servicio simple'}</p>}
-      <OrderTools order={order} role={role} technical={technical} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} />
+      <button className="fp-back fp-link" onClick={onBack}><ArrowLeft size={16} /><span className="sr-only">Volver a la cola</span></button>
+      {technical ? <><div className="fp-sheet-identity"><h2>{order.brand} {order.model}</h2><p className="fp-sheet-meta"><span>{order.number}</span><span>{order.isSimpleService ? 'Servicio simple' : order.entry === 'repair' ? 'Reparación definida' : 'Para revisión'}</span>{order.warrantyReturn && <span>Garantía</span>}</p></div><Status order={order} /></> : <><div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} /></div><h2>{order.brand} {order.model}</h2>{(order.warrantyReturn || order.isSimpleService) && <p className="fp-muted">{order.warrantyReturn ? 'Garantía' : 'Servicio simple'}</p>}</>}
       {!technical && <>
         <div className="fp-order-meta"><span><UserRound size={16} />{order.customer}</span><span><Phone size={16} />{order.phone}</span></div>
         <div className="fp-access"><span>Acceso del equipo</span><button className="fp-link" aria-expanded={showAccess} aria-controls="device-access" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={16} /> : <Eye size={16} />}{showAccess ? 'Ocultar contraseña' : 'Mostrar contraseña'}</button><strong id="device-access" hidden={!showAccess}>{showAccess ? order.access : ''}</strong></div>
@@ -158,6 +155,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
           {canWork && workDirty && <p className="fp-save-state">Borrador sin guardar</p>}
           {order.status === 'falta_repuestos' && <div className="fp-parts-wait"><Package size={17} /><div><p>{wait.ready ? 'Repuestos recibidos' : 'Repuestos pendientes'}</p><ul>{order.parts.map((part) => <li key={part.id}>{part.name} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Esperando llegada' : 'Recibido'}</li>)}</ul></div></div>}
       </section>
+      <div className="fp-order-secondary"><OrderTools order={order} role={role} technical={technical} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} /></div>
       {!technical && <section className="fp-counter" aria-label="Presupuesto y retiro">
           {priceEditor}
           <div className="fp-finance"><div><span>{order.rejectedCharge !== null ? 'Importe de retiro' : 'Presupuesto'}</span><strong>{bill.total ? money(bill.total) : order.rejectedCharge === 0 ? money(0) : 'A definir'}</strong></div><div><span>Seña recibida</span><strong>{money(order.advance)}</strong></div><div><span>{bill.balance < 0 ? 'Saldo a favor' : 'Saldo pendiente'}</span><strong>{!bill.total && order.rejectedCharge === null ? '—' : money(Math.abs(bill.balance))}</strong></div></div>

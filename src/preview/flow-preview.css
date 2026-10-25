@@ -103,8 +103,17 @@ body.fp-preview {
 .fp-order-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--fp-ink); margin-top: 10px; }
 .fp-order-meta > span { display: flex; align-items: center; gap: 7px; }
 .fp-technical-order { display: grid; grid-template-columns: minmax(0,1fr) 240px; grid-template-rows: auto minmax(0,1fr) auto; grid-template-areas: 'heading reference' 'body reference' 'actions reference'; }
-.fp-technical-order > .fp-order-header { grid-area: heading; }
-.fp-technical-order > .fp-order-body { grid-area: body; }
+.fp-technical-order > .fp-order-header { grid-area: heading; display: flex; align-items: flex-start; gap: 12px; border-bottom: 0; }
+.fp-sheet-identity { flex: 1; min-width: 0; }
+.fp-sheet-identity h2 { margin: 0; overflow-wrap: anywhere; }
+.fp-sheet-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; color: var(--fp-muted); }
+.fp-sheet-meta > span + span::before { content: '·'; margin-right: 12px; }
+.fp-technical-order > .fp-order-header > .fp-status { flex-shrink: 0; }
+.fp-technical-order > .fp-order-header > .fp-back { margin: 0; min-height: 28px; flex-shrink: 0; }
+.fp-technical-order > .fp-order-body { grid-area: body; display: flex; flex-direction: column; gap: 22px; padding-top: 8px; }
+.fp-technical-order .fp-issue { padding: 0; margin: 0; border: 0; }
+.fp-technical-order .fp-order-secondary { margin-top: auto; padding-top: 8px; }
+.fp-technical-order .fp-section-heading .secondary { border: 0; background: var(--fp-subtle); }
 .fp-technical-order > .fp-action-dock { grid-area: actions; }
 .fp-reference { grid-area: reference; min-width: 0; min-height: 0; overflow-y: auto; padding: 20px 18px; border-left: 1px solid var(--fp-line); background: var(--fp-subtle); }
 .fp-reference-client { margin-bottom: 16px; }
@@ -253,6 +262,12 @@ body.fp-preview {
 .fp-tool-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .fp-tool-buttons button { min-height: 38px; padding: 7px 10px; border: 1px solid var(--fp-line); border-radius: 7px; color: var(--fp-ink); background: var(--fp-subtle); }
 .fp-tool-buttons button:hover { background: var(--fp-selection); }
+.fp-order-secondary .fp-tool-buttons, .fp-reception-secondary .fp-tool-buttons { margin: 0; padding: 4px; gap: 2px; border-radius: 7px; background: var(--fp-subtle); }
+.fp-order-secondary .fp-tool-buttons > button, .fp-reception-secondary .fp-tool-buttons > button { min-height: 36px; padding: 6px 5px; gap: 5px; border: 0; background: transparent; flex: 1; white-space: nowrap; }
+.fp-order-secondary .fp-tool-buttons > button:hover, .fp-reception-secondary .fp-tool-buttons > button:hover { background: var(--fp-selection); }
+.fp-order-secondary .fp-tool-buttons > button > span:not(.fp-draft-indicator), .fp-reception-secondary .fp-tool-buttons > button > span:not(.fp-draft-indicator) { min-width: 16px; padding: 0 2px; border-radius: 4px; background: var(--fp-paper); color: var(--fp-muted); font-variant-numeric: tabular-nums; }
+.fp-order-secondary .fp-more summary { min-height: 36px; padding: 6px 7px; border: 0; background: transparent; }
+.fp-order-secondary .fp-more[open] > div { top: auto; bottom: calc(100% + 5px); }
 .fp-preview [role=dialog] { color: var(--fp-ink); background: var(--fp-paper); border: 1px solid var(--fp-line); }
 .fp-preview [role=dialog] h2 { font-size: 18px; font-weight: 700; color: var(--fp-ink); }
 .fp-preview [role=dialog] > div:first-child button { color: var(--fp-ink); }
@@ -448,33 +463,32 @@ body.fp-preview {
 .fp-main:has(.fp-reception-page) > .fp-page-heading > div:first-child > p { display: none; }
 .fp-reception-page { height: calc(100dvh - 134px); }
 .fp-reception-order { display: grid; grid-template-columns: minmax(0,1fr) 300px; grid-template-rows: auto minmax(0,1fr) auto; grid-template-areas: 'heading reference' 'body reference' 'footer reference'; }
-.fp-reception-order > .fp-order-header { grid-area: heading; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 16px 16px 8px; border-bottom: 0; }
+.fp-reception-order > .fp-order-header { grid-area: heading; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; border-bottom: 0; }
 .fp-reception-order > .fp-order-header > .fp-back { margin: 0; width: 30px; height: 36px; flex-shrink: 0; }
-.fp-reception-identity { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 100%; }
+.fp-reception-identity { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex: 1; }
 .fp-reception-identity > div { min-width: 0; }
-.fp-reception-identity h2 { margin: 0; }
-.fp-reception-device-icon { width: 42px; height: 42px; border-radius: 10px; background: var(--fp-selection); color: var(--fp-blue-text); display: grid; place-items: center; flex-shrink: 0; }
-.fp-reception-header-facts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--fp-muted); margin-top: 3px; }
+.fp-reception-identity h2 { margin: 0; overflow-wrap: anywhere; }
+.fp-reception-order > .fp-order-header > .fp-status { flex-shrink: 0; }
+.fp-reception-device-icon { color: var(--fp-muted); display: grid; place-items: center; flex-shrink: 0; padding-top: 1px; }
+.fp-reception-header-facts { display: flex; flex-wrap: wrap; gap: 4px 8px; color: var(--fp-muted); margin-top: 6px; }
 .fp-reception-header-facts dd { margin: 0; }
 .fp-reception-header-facts > div { display: flex; align-items: baseline; gap: 6px; }
-.fp-reception-header-facts > div + div::before { content: '·'; margin-right: 6px; }
-.fp-reception-order > .fp-order-body { grid-area: body; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+.fp-reception-header-facts > div + div::before { content: '·'; margin-right: 2px; }
+.fp-reception-order > .fp-order-body { grid-area: body; display: flex; flex-direction: column; gap: 16px; padding: 8px 20px 18px; }
 .fp-reception-order h3 { display: flex; align-items: center; gap: 7px; }
 .fp-reception-order h3 > svg { color: var(--fp-muted); }
-.fp-reception-secondary .fp-tool-buttons { margin: 0; gap: 6px; flex-wrap: wrap; }
-.fp-reception-secondary .fp-tool-buttons button { min-height: 32px; padding: 5px 8px; }
-.fp-reception-context { display: flex; flex-direction: column; gap: 14px; }
-.fp-reception-context h3 { margin-bottom: 5px; }
-.fp-reception-context .fp-read-value { line-height: 1.45; }
+.fp-reception-context { display: flex; flex-direction: column; gap: 22px; }
+.fp-reception-context h3 { margin-bottom: 6px; }
+.fp-reception-context .fp-read-value { line-height: 1.5; }
 .fp-reception-context .fp-work-origin { margin-top: 7px; line-height: 1.4; }
-.fp-reception-tracking { margin-top: auto; padding-top: 12px; }
+.fp-reception-tracking { margin-top: auto; padding-top: 0; }
 .fp-reception-tracking > h3 { margin-bottom: 8px; }
-.fp-reception-tracking > dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 14px; }
-.fp-reception-tracking > dl > div { min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 5px; }
-.fp-reception-tracking dt::after { content: ':'; }
+.fp-reception-tracking > dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px 16px; line-height: 1.45; }
+.fp-reception-tracking > dl > div { min-width: 0; }
+.fp-reception-tracking dt { margin-bottom: 3px; }
 .fp-reception-order .fp-reception-tracking dd { margin: 0; }
 .fp-data-event { display: block; color: var(--fp-muted); }
-.fp-reception-reference { grid-area: reference; min-height: 0; overflow-y: auto; padding: 14px; border-left: 1px solid var(--fp-line); background: var(--fp-subtle); }
+.fp-reception-reference { grid-area: reference; min-height: 0; overflow-y: auto; padding: 14px; border-left: 1px solid var(--fp-line); background: var(--fp-subtle); line-height: 1.45; }
 .fp-reception-customer-identity { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .fp-reception-customer-identity .fp-avatar { width: 36px; height: 36px; }
 .fp-reception-customer-identity h3 { line-height: 1.4; }
@@ -482,7 +496,7 @@ body.fp-preview {
 .fp-reception-customer-id dt::after { content: ':'; }
 .fp-reception-order .fp-reception-customer-id dd { margin: 0; }
 .fp-reception-contacts { display: grid; gap: 5px; }
-.fp-reception-contacts > div { display: grid; grid-template-columns: 90px minmax(0,1fr); gap: 7px; }
+.fp-reception-contacts > div { display: grid; grid-template-columns: 90px minmax(0,1fr); align-items: start; gap: 7px; }
 .fp-reception-contacts dt { display: flex; align-items: center; gap: 6px; }
 .fp-reception-contacts svg { color: var(--fp-muted); }
 .fp-reception-order .fp-reception-contacts dd { margin: 0; }
@@ -498,7 +512,8 @@ body.fp-preview {
 .fp-reception-external dl > div { display: flex; gap: 6px; }
 .fp-reception-order .fp-reception-external dd { margin: 0; }
 .fp-reception-order dt, .fp-reception-task dt { color: var(--fp-muted); }
-.fp-reception-order dd, .fp-reception-task dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.fp-reception-order dd { margin: 0; overflow-wrap: anywhere; }
+.fp-reception-task dd { margin: 3px 0 0; overflow-wrap: anywhere; }
 .fp-reception-order > .fp-action-dock { grid-area: footer; display: flex; flex-direction: column; align-items: stretch; gap: 14px; padding: 12px 16px; }
 .fp-reception-amounts { min-width: 0; }
 .fp-reception-amounts .fp-finance { padding: 0; grid-template-columns: repeat(auto-fit,minmax(90px,1fr)); gap: 6px 12px; }
@@ -519,8 +534,8 @@ body.fp-preview {
   .fp-main:has(.fp-reception-page) > .fp-page-heading { min-height: 38px; }
   .fp-reception-page { height: calc(100dvh - 194px); }
   .fp-reception-order { display: flex; flex-direction: column; overflow-y: auto; }
-  .fp-reception-order > .fp-order-header { flex-wrap: wrap; padding: 12px; flex-shrink: 0; }
-  .fp-reception-identity { flex-basis: calc(100% - 44px); }
+  .fp-reception-order > .fp-order-header { gap: 8px; padding: 14px 12px; flex-shrink: 0; }
+  .fp-reception-device-icon { display: none; }
   .fp-reception-order > .fp-order-header > .fp-status { margin-left: 0; }
   .fp-reception-order > .fp-order-body { overflow: visible; flex: none; padding: 14px 12px; order: 2; }
   .fp-reception-reference { overflow: visible; flex: none; border-left: 0; border-bottom: 1px solid var(--fp-line); order: 1; }
@@ -528,4 +543,5 @@ body.fp-preview {
   .fp-reception-order > .fp-action-dock { position: sticky; bottom: 0; z-index: 2; flex-shrink: 0; padding: 10px 12px; order: 3; }
   .fp-reception-order .fp-dock-buttons { width: 100%; }
   .fp-reception-price { grid-template-columns: minmax(0,1fr) auto; gap: 14px; }
+  .fp-reception-tracking > dl { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
