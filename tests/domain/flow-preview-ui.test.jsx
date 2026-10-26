@@ -3,7 +3,10 @@ import { afterEach, describe, it, expect, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { NotificationContext } from '../../src/context/notifications.js'
 import FlowPreview from '../../src/preview/FlowPreview.jsx'
+import OrderWorkspace from '../../src/preview/OrderWorkspace.jsx'
+import ReceptionWorkspace from '../../src/preview/ReceptionWorkspace.jsx'
 import { createDemoOrders } from '../../src/preview/preview-model.js'
+import { createSystemState } from '../../src/preview/system-model.js'
 
 describe('Ficha de consulta del taller', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -11,11 +14,21 @@ describe('Ficha de consulta del taller', () => {
     const order = createDemoOrders().find((item) => item.number === 'OS1042')
     const html = renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><MemoryRouter initialEntries={['/taller']}><FlowPreview /></MemoryRouter></NotificationContext.Provider>)
     const disclosures = [...html.matchAll(/<details\b[^>]*>[\s\S]*?<\/details>/g)].join('')
-    const reference = html.match(/<aside\b[^>]*aria-label="Datos del equipo"[\s\S]*?<\/aside>/)?.[0] || ''
-    for (const value of [order.customer, order.phone, order.access, order.conditions, order.accessories]) {
+    const reference = html.match(/<aside\b[^>]*aria-label="Cliente y seguimiento"[\s\S]*?<\/aside>/)?.[0] || ''
+    const equipment = html.match(/<section\b[^>]*aria-labelledby="reception-ingress"[\s\S]*?<\/section>/)?.[0] || ''
+    for (const value of [order.customer, order.phone]) {
       expect(reference).toContain(value)
       expect(html.split(value)).toHaveLength(2)
     }
+    for (const value of [order.access, order.conditions, order.accessories]) {
+      expect(equipment).toContain(value)
+      expect(reference).not.toContain(value)
+      expect(html.split(value)).toHaveLength(2)
+    }
+    expect(reference).toContain('Ingreso')
+    expect(reference).toContain('Aceptado')
+    expect(reference).toContain('Respuesta')
+    expect(html).toContain('fp-order-sheet fp-technical-order')
     for (const value of [order.customer, order.phone, order.access, order.conditions, order.accessories, order.issue, order.work]) {
       expect(html).toContain(value)
       expect(disclosures).not.toContain(value)
@@ -25,18 +38,39 @@ describe('Ficha de consulta del taller', () => {
     expect(html).toContain('aria-label="Herramientas de la orden"')
     expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(3)
     expect(html).toContain('aria-haspopup="menu"')
-    expect(html).toContain('Notas generales · Recepción')
+    expect(html).toContain('Notas generales')
     expect(html).not.toContain('Diagnóstico · Técnico')
     expect(html).not.toContain('Realicé la prueba de funcionamiento')
     expect(html).toContain('Actualizado por Juan · Técnico')
     const header = html.match(/<header class="fp-order-header"[\s\S]*?<\/header>/)[0]
-    const technical = html.match(/<section class="fp-work"[\s\S]*?<\/section>/)[0]
+    const technical = html.match(/<section class="fp-work [^"]*"[\s\S]*?<\/section>/)[0]
     expect(header).not.toContain('Editar')
     expect(technical).toMatch(/<button\b[^>]*>[\s\S]*?Editar<\/button>/)
     expect(html).not.toContain('Guardar cambios')
     expect(html).not.toContain('Se guardará el diagnóstico')
     expect(html).not.toContain('Estás explorando el nuevo flujo')
     expect(html).not.toContain('Elegí un equipo, continuá el trabajo')
+  })
+  it('comparte datos y seguimiento con Recepción y conserva las acciones del técnico', () => {
+    const state = createSystemState(), order = state.orders.find((item) => item.number === 'OS1044')
+    const customer = { ...state.customers.find((item) => item.id === order.customerId), name: 'Cliente actualizado' }
+    const props = { order, customer, users: state.users, role: 'tecnico', draft: { work: order.work, note: '', partName: '', price: order.price }, setDraft() {}, onAction() {}, onExtra() {} }
+    const workshop = renderToStaticMarkup(<OrderWorkspace {...props} />)
+    const reception = renderToStaticMarkup(<ReceptionWorkspace {...props} role="recepcion" />)
+    const equipment = (html) => html.match(/<section\b[^>]*aria-labelledby="reception-ingress"[\s\S]*?<\/section>/)[0]
+    const reference = (html) => html.match(/<aside\b[\s\S]*?<\/aside>/)[0]
+    expect(equipment(workshop)).toBe(equipment(reception))
+    expect(reference(workshop)).toBe(reference(reception))
+    expect(reference(workshop)).toContain(customer.name)
+    expect(workshop).toContain('Patrón de desbloqueo: 1, 4, 7, 8, 9')
+    expect(workshop).toContain('Finalizar reparación')
+    expect(workshop).toContain('Editar')
+    expect(workshop).not.toContain('fp-finance-summary')
+    expect(workshop).not.toContain('Registrar respuesta')
+    const unlocked = renderToStaticMarkup(<OrderWorkspace {...props} order={{ ...order, noPin: true }} />)
+    expect(equipment(unlocked)).toContain('Sin bloqueo')
+    expect(equipment(unlocked)).not.toContain(order.access)
+    expect(equipment(unlocked)).not.toContain('Patrón de desbloqueo:')
   })
   it('une cola y ficha bajo pestañas accesibles con iconos y mantiene contraseña en Ajustes', () => {
     const render = (path) => renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><MemoryRouter initialEntries={[path]}><FlowPreview /></MemoryRouter></NotificationContext.Provider>)

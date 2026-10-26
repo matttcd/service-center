@@ -3,24 +3,20 @@ import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown,
   Clock3, Eye, EyeOff, History, MessageSquare,
   Package, Pencil, Phone, Save, Smartphone,
-  StickyNote, UserRound, Laptop, Monitor, Gamepad2, KeyRound, Grid3X3, Cable, Printer, Tablet, HelpCircle, Tag, Truck, RotateCcw, Trash2,
+  StickyNote, UserRound, Laptop, Monitor, Gamepad2, Printer, Tablet, HelpCircle, Tag, Truck, RotateCcw, Trash2,
 } from 'lucide-react'
-import { PatternPreview } from '../components/PatternPad.jsx'
+import OrderSheet, { Status } from './OrderSheet.jsx'
 import Modal from '../components/Modal.jsx'
 import OrderActionsMenu from './OrderActionsMenu.jsx'
-import { TECHNICIAN, STATUS_LABELS, nextAction, waitingFor, charges } from './preview-model.js'
+import { TECHNICIAN, nextAction, waitingFor, charges } from './preview-model.js'
+
+export { Status } from './OrderSheet.jsx'
 
 const money = (value) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value)
 const date = (value) => new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(value)
 export function DeviceIcon({ type, ...props }) {
   const Icon = { Celular: Smartphone, Tablet, Notebook: Laptop, 'Notebook / PC': Laptop, Monitor, 'Smart TV': Monitor, Consola: Gamepad2, Impresora: Printer, Otro: HelpCircle }[type] || Smartphone
   return <Icon {...props} />
-}
-export function Status({ order }) {
-  const tone = order.status === 'entregado' || order.status === 'terminado' ? 'green'
-    : ['presupuesto', 'falta_repuestos', 'presupuesto_rechazado'].includes(order.status) ? 'amber'
-      : order.status === 'recibido' ? 'neutral' : 'blue'
-  return <span className={`fp-status fp-status-${tone}`}><span />{STATUS_LABELS[order.status]}</span>
 }
 export function ToolWindow({ title, onClose, children, maxWidth = 'max-w-2xl' }) {
   const contentRef = useRef(null)
@@ -66,7 +62,7 @@ export function OrderTools({ order, role, technical = false, draft, setDraft, on
       </ToolWindow>}</>
 }
 
-export default function OrderWorkspace({ order, role, technical = role === 'tecnico', draft, setDraft, onAction, onBack, onExtra }) {
+export default function OrderWorkspace({ order, role, technical = role === 'tecnico', customer, users, draft, setDraft, onAction, onBack, onExtra }) {
   const [showAccess, setShowAccess] = useState(false)
   const [editingWork, setEditingWork] = useState(() => draft.work !== order.work || !order.work)
   const [actionForm, setActionForm] = useState(null)
@@ -110,24 +106,32 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
   const priceEditor = !technical && order.status === 'presupuesto' && !order.confirmed && <div className="fp-price-editor"><label htmlFor="quote-price">Precio del presupuesto</label><div className="fp-currency-input"><span>$</span><input id="quote-price" type="number" min="0" step="0.01" value={draft.price} onChange={(e) => setDraft({ price: e.target.value })} placeholder="Ingresá el importe" /></div>
     {order.price > 0 && Number(draft.price) !== order.price && <button className="fp-button secondary" onClick={() => onAction('price', { price: draft.price })} disabled={!draft.price || Number(draft.price) <= 0 || !Number.isFinite(Number(draft.price))}><Save size={15} />Guardar nuevo precio</button>}
   </div>
-  return <article className={`fp-order ${technical ? 'fp-technical-order' : ''}`} aria-label={`Orden ${order.number}`}>
+  const workContent = <section className={technical ? 'fp-work fp-reception-work' : 'fp-work'} aria-label="Reparación">
+          <div className={technical ? 'fp-work-fields' : undefined}>
+            <div><div className="fp-section-heading"><h3 id="work-title">{order.status === 'terminado' || order.status === 'entregado' ? 'Trabajo realizado' : order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : 'Trabajo a realizar'}</h3>{canWork && <button className="fp-button secondary" aria-expanded={showWorkEditor} onClick={() => { if (showWorkEditor) { if (!workDirty || onAction('saveWork', { work: draft.work })) setEditingWork(false) } else setEditingWork(true) }}>{showWorkEditor ? <Save size={14} /> : <Pencil size={14} />}{showWorkEditor ? 'Guardar' : 'Editar'}</button>}</div>
+            {showWorkEditor ? <textarea id="work" aria-labelledby="work-title" rows={3} value={draft.work} onChange={(e) => setDraft({ work: e.target.value })} /> : <p className="fp-read-value">{draft.work || 'Trabajo por definir'}</p>}
+            {order.workAuthor && <p className="fp-work-origin">{order.workAuthor.role === 'recepcion' ? `Definido en recepción por ${order.workAuthor.name}` : `Actualizado por ${order.workAuthor.name} · ${order.workAuthor.role === 'admin' ? 'Administrador' : 'Técnico'}`}</p>}</div>
+          </div>
+          {canWork && workDirty && <p className="fp-save-state">Borrador sin guardar</p>}
+          {order.status === 'falta_repuestos' && <div className="fp-parts-wait"><Package size={17} /><div><p>{wait.ready ? 'Repuestos recibidos' : 'Repuestos pendientes'}</p><ul>{order.parts.map((part) => <li key={part.id}>{part.name} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Esperando llegada' : 'Recibido'}</li>)}</ul></div></div>}
+      </section>
+  const footer = <>{blocked && <p className="fp-action-context fp-blocked">{blocked}</p>}<div className="fp-dock-buttons">
+      {actionForm && <button className="fp-button secondary" onClick={() => { setActionForm(null); setResponse('') }}>Cancelar</button>}
+      {primaryLabel && <button className="fp-button primary" onClick={runPrimary} disabled={!!blocked}>{actionForm === 'pickup' || action?.id === 'finish' ? <Check size={17} /> : <ArrowRight size={17} />}{primaryLabel}</button>}
+      {!primaryLabel && <span className="fp-no-action"><Clock3 size={15} />{order.status === 'entregado' ? 'Orden cerrada' : 'Sin acciones pendientes'}</span>}
+    </div></>
+  if (technical) return <OrderSheet className="fp-technical-order" order={order} customer={customer} users={users} onBack={onBack}
+    tools={<OrderTools order={order} role={role} technical draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} actionsLabel="Acciones" />} footer={footer}>
+    <section aria-labelledby="issue-title"><h3 id="issue-title">Notas generales</h3><p className="fp-read-value">{order.issue}</p></section>
+    {workContent}
+  </OrderSheet>
+  return <article className="fp-order" aria-label={`Orden ${order.number}`}>
     <header className="fp-order-header">
       <button className="fp-back fp-link" onClick={onBack}><ArrowLeft size={16} /><span className="sr-only">Volver a la cola</span></button>
-      {technical ? <><div className="fp-sheet-identity"><h2>{order.brand} {order.model}</h2><p className="fp-sheet-meta"><span>{order.number}</span><span>{order.isSimpleService ? 'Servicio simple' : order.entry === 'repair' ? 'Reparación definida' : 'Para revisión'}</span>{order.warrantyReturn && <span>Garantía</span>}</p></div><Status order={order} /></> : <><div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} /></div><h2>{order.brand} {order.model}</h2>{(order.warrantyReturn || order.isSimpleService) && <p className="fp-muted">{order.warrantyReturn ? 'Garantía' : 'Servicio simple'}</p>}</>}
-      {!technical && <>
-        <div className="fp-order-meta"><span><UserRound size={16} />{order.customer}</span><span><Phone size={16} />{order.phone}</span></div>
-        <div className="fp-access"><span>Acceso del equipo</span><button className="fp-link" aria-expanded={showAccess} aria-controls="device-access" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={16} /> : <Eye size={16} />}{showAccess ? 'Ocultar contraseña' : 'Mostrar contraseña'}</button><strong id="device-access" hidden={!showAccess}>{showAccess ? order.access : ''}</strong></div>
-      </>}
+      <div className="fp-order-topline"><span className="fp-order-number">{order.number}</span><Status order={order} /></div><h2>{order.brand} {order.model}</h2>{(order.warrantyReturn || order.isSimpleService) && <p className="fp-muted">{order.warrantyReturn ? 'Garantía' : 'Servicio simple'}</p>}
+      <div className="fp-order-meta"><span><UserRound size={16} />{order.customer}</span><span><Phone size={16} />{order.phone}</span></div>
+      <div className="fp-access"><span>Acceso del equipo</span><button className="fp-link" aria-expanded={showAccess} aria-controls="device-access" onClick={() => setShowAccess((value) => !value)}>{showAccess ? <EyeOff size={16} /> : <Eye size={16} />}{showAccess ? 'Ocultar contraseña' : 'Mostrar contraseña'}</button><strong id="device-access" hidden={!showAccess}>{showAccess ? order.access : ''}</strong></div>
     </header>
-    {technical && <aside className="fp-reference" aria-label="Datos del equipo">
-      <div className="fp-reference-client"><span><UserRound size={16} aria-hidden="true" />Cliente</span><p>{order.customer}</p><span className="fp-reference-phone"><Phone size={16} aria-hidden="true" />Teléfono</span><p>{order.phone}</p></div>
-      <dl className="fp-equipment-facts">
-        <div><dt><KeyRound size={16} aria-hidden="true" />Contraseña o PIN</dt><dd>{order.access || 'Sin contraseña informada'}</dd></div>
-        {order.pattern?.length > 0 && <div><dt><Grid3X3 size={16} aria-hidden="true" />Patrón de desbloqueo</dt><dd><div role="img" aria-label={`Patrón de desbloqueo: ${order.pattern.map((point) => point + 1).join(', ')}`}><PatternPreview value={order.pattern} size={112} /></div></dd></div>}
-        <div><dt><Smartphone size={16} aria-hidden="true" />Estado del equipo</dt><dd>{order.conditions || 'Sin registrar'}</dd></div>
-        <div><dt><Cable size={16} aria-hidden="true" />Accesorios</dt><dd>{order.accessories || 'Sin accesorios'}</dd></div>
-      </dl>
-    </aside>}
     <div className="fp-order-body" ref={bodyRef}>
       <div className="fp-order-secondary"><OrderTools order={order} role={role} technical={technical} draft={draft} setDraft={setDraft} onAction={onAction} onExtra={onExtra} /></div>
       {actionForm === 'response' && <section className="fp-action-form" aria-label="Respuesta del cliente">
@@ -147,15 +151,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
         <label className="fp-checkbox"><input type="checkbox" checked={withoutReceipt} onChange={(e) => setWithoutReceipt(e.target.checked)} />Retiro sin comprobante</label>
       </section>}
       <section className="fp-issue" aria-labelledby="issue-title"><h3 id="issue-title">Notas generales · Recepción</h3><p>{order.issue}</p></section>
-      <section className="fp-work" aria-label="Reparación">
-          <div className={technical ? 'fp-work-fields' : undefined}>
-            <div><div className="fp-section-heading"><h3 id="work-title">{order.status === 'terminado' || order.status === 'entregado' ? 'Trabajo realizado' : order.rejectedCharge !== null ? 'Trabajo propuesto · sin realizar' : 'Trabajo a realizar'}</h3>{canWork && <button className="fp-button secondary" aria-expanded={showWorkEditor} onClick={() => { if (showWorkEditor) { if (!workDirty || onAction('saveWork', { work: draft.work })) setEditingWork(false) } else setEditingWork(true) }}>{showWorkEditor ? <Save size={14} /> : <Pencil size={14} />}{showWorkEditor ? 'Guardar' : 'Editar'}</button>}</div>
-            {showWorkEditor ? <textarea id="work" aria-labelledby="work-title" rows={3} value={draft.work} onChange={(e) => setDraft({ work: e.target.value })} /> : <p className="fp-read-value">{draft.work || 'Trabajo por definir'}</p>}
-            {order.workAuthor && <p className="fp-work-origin">{order.workAuthor.role === 'recepcion' ? `Definido en recepción por ${order.workAuthor.name}` : `Actualizado por ${order.workAuthor.name} · ${order.workAuthor.role === 'admin' ? 'Administrador' : 'Técnico'}`}</p>}</div>
-          </div>
-          {canWork && workDirty && <p className="fp-save-state">Borrador sin guardar</p>}
-          {order.status === 'falta_repuestos' && <div className="fp-parts-wait"><Package size={17} /><div><p>{wait.ready ? 'Repuestos recibidos' : 'Repuestos pendientes'}</p><ul>{order.parts.map((part) => <li key={part.id}>{part.name} · {part.status === 'necesario' ? 'Por pedir' : part.status === 'pedido' ? 'Esperando llegada' : 'Recibido'}</li>)}</ul></div></div>}
-      </section>
+      {workContent}
       {!technical && <section className="fp-counter" aria-label="Presupuesto y retiro">
           {priceEditor}
           <div className="fp-finance"><div><span>{order.rejectedCharge !== null ? 'Importe de retiro' : 'Presupuesto'}</span><strong>{bill.total ? money(bill.total) : order.rejectedCharge === 0 ? money(0) : 'A definir'}</strong></div><div><span>Seña recibida</span><strong>{money(order.advance)}</strong></div><div><span>{bill.balance < 0 ? 'Saldo a favor' : 'Saldo pendiente'}</span><strong>{!bill.total && order.rejectedCharge === null ? '—' : money(Math.abs(bill.balance))}</strong></div></div>
@@ -164,11 +160,7 @@ export default function OrderWorkspace({ order, role, technical = role === 'tecn
 
       {!technical && <details className="fp-disclosure fp-device-details"><summary>Datos de ingreso<ChevronDown size={15} /></summary><div className="fp-device-grid"><div><span>Accesorios</span><p>{order.accessories}</p></div><div><span>Estado del equipo</span><p>{order.conditions}</p></div><div><span>Ingreso</span><p>{date(order.createdAt)}</p></div><div><span>Técnico</span><p>{order.assignedTo ? own ? 'Juan Pérez' : 'Diego Molina' : 'Sin asignar'}</p></div></div></details>}
     </div>
-    <footer className="fp-action-dock">{blocked && <p className="fp-action-context fp-blocked">{blocked}</p>}<div className="fp-dock-buttons">
-      {actionForm && <button className="fp-button secondary" onClick={() => { setActionForm(null); setResponse('') }}>Cancelar</button>}
-      {primaryLabel && <button className="fp-button primary" onClick={runPrimary} disabled={!!blocked}>{actionForm === 'pickup' || action?.id === 'finish' ? <Check size={17} /> : <ArrowRight size={17} />}{primaryLabel}</button>}
-      {!primaryLabel && <span className="fp-no-action"><Clock3 size={15} />{order.status === 'entregado' ? 'Orden cerrada' : 'Sin acciones pendientes'}</span>}
-    </div></footer>
+    <footer className="fp-action-dock">{footer}</footer>
   </article>
 }
 
