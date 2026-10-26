@@ -101,6 +101,22 @@ describe('Ficha de consulta del taller', () => {
     expect(html).toContain('data-theme="dark"')
     expect(html).toContain('aria-label="Activar modo claro"')
   })
+  it.each(['/taller', '/recepcion', '/resumen'])('ubica Ajustes en la navegación y Salir junto al perfil en %s', (path) => {
+    const html = renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><MemoryRouter initialEntries={[path]}><FlowPreview /></MemoryRouter></NotificationContext.Provider>)
+    const navigation = html.match(/<nav\b[\s\S]*?<\/nav>/)[0]
+    const account = html.match(/<div class="fp-account">[\s\S]*?<\/aside>/)[0]
+    expect(navigation).toContain('href="/ajustes"')
+    expect(navigation).toContain('Ajustes')
+    expect(account).not.toContain('Ajustes')
+    expect(account).toContain('aria-label="Cambiar de perfil"')
+    const signout = account.match(/<a class="fp-signout"[\s\S]*?<\/a>/)[0]
+    expect(signout).toContain('aria-label="Salir"')
+    expect(signout).toContain('href="/acceso"')
+    expect(signout).toContain('<svg')
+    expect(signout.replace(/<[^>]*>/g, '')).toBe('')
+    const settings = renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><MemoryRouter initialEntries={['/ajustes']}><FlowPreview /></MemoryRouter></NotificationContext.Provider>)
+    expect(settings).toMatch(/<a class="fp-settings-link active" aria-current="page"/)
+  })
   it.each(['/recepcion', '/ordenes', '/terminados', '/clientes', '/clientes/client-0', '/resumen', '/metricas', '/actividad', '/usuarios', '/copias', '/papelera', '/configuracion', '/ajustes', '/acceso'])('renderiza la pantalla %s sin proveedores de producción', (path) => {
     const html = renderToStaticMarkup(<NotificationContext.Provider value={{ show() {}, dismiss() {} }}><MemoryRouter initialEntries={[path]}><FlowPreview /></MemoryRouter></NotificationContext.Provider>)
     expect(html).toContain('Perfil de demostración')
