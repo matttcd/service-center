@@ -1,3 +1,4 @@
+import { orderAmounts } from '../../shared/order-workspace.js'
 import { LOGO_DATA_URL } from './logo.js'
 
 // ============================================
@@ -150,11 +151,13 @@ export function buildPickupHtml(order, customer, pickup) {
   </div>
 
   <h2>Reparacion</h2>
+  ${order?.rejectedCharge != null ? field('Estado', 'Presupuesto rechazado · sin reparar') : ''}
   ${field('Tipo de reparación', isRevision ? 'Revisión' : 'Reparación', { full: true })}
   ${fixList.length > 0 ? field('Detalle', plainList(fixList), { full: true }) : ''}
   <div class="grid2">
     ${field('Presupuesto', `<span class="val-price">${esc(priceStr) || '&mdash;'}</span>`)}
     ${order?.advance > 0 ? field('Seña recibida', `<span class="val-price">${esc(advanceStr)}</span>`) : ''}
+    ${order?.rejectedCharge != null ? field('Importe de retiro', `<span class="val-price">${esc(formatMoney(order.rejectedCharge))}</span>`) + field(orderAmounts(order).credit ? 'Saldo a favor' : 'Saldo', esc(formatMoney(Math.abs(orderAmounts(order).balance)))) : ''}
   </div>
 
   <h2>Retira el sr/sra</h2>

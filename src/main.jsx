@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import './components/patternlock.css'
+import './components/workspace.css'
 import App from './App.jsx'
 import { DataProvider } from './context/DataContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
@@ -14,6 +15,7 @@ import { loadTheme } from './utils/storage.js'
 
 // Aplica el tema guardado antes de renderizar (evita el flash de color).
 const theme = loadTheme()
+document.body.classList.add('sc-ui')
 if (theme === 'dark') document.documentElement.classList.add('dark')
 
 createRoot(document.getElementById('root')).render(

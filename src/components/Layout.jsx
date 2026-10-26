@@ -12,6 +12,7 @@ import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { BRAND_NAME } from '../utils/brand.js'
 import logoUrl from '../assets/gringologo-modified.png'
+import { WorkspaceProvider } from '../context/WorkspaceContext.jsx'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -25,7 +26,7 @@ export default function Layout() {
   }, [dataError, refresh, notifyError])
 
   return (
-    <div className="min-h-screen">
+    <WorkspaceProvider key={currentUser?.id}><div className="min-h-screen">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Barra superior en móvil */}
@@ -44,8 +45,8 @@ export default function Layout() {
       </header>
 
       {/* Contenido principal */}
-      <main className="px-4 py-6 sm:px-6 lg:ml-64 lg:px-8">
-        <div className="mx-auto max-w-6xl">
+      <main className="sc-main">
+        <div className="sc-page">
           {loading ? (
             <DashboardSkeleton />
           ) : (
@@ -59,6 +60,6 @@ export default function Layout() {
       {currentUser?.mustChangePassword && (
         <ChangePasswordModal open onDone={clearMustChangePassword} />
       )}
-    </div>
+    </div></WorkspaceProvider>
   )
 }

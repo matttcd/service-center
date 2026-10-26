@@ -107,6 +107,7 @@ export function orderStatusTone(status) {
     recibido: 'slate',
     en_revision: 'primary',
     presupuesto: 'yellow',
+    presupuesto_rechazado: 'yellow',
     en_reparacion: 'primary',
     falta_repuestos: 'orange',
     terminado: 'green',

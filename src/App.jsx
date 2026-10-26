@@ -1,13 +1,15 @@
+import { lazy, Suspense } from 'react'
 // ============================================
 // App: definición de rutas y guardas de acceso
 // ============================================
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { lazy, Suspense } from 'react'
 import { useAuth } from './context/AuthContext.jsx'
 import Layout from './components/Layout.jsx'
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Taller from './pages/Taller.jsx'
+import Reception from './pages/Reception.jsx'
+import AccountSettings from './pages/AccountSettings.jsx'
 import Terminados from './pages/Terminados.jsx'
 import Orders from './pages/Orders.jsx'
 import OrderDetail from './pages/OrderDetail.jsx'
@@ -39,7 +41,8 @@ function RequireRole({ roles, children }) {
 function Home() {
   const { currentUser } = useAuth()
   if (currentUser?.role === 'tecnico') return <Navigate to="/taller" replace />
-  return <Dashboard />
+  if (currentUser?.role === 'recepcion') return <Navigate to="/recepcion" replace />
+  return <Navigate to="/resumen" replace />
 }
 
 export default function App() {
@@ -56,6 +59,9 @@ export default function App() {
         }
       >
         <Route index element={<Home />} />
+        <Route path="resumen" element={<RequireRole roles={['recepcion', 'admin']}><Dashboard /></RequireRole>} />
+        <Route path="recepcion" element={<RequireRole roles={['recepcion', 'admin']}><Reception /></RequireRole>} />
+        <Route path="ajustes" element={<AccountSettings />} />
         <Route
           path="taller"
           element={

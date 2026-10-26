@@ -33,6 +33,7 @@ test('flujo completo y recuperación en PostgreSQL real', async (t) => {
   await t.test('alta de varios usuarios sin email y permisos', async () => {
     const technician = await post('/users', { name: 'Técnico Pruebas', password: 'Verification-tech-2026', role: 'tecnico' })
     const reception = await post('/users', { name: 'Recepción Pruebas', password: 'Verification-counter-2026', role: 'recepcion' })
+    t.reception = reception.id
     t.technician = technician.id
     t.techToken = (await post('/auth/login', { profileId: technician.id, password: 'Verification-tech-2026' })).token
     t.counterToken = (await post('/auth/login', { profileId: reception.id, password: 'Verification-counter-2026' })).token
@@ -56,6 +57,7 @@ test('flujo completo y recuperación en PostgreSQL real', async (t) => {
   })
   await t.test('recepción, reparación, entrega y garantía', async () => {
     visible = await create({ fix: 'Cambio de batería', price: 30000, advance: 5000 })
+    await put(`/orders/${visible.id}`, { pin: '4321', pattern: [0, 1, 2], expected: { pin: '', pattern: [] } }, { as: t.counterToken })
     await state(visible, 'en_reparacion', {}, { status: 400 })
     visible = await state(visible, 'en_reparacion', { assignedTo: t.technician })
     await put(`/orders/${visible.id}`, { fix: 'Cambio de batería, Limpieza', note: 'Revisado' }, { as: t.techToken })
@@ -96,6 +98,56 @@ test('flujo completo y recuperación en PostgreSQL real', async (t) => {
     order = await state(order, 'en_reparacion', {}, { as: t.techToken })
     assert.equal(order.status, 'en_reparacion')
   })
+  await t.test('aceptación, reasignación y toma concurrente', async () => {
+    let order = await create({ diagnosisType: 'revision' })
+    order = (await post(`/orders/${order.id}/assign`, { userId: t.technician })).order
+    assert.equal(order.acceptedAt, null)
+    order = await state(order, 'en_revision', {}, { as: t.techToken })
+    const accepted = order.acceptedAt
+    assert.ok(accepted)
+    await put(`/orders/${order.id}`, { fix: 'Carga' }, { as: t.techToken })
+    order = await state(order, 'presupuesto', {}, { as: t.techToken })
+    assert.equal(order.acceptedAt, accepted)
+    await post(`/orders/${order.id}/assign`, { userId: null })
+    assert.equal((await request(`/orders/${order.id}`)).order.acceptedAt, null)
+    const other = await post('/users', { name: 'Segundo Técnico', role: 'tecnico', password: 'Verification-other-2026' })
+    const otherToken = (await post('/auth/login', { profileId: other.id, password: 'Verification-other-2026' })).token
+    const available = await create({ diagnosisType: 'revision' })
+    const attempts = await Promise.all([[t.technician, t.techToken], [other.id, otherToken]].map(async ([tech, auth]) => {
+      const response = await fetch(`${base}/api/orders/${available.id}/status`, { method: 'POST', headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'en_revision', assignedTo: tech }) })
+      return response.status
+    }))
+    assert.equal(attempts.filter((status) => status === 200).length, 1)
+    assert.ok(attempts.some((status) => [400, 403, 409].includes(status)))
+    assert.ok((await request(`/orders/${available.id}`)).order.acceptedAt)
+    const reassigned = (await post(`/orders/${available.id}/assign`, { userId: t.technician })).order
+    if (reassigned.assignedTo !== (await request(`/orders/${available.id}`)).order.assignedTo) throw new Error('La reasignación no se conservó.')
+    const acceptedAgain = (await post(`/orders/${available.id}/assign`, { userId: t.technician, accept: true }, { as: t.techToken })).order
+    assert.ok(acceptedAgain.acceptedAt)
+  })
+  await t.test('rechazo con importe independiente y retiro posterior', async () => {
+    let order = await create({ diagnosisType: 'revision', advance: 5000 })
+    order = await state(order, 'en_revision', { assignedTo: t.technician }, { as: t.techToken })
+    await put(`/orders/${order.id}`, { fix: 'Cambio de módulo', expected: { fix: '' } }, { as: t.techToken })
+    await put(`/orders/${order.id}`, { fix: 'Otro', expected: { fix: '' } }, { as: t.techToken, status: 409 })
+    order = await state(order, 'presupuesto', {}, { as: t.techToken })
+    await put(`/orders/${order.id}`, { price: 45000 }, { as: t.counterToken })
+    await post(`/orders/${order.id}/notified`, { notified: true }, { as: t.counterToken })
+    await state(order, 'presupuesto_rechazado', { rejectedCharge: 0 }, { as: t.techToken, status: 403 })
+    const before = (await request('/metrics')).income.today
+    order = await state(order, 'presupuesto_rechazado', { rejectedCharge: 3500 }, { as: t.counterToken })
+    assert.equal(order.price, 45000)
+    assert.equal(order.advance, 5000)
+    assert.equal(order.rejectedCharge, 3500)
+    assert.equal(order.rejectedBy, t.reception)
+    assert.equal(order.deliveredAt, null)
+    assert.equal((await request('/metrics')).income.today, before)
+    await state(order, 'en_reparacion', {}, { as: t.techToken, status: 400 })
+    order = await state(order, 'entregado', { pickup: { pickupBy: 'third', pickupName: 'Persona Autorizada', pickupDni: '32123456' } }, { as: t.counterToken })
+    assert.ok(order.deliveredAt)
+    assert.equal((await request('/metrics')).income.today, before + 3500)
+    t.rejectedOrder = order
+  })
   await t.test('servicio simple y derivación externa', async () => {
     let simple = await create({ isSimpleService: true, fix: 'Limpieza', price: 1000 })
     simple = await state(simple, 'terminado', {}, { as: t.counterToken })
@@ -112,6 +164,22 @@ test('flujo completo y recuperación en PostgreSQL real', async (t) => {
     assert.equal(returned.isExternal, false)
     assert.equal(returned.repairedBy, null)
     await post(`/orders/${external.id}/pickup`, { pickupBy: 'client' }, { as: t.techToken, status: 403 })
+  })
+  await t.test('actualiza otra sesión mediante el canal de eventos real', async () => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10000)
+    try {
+      const response = await fetch(`${base}/api/events?token=${encodeURIComponent(t.counterToken)}`, { signal: controller.signal })
+      assert.equal(response.status, 200)
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let text = decoder.decode((await reader.read()).value)
+      assert.match(text, /event: connected/)
+      await create({ issue: 'Prueba de sincronización entre sesiones' })
+      while (!text.includes('event: data-changed')) text += decoder.decode((await reader.read()).value)
+      assert.match(text, /event: data-changed/)
+      await reader.cancel()
+    } finally { clearTimeout(timeout); controller.abort() }
   })
   await t.test('concurrencia, filtros y comprobantes PDF', async () => {
     const orders = await Promise.all(Array.from({ length: 5 }, () => create({ fix: 'Limpieza' })))
@@ -170,6 +238,10 @@ test('flujo completo y recuperación en PostgreSQL real', async (t) => {
     await post(`/backups/${backup.name}/restore`)
     assert.equal((await request('/orders')).total, before)
     await request('/health')
+    const rejected = (await request(`/orders/${t.rejectedOrder.id}`)).order
+    assert.equal(rejected.rejectedCharge, 3500)
+    assert.equal(rejected.price, 45000)
+    assert.ok(rejected.acceptedAt)
   })
   await t.test('listas editables deduplicadas y cambios inválidos conservan el catálogo', async () => {
     await put('/catalog/lists', { accessories: ['Funda', ' funda ', 'Cargador'] }, { as: t.techToken, status: 403 })

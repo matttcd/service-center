@@ -5,8 +5,8 @@ import {
   canTransitionForRole,
 } from '../../shared/fsm.js'
 
-describe('FSM Matrix - Matriz Completa de Transiciones (64 pares)', () => {
-  // Mapa esperado de transiciones permitidas según estado y configuración
+describe('FSM Matrix - Matriz Completa de Transiciones (81 pares)', () => {
+  // Mapa esperado de transiciones permitidas segÃºn estado y configuraciÃ³n
   const getExpected = (from, order = {}) => {
     switch (from) {
       case 'recibido':
@@ -17,7 +17,9 @@ describe('FSM Matrix - Matriz Completa de Transiciones (64 pares)', () => {
       case 'en_revision':
         return ['presupuesto', 'entregado', 'en_tercero']
       case 'presupuesto':
-        return ['en_reparacion', 'entregado', 'en_tercero']
+        return ['en_reparacion', 'entregado', 'en_tercero', 'presupuesto_rechazado']
+      case 'presupuesto_rechazado':
+        return ['entregado']
       case 'en_reparacion':
         return ['terminado', 'presupuesto', 'entregado', 'falta_repuestos', 'en_tercero']
       case 'falta_repuestos':
@@ -33,8 +35,8 @@ describe('FSM Matrix - Matriz Completa de Transiciones (64 pares)', () => {
     }
   }
 
-  // 1. Probar cada estado origen contra los 8 estados destino (orden estándar con diagnóstico de revisión)
-  describe('Diagnóstico de revisión estándar', () => {
+  // 1. Probar cada estado origen contra los 8 estados destino (orden estÃ¡ndar con diagnÃ³stico de revisiÃ³n)
+  describe('DiagnÃ³stico de revisiÃ³n estÃ¡ndar', () => {
     for (const from of ORDER_STATUSES) {
       for (const to of ORDER_STATUSES) {
         const order = { status: from, diagnosisType: 'revision', isSimpleService: false }
@@ -49,15 +51,15 @@ describe('FSM Matrix - Matriz Completa de Transiciones (64 pares)', () => {
     }
   })
 
-  // 2. Probar orden con falla visible (pasa directo a reparación, no a revisión)
-  describe('Diagnóstico visible vs revisión', () => {
+  // 2. Probar orden con falla visible (pasa directo a reparaciÃ³n, no a revisiÃ³n)
+  describe('DiagnÃ³stico visible vs revisiÃ³n', () => {
     it('recibido con falla visible NO puede pasar a en_revision', () => {
       const order = { status: 'recibido', diagnosisType: 'visible' }
       expect(allowedTransitions(order)).not.toContain('en_revision')
       expect(allowedTransitions(order)).toContain('en_reparacion')
     })
 
-    it('recibido con revisión NO puede pasar directo a en_reparacion', () => {
+    it('recibido con revisiÃ³n NO puede pasar directo a en_reparacion', () => {
       const order = { status: 'recibido', diagnosisType: 'revision' }
       expect(allowedTransitions(order)).not.toContain('en_reparacion')
       expect(allowedTransitions(order)).toContain('en_revision')
@@ -77,13 +79,13 @@ describe('FSM Matrix - Matriz Completa de Transiciones (64 pares)', () => {
 })
 
 describe('FSM Matrix - Matriz de Permisos por Rol en Transiciones', () => {
-  it('admin tiene autorización total para todas las transiciones operativas', () => {
+  it('admin tiene autorizaciÃ³n total para todas las transiciones operativas', () => {
     for (const status of ORDER_STATUSES) {
       expect(canTransitionForRole(status, 'admin', { status: 'recibido' })).toBe(true)
     }
   })
 
-  it('roles no reconocidos o nulos no tienen permisos para ninguna acción de taller o mostrador', () => {
+  it('roles no reconocidos o nulos no tienen permisos para ninguna acciÃ³n de taller o mostrador', () => {
     const invalidRoles = ['invitado', 'externo', null, undefined]
     for (const role of invalidRoles) {
       expect(canTransitionForRole('en_revision', role)).toBe(false)
@@ -119,7 +121,7 @@ describe('FSM Matrix - Matriz de Permisos por Rol en Transiciones', () => {
     expect(canTransitionForRole('entregado', 'recepcion')).toBe(true)
   })
 
-  it('tecnico puede enviar diagnóstico a presupuesto pero no entregar al cliente', () => {
+  it('tecnico puede enviar diagnÃ³stico a presupuesto pero no entregar al cliente', () => {
     expect(canTransitionForRole('presupuesto', 'tecnico')).toBe(true)
     expect(canTransitionForRole('entregado', 'tecnico')).toBe(false)
   })

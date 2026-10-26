@@ -1,3 +1,4 @@
+import { ensureSchema } from './migrations.js'
 import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -135,6 +136,14 @@ export async function restoreBackup(name, { key = BACKUP_ENCRYPTION_KEY } = {}) 
   const bin = findPgBinary('pg_restore')
   restoring = true
   try {
+    const listing = await new Promise((resolve, reject) => {
+      const child = execFile(bin, ['--list'], { env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+        if (error) reject(new Error('La copia no contiene un archivo PostgreSQL válido.'))
+        else resolve(stdout)
+      })
+      child.stdin.on('error', () => {})
+      child.stdin.end(data)
+    })
     await new Promise((resolve, reject) => {
     // 1. Intenta ejecutar pg_restore directamente
     const args = ['--single-transaction', '--clean', '--if-exists', '--no-owner', '--no-privileges', '--dbname', env.PGDATABASE]
@@ -148,6 +157,11 @@ export async function restoreBackup(name, { key = BACKUP_ENCRYPTION_KEY } = {}) 
     child.stdin.on('error', () => {})
     child.stdin.end(data)
     })
+    // pg_restore no elimina tablas ausentes del archivo, como el registro de
+    // migraciones que no existía en copias antiguas creadas con db push.
+    if (!/\bTABLE public _prisma_migrations\b/.test(listing)) await prisma.$executeRaw`DROP TABLE IF EXISTS "_prisma_migrations"`
+    // Una copia anterior puede restaurar un esquema más viejo que la aplicación.
+    try { await ensureSchema() } catch { throw new Error('La copia se restauró, pero falló su actualización de esquema. Conservá la copia previa para recuperación.') }
   } finally { restoring = false }
   notifyChange()
   return true

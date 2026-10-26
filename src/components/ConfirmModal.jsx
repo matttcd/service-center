@@ -1,45 +1,15 @@
-import { useEffect } from 'react'
-import { createPortal } from 'react-dom'
-import { AlertTriangle, Info, X } from 'lucide-react'
-
-let confirmStack = 0
+import { AlertTriangle, Info } from 'lucide-react'
+import Modal from './Modal.jsx'
 
 export default function ConfirmModal({ open, onClose, onConfirm, title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar', danger = false, type = 'confirm' }) {
-  useEffect(() => {
-    if (!open) return
-    confirmStack += 1
-    const myDepth = confirmStack
-    const onKey = (e) => {
-      if (e.key === 'Escape' && confirmStack === myDepth) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      confirmStack -= 1
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [open, onClose])
-
-  if (!open || typeof document === 'undefined') return null
-
   const Icon = danger ? AlertTriangle : Info
   const iconColor = danger ? 'text-red-500' : 'text-primary-500'
-
-  return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-        <button
-          onClick={onClose}
-          className="absolute right-3 top-3 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-        >
-          <X size={18} />
-        </button>
+  return <Modal open={open} onClose={onClose} title={title} maxWidth="max-w-sm" zIndex="z-[70]">
         <div className="flex items-start gap-3">
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${danger ? 'bg-red-100 dark:bg-red-500/15' : 'bg-primary-100 dark:bg-primary-500/15'}`}>
             <Icon size={20} className={iconColor} />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">{title}</h3>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{message}</p>
           </div>
         </div>
@@ -58,8 +28,5 @@ export default function ConfirmModal({ open, onClose, onConfirm, title, message,
             {type === 'confirm' ? confirmLabel : 'Entendido'}
           </button>
         </div>
-      </div>
-    </div>,
-    document.body
-  )
+  </Modal>
 }

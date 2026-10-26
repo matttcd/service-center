@@ -1,17 +1,21 @@
+import Modal from './Modal.jsx'
+import { useFormDraft } from '../utils/useFormDraft.js'
 import { useNotify } from '../context/notifications.js'
 import { useState, useEffect, useRef } from 'react'
-import { X, User, Users, Printer, CheckCircle2, Loader2 } from 'lucide-react'
+import { User, Users, Printer, CheckCircle2, Loader2 } from 'lucide-react'
 import { loadSession } from '../utils/storage.js'
 
-let stack = 0
 
-export default function PickupModal({ open, onClose, onConfirm, order, mode = 'normal' }) {
-  const [pickupBy, setPickupBy] = useState('client')
-  const [pickupName, setPickupName] = useState('')
-  const [pickupDni, setPickupDni] = useState('')
+export default function PickupModal({ open, onClose, onConfirm, order, mode = 'normal', draft, onDraftChange }) {
+  const [fields, patchFields, clearFields] = useFormDraft({ pickupBy: 'client', pickupName: '', pickupDni: '' }, draft, onDraftChange)
+  const { pickupBy, pickupName, pickupDni } = fields
+  const setPickupBy = (value) => patchFields({ pickupBy: value })
+  const setPickupName = (value) => patchFields({ pickupName: value })
+  const setPickupDni = (value) => patchFields({ pickupDni: value })
   const setError = useNotify('error')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [completedPickup, setCompletedPickup] = useState(null)
   const [printing, setPrinting] = useState(false)
 
   const onCloseRef = useRef(onClose)
@@ -21,23 +25,11 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
 
   useEffect(() => {
     if (!open) return
-    setPickupBy('client')
-    setPickupName('')
-    setPickupDni('')
     setError('')
     setSaving(false)
     setSaved(false)
     setPrinting(false)
-    stack += 1
-    const myDepth = stack
-    const onKey = (e) => {
-      if (e.key === 'Escape' && stack === myDepth) onCloseRef.current()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      stack -= 1
-      window.removeEventListener('keydown', onKey)
-    }
+
   }, [open, setError])
 
   if (!open) return null
@@ -53,6 +45,8 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
     try {
       const result = await onConfirmRef.current({ pickupBy, pickupName: pickupName.trim(), pickupDni: pickupDni.trim() })
       if (result?.error) throw new Error(result.error)
+      setCompletedPickup({ pickupBy, pickupName: pickupName.trim(), pickupDni: pickupDni.trim() })
+      clearFields()
       setSaved(true)
     } catch (err) {
       setError(err.message || 'No se pudo guardar. Intentá de nuevo.')
@@ -86,16 +80,9 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
   const labelCls = 'mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400'
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-        <button onClick={onClose} className="absolute right-3 top-3 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300">
-          <X size={18} />
-        </button>
-
+    <Modal open={open} onClose={onClose} title={saved ? 'Equipo entregado' : 'Retiro del equipo'} maxWidth="max-w-md" zIndex="z-[60]">
         {!saved ? (
           <>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Retiro del equipo</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">¿Quién retira el equipo?</p>
 
             <div className="mt-4 flex gap-2">
@@ -152,10 +139,9 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/15">
                 <CheckCircle2 size={24} className="text-emerald-600 dark:text-emerald-400" />
               </div>
-              <h3 className="mt-3 text-base font-bold text-slate-900 dark:text-white">Equipo entregado</h3>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {pickupBy === 'third'
-                  ? `Retirado por ${pickupName.trim()} (DNI ${pickupDni.trim()})`
+                {completedPickup?.pickupBy === 'third'
+                  ? `Retirado por ${completedPickup.pickupName} (DNI ${completedPickup.pickupDni})`
                   : 'Retirado por el titular'}
               </p>
             </div>
@@ -177,7 +163,6 @@ export default function PickupModal({ open, onClose, onConfirm, order, mode = 'n
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }

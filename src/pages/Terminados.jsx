@@ -1,3 +1,4 @@
+import { useWorkspaceState } from '../context/workspace.js'
 // ============================================
 // Terminados: tabla de equipos terminados listos para entregar.
 // ============================================
@@ -24,18 +25,18 @@ export default function Terminados() {
   const navigate = useNavigate()
 
   const [pageData, setPageData] = useState({ orders: [], total: 0 })
-  const [q, setQ] = useState('')
-  const [qInput, setQInput] = useState('')
-  const [notifiedFilter, setNotifiedFilter] = useState('all')
-  const [sortKey, setSortKey] = useState('createdAt')
-  const [sortDir, setSortDir] = useState('desc')
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0])
+  const [q, setQ] = useWorkspaceState('finished:q', '')
+  const [qInput, setQInput] = useWorkspaceState('finished:qInput', '')
+  const [notifiedFilter, setNotifiedFilter] = useWorkspaceState('finished:notifiedFilter', 'all')
+  const [sortKey, setSortKey] = useWorkspaceState('finished:sortKey', 'createdAt')
+  const [sortDir, setSortDir] = useWorkspaceState('finished:sortDir', 'desc')
+  const [page, setPage] = useWorkspaceState('finished:page', 1)
+  const [pageSize, setPageSize] = useWorkspaceState('finished:pageSize', PAGE_SIZE_OPTIONS[0])
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qInput), 300)
     return () => clearTimeout(t)
-  }, [qInput])
+  }, [qInput, setQ])
 
   useEffect(() => {
     let active = true

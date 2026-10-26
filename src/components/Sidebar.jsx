@@ -20,16 +20,15 @@ import {
   BarChart3,
   ChevronDown,
   RefreshCw,
-  AlertCircle,
+  Check,
   ShieldCheck,
   Shield,
   Trash2,
-  KeyRound,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../utils/api.js'
 import ProfileSwitchModal from './ProfileSwitchModal.jsx'
-import ChangePasswordModal from './ChangePasswordModal.jsx'
+import { usePendingDrafts } from '../context/workspace.js'
 import { BRAND_NAME, BRAND_SUBTITLE } from '../utils/brand.js'
 import logoUrl from '../assets/gringologo-modified.png'
 import { ROLE_LABEL } from '../utils/helpers.js'
@@ -41,7 +40,7 @@ function RoleIcon({ role }) {
 }
 
 export default function Sidebar({ open, onClose }) {
-  const { currentUser, logout, clearMustChangePassword } = useAuth()
+  const { currentUser, logout } = useAuth()
   const role = currentUser?.role
   const isAdmin = role === 'admin'
   const isTech = role === 'tecnico' || isAdmin
@@ -51,7 +50,6 @@ export default function Sidebar({ open, onClose }) {
   const [loadingProfiles, setLoadingProfiles] = useState(false)
   const [switchTarget, setSwitchTarget] = useState(null)
   const menuRef = useRef(null)
-  const [passwordOpen, setPasswordOpen] = useState(false)
 
   const loadProfiles = async () => {
     setLoadError('')
@@ -74,7 +72,7 @@ export default function Sidebar({ open, onClose }) {
   const pick = (p) => {
     if (p.id === currentUser?.id) return setMenuOpen(false)
     setMenuOpen(false)
-    setSwitchTarget(p)
+    if (leave()) setSwitchTarget(p)
   }
 
   // Cierra el menú con click afuera o Escape.
@@ -99,44 +97,31 @@ export default function Sidebar({ open, onClose }) {
       .map((w) => w[0]?.toUpperCase())
       .join('')
 
-  // Ítems de navegación según el rol.
-  const navItems = isAdmin
-    ? [
-        { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-        { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
-        { to: '/taller', label: 'Taller', icon: Wrench, end: false },
-        { to: '/terminados', label: 'Terminados', icon: PackageCheck, end: false },
-        { to: '/clientes', label: 'Clientes', icon: Users, end: false },
-        { to: '/actividad', label: 'Actividad', icon: History, end: false },
-        { to: '/metricas', label: 'Métricas', icon: BarChart3, end: false },
-        { to: '/usuarios', label: 'Usuarios', icon: UserCog, end: false },
-        { to: '/backups', label: 'Copias de seguridad', icon: Database, end: false },
-        { to: '/papelera', label: 'Papelera', icon: Trash2, end: false },
-        { to: '/configuracion', label: 'Configuración', icon: Settings, end: false },
-      ]
-    : isTech
-      ? [
-          { to: '/taller', label: 'Taller', icon: Wrench, end: false },
-          { to: '/terminados', label: 'Terminados', icon: PackageCheck, end: false },
-          { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
-          { to: '/actividad', label: 'Actividad', icon: History, end: false },
-        ]
-      : [
-          { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-          { to: '/ordenes', label: 'Órdenes', icon: ClipboardList, end: false },
-          { to: '/taller', label: 'Taller', icon: Wrench, end: false },
-          { to: '/terminados', label: 'Terminados', icon: PackageCheck, end: false },
-          { to: '/clientes', label: 'Clientes', icon: Users, end: false },
-          { to: '/actividad', label: 'Actividad', icon: History, end: false },
-        ]
-
-  const linkCls = ({ isActive }) =>
-    `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-      isActive
-        ? 'bg-primary-600 text-white shadow-sm'
-        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
-    }`
-
+  const pendingDrafts = usePendingDrafts()
+  const leave = () => !pendingDrafts || window.confirm('Hay borradores sin guardar. ¿Descartarlos y salir?')
+  const groups = [
+    { label: 'Trabajo', items: [
+      ...(!isTech || isAdmin ? [{ to: '/recepcion', label: 'Recepción', icon: ClipboardList }] : []),
+      { to: '/taller', label: 'Taller', icon: Wrench },
+      { to: '/terminados', label: 'Terminados', icon: PackageCheck },
+    ] },
+    { label: 'Consultas', items: [
+      ...(!isTech || isAdmin ? [{ to: '/resumen', label: 'Resumen', icon: LayoutDashboard }] : []),
+      { to: '/ordenes', label: 'Órdenes', icon: ClipboardList },
+      ...(!isTech || isAdmin ? [{ to: '/clientes', label: 'Clientes', icon: Users }] : []),
+      { to: '/actividad', label: 'Actividad', icon: History },
+      ...(isAdmin ? [{ to: '/metricas', label: 'Métricas', icon: BarChart3 }] : []),
+    ] },
+    { label: 'Administración', items: [
+      ...(isAdmin ? [
+        { to: '/usuarios', label: 'Usuarios', icon: UserCog },
+        { to: '/backups', label: 'Copias de seguridad', icon: Database },
+        { to: '/papelera', label: 'Papelera', icon: Trash2 },
+        { to: '/configuracion', label: 'Configuración', icon: Settings },
+      ] : []),
+      { to: '/ajustes', label: 'Ajustes', icon: Settings },
+    ] },
+  ]
   return (
     <>
       {/* Overlay para móvil */}
@@ -149,7 +134,7 @@ export default function Sidebar({ open, onClose }) {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform dark:border-slate-800 dark:bg-slate-900 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 sc-sidebar flex flex-col border-r border-slate-200 bg-white transition-transform dark:border-slate-800 dark:bg-slate-900 lg:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -173,127 +158,22 @@ export default function Sidebar({ open, onClose }) {
 
         {/* Navegación */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-3">
-          {navItems.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} onClick={onClose} className={linkCls}>
-              <Icon size={18} />
-              {label}
-            </NavLink>
-          ))}
+          {groups.map((group) => <div key={group.label}><p className="sc-nav-group">{group.label}</p>{group.items.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} onClick={onClose} className={({ isActive }) => `sc-nav-link ${isActive ? 'active' : ''}`}><Icon size={18} />{label}</NavLink>)}</div>)}
         </nav>
 
-        {/* Usuario + acciones */}
         <div className="border-t border-slate-200 p-3 dark:border-slate-800">
-          <div ref={menuRef} className="relative">
-            <button
-              onClick={openMenu}
-              className={`flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
-                menuOpen ? 'bg-slate-50 dark:bg-slate-800/50' : ''
-              }`}
-              title="Cambiar de perfil"
-            >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-600 dark:bg-primary-500/15 dark:text-primary-400">
-                {initials(currentUser?.name)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-                  {currentUser?.name}
-                </p>
-                <p className="truncate text-xs capitalize text-slate-400">
-                  {ROLE_LABEL[role] || role}
-                </p>
-              </div>
-              <ChevronDown size={16} className={`shrink-0 text-slate-400 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {menuOpen && (
-              <div className="absolute inset-x-0 bottom-full z-20 mb-1.5 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                {loadingProfiles ? (
-                  <div className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400">
-                    <RefreshCw size={14} className="animate-spin" />
-                    Cargando perfiles…
-                  </div>
-                ) : loadError ? (
-                  <div className="px-3 py-2 text-center">
-                    <p className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
-                      <AlertCircle size={14} />
-                      No se pudieron cargar los perfiles.
-                    </p>
-                    <button
-                      onClick={loadProfiles}
-                      className="mx-auto mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700"
-                    >
-                      <RefreshCw size={12} />
-                      Reintentar
-                    </button>
-                  </div>
-                ) : profiles.length === 0 ? (
-                  <p className="px-3 py-2 text-sm text-slate-400">No hay otros perfiles.</p>
-                ) : (
-                  profiles.map((p) => {
-                    const isCurrent = p.id === currentUser?.id
-                    return (
-                      <button
-                        type="button"
-                        key={p.id}
-                        onClick={() => pick(p)}
-                        disabled={isCurrent}
-                        className={`flex w-full items-center gap-3 px-3 py-2 text-left transition ${
-                          isCurrent
-                            ? 'cursor-default bg-primary-50 dark:bg-primary-500/10'
-                            : 'hover:bg-slate-100 dark:hover:bg-slate-700/60'
-                        }`}
-                      >
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                            isCurrent
-                              ? 'bg-primary-600 text-white'
-                              : 'bg-primary-100 text-primary-600 dark:bg-primary-500/15 dark:text-primary-400'
-                          }`}
-                        >
-                          {initials(p.name)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`truncate text-sm font-semibold ${isCurrent ? 'text-primary-800 dark:text-primary-300' : 'text-slate-700 dark:text-slate-200'}`}>
-                            {p.name}
-                          </p>
-                          <span
-                            className={`inline-flex items-center gap-1 text-xs font-semibold ${
-                              p.role === 'admin'
-                                ? 'text-primary-600 dark:text-primary-400'
-                                : p.role === 'tecnico'
-                                  ? 'text-amber-600 dark:text-amber-400'
-                                  : 'text-slate-400 dark:text-slate-400'
-                            }`}
-                          >
-                            <RoleIcon role={p.role} />
-                            {ROLE_LABEL[p.role] || p.role}
-                          </span>
-                        </div>
-                        {isCurrent && <span className="text-[10px] font-semibold text-primary-600 dark:text-primary-400">Activo</span>}
-                      </button>
-                    )
-                  })
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-2 flex items-center gap-2">
-            <ThemeToggle />
-            <button
-              onClick={logout}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-red-500/10"
-            >
-              <LogOut size={16} />
-              Salir
-            </button>
-          </div>
-          <button onClick={() => setPasswordOpen(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"><KeyRound size={14} />Cambiar mi contraseña</button>
+          <div className="sc-profile-row"><div ref={menuRef} className="relative">
+            <button className="sc-profile-button" onClick={openMenu} aria-expanded={menuOpen} aria-label="Cambiar de perfil"><span className="ws-avatar">{initials(currentUser?.name)}</span><span><strong>{currentUser?.name}</strong><small>{ROLE_LABEL[role]}</small></span><ChevronDown size={14} /></button>
+            {menuOpen && <div className="absolute bottom-full left-0 z-50 mb-2 w-72 max-h-[70dvh] overflow-y-auto max-w-[calc(100vw-24px)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900" role="menu" aria-label="Perfiles">
+              <p className="px-2 py-1 text-sm">Cambiar de perfil</p>
+              {loadingProfiles ? <p className="p-2">Cargando perfiles…</p> : loadError ? <div className="p-2"><p>{loadError}</p><button onClick={loadProfiles} className="ws-button"><RefreshCw size={14} />Reintentar</button></div> : profiles.length === 0 ? <p className="p-2">No hay perfiles disponibles.</p> : profiles.map((profile) => <button key={profile.id} role="menuitem" disabled={profile.id === currentUser?.id} onClick={() => pick(profile)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-70"><span className="ws-avatar">{initials(profile.name)}</span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{profile.name}</strong><span className="flex items-center gap-1 text-sm"><RoleIcon role={profile.role} />{ROLE_LABEL[profile.role]}</span></span>{profile.id === currentUser?.id && <Check size={16} />}</button>)}
+            </div>}
+          </div><button className="ws-icon-button" onClick={() => { if (leave()) logout() }} aria-label="Salir" title="Salir"><LogOut size={18} /></button></div>
+          <div className="mt-2"><ThemeToggle /></div>
         </div>
       </aside>
 
       <ProfileSwitchModal profile={switchTarget} onClose={() => setSwitchTarget(null)} />
-      {passwordOpen && <ChangePasswordModal open required={false} onClose={() => setPasswordOpen(false)} onDone={(token) => { clearMustChangePassword(token); setPasswordOpen(false) }} />}
     </>
   )
 }

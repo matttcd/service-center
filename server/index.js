@@ -195,6 +195,7 @@ async function decorateOrder(order) {
     notifiedByName: order.notifiedBy ? (notifiedByName || '—') : null,
     confirmedByName: order.confirmedBy ? (confirmedByName || '—') : null,
     history,
+    rejectedByName: order.rejectedBy ? history.find((entry) => entry.by === order.rejectedBy)?.byName || '—' : null,
     notesLog: order.notes || [],
     sparePartsLog: order.spareParts || [],
   }
@@ -991,7 +992,7 @@ app.delete('/api/orders/:id', auth, adminOnly, async (req, res) => {
 
 // ---------- Estado de una orden ----------
 app.post('/api/orders/:id/status', auth, async (req, res) => {
-  const { status, retiro, assignedTo, externalTech, pickup } = req.body || {}
+  const { status, retiro, assignedTo, externalTech, pickup, rejectedCharge } = req.body || {}
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
@@ -1000,9 +1001,17 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   }
 
   const from = order.status
+  const previousAssignedTo = order.assignedTo
   const role = req.user.role
   const isTech = ['tecnico', 'admin'].includes(role)
   const isCounter = ['recepcion', 'admin'].includes(role)
+  let rejectionAmount
+  if (status === 'presupuesto_rechazado') {
+    if (!isCounter) return res.status(403).json({ error: 'Solo recepción o administración puede registrar un rechazo.' })
+    if (from !== 'presupuesto' || !order.price || !order.notified || order.confirmed) return res.status(400).json({ error: 'El presupuesto debe estar avisado y pendiente de respuesta.' })
+    if (!['number', 'string'].includes(typeof rejectedCharge) || String(rejectedCharge).trim() === '') return res.status(400).json({ error: 'Ingresá el importe de retiro, incluso si es cero.' })
+    rejectionAmount = money(rejectedCharge, 'El importe de retiro')
+  } else if (rejectedCharge !== undefined) return res.status(400).json({ error: 'El importe de retiro solo corresponde al rechazo.' })
   if (pickup !== undefined) {
     if (status !== 'entregado' || !isCounter) return res.status(403).json({ error: 'Solo recepción puede registrar una entrega.' })
     if (!['client', 'third'].includes(pickup?.pickupBy)) return res.status(400).json({ error: 'Indicá quién retira el equipo.' })
@@ -1013,6 +1022,7 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
 
   // Se puede asignar el técnico junto con la transición (asignación diferida).
   if (assignedTo !== undefined) {
+    if (role === 'tecnico' && (assignedTo !== req.user.id || previousAssignedTo && previousAssignedTo !== req.user.id)) return res.status(403).json({ error: 'No podés tomar un equipo asignado a otro técnico.' })
     const canAssign = ['tecnico', 'admin', 'recepcion'].includes(role)
     if (!canAssign) return res.status(403).json({ error: 'No tenés permiso para asignar un técnico.' })
     if (assignedTo) {
@@ -1025,6 +1035,9 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   const allowed = allowedTransitions(order).includes(status)
   if (!allowed) {
     return res.status(400).json({ error: `No se puede pasar de "${from}" a "${status}".` })
+  }
+  if (role === 'tecnico' && ['en_revision', 'en_reparacion', 'terminado', 'falta_repuestos', 'presupuesto'].includes(status) && order.assignedTo !== req.user.id) {
+    return res.status(403).json({ error: 'Solo el técnico encargado puede realizar esta acción.' })
   }
   if (from === 'presupuesto' && status === 'en_reparacion' && !order.confirmed) {
     return res.status(400).json({ error: 'El cliente debe confirmar el arreglo antes de reparar.' })
@@ -1066,11 +1079,12 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   try {
     const updated = await commit(async (db) => {
       // Reserva la versión leída para evitar dos transiciones simultáneas.
-      const locked = await db.order.updateMany({ where: { id: order.id, status: from, deletedAt: null }, data: { status } })
+      const locked = await db.order.updateMany({ where: { id: order.id, status: from, assignedTo: previousAssignedTo, deletedAt: null }, data: { status } })
       if (!locked.count) throw Object.assign(new Error('La orden cambió en otro equipo. Actualizá e intentá nuevamente.'), { status: 409 })
       const previous = order.status
       let note
-      if (status === 'entregado' && retiro) note = 'Cliente retiró el equipo'
+      if (status === 'presupuesto_rechazado') note = `Presupuesto rechazado: $${order.price}. Importe de retiro: $${rejectionAmount}`
+      else if (status === 'entregado' && retiro) note = 'Cliente retiró el equipo'
       else if (status === 'entregado' && previous === 'presupuesto' && !retiro) note = 'Cliente rechazó el presupuesto'
       else if (status === 'recibido' && previous === 'entregado') note = 'Reingreso por garantía'
       else if (status === 'falta_repuestos') note = 'Esperando repuestos'
@@ -1084,9 +1098,13 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
 
       const data = {
         status,
+        ...(assignedTo !== undefined && assignedTo !== previousAssignedTo ? { acceptedAt: null } : {}),
+        ...(['en_revision', 'en_reparacion'].includes(status) && (!order.acceptedAt || assignedTo !== undefined && assignedTo !== previousAssignedTo) && (from === 'recibido' || assignedTo !== undefined && assignedTo !== previousAssignedTo) ? { acceptedAt: new Date() } : {}),
+        ...(status === 'presupuesto_rechazado' ? { rejectedCharge: rejectionAmount, rejectedAt: new Date(), rejectedBy: req.user.id, confirmed: false, confirmedAt: null, confirmedBy: null } : {}),
         ...(assignedTo !== undefined ? { assignedTo: assignedTo || null } : {}),
         ...(status === 'recibido' && previous === 'entregado' ? {
           warrantyReturn: true, deliveredAt: null, deliveredBy: null,
+          acceptedAt: null, rejectedCharge: null, rejectedAt: null, rejectedBy: null,
           pickupBy: '', pickupName: '', pickupDni: '',
           notified: false, notifiedAt: null, notifiedBy: null,
           confirmed: false, confirmedAt: null, confirmedBy: null,
@@ -1136,11 +1154,17 @@ app.put('/api/orders/:id', auth, async (req, res) => {
   const {
     deviceType, brand, model, pin, noPin, pattern, accessories, conditions,
     technicianNotes, fix, price, issue, note, editNote, deleteNote, isSimpleService,
-    addSparePart, editSparePart, deleteSparePart,
+    addSparePart, editSparePart, deleteSparePart, sendToBudget,
   } = req.body || {}
   const role = req.user.role
   const isAssignedTech = (role === 'tecnico' && order.assignedTo === req.user.id) || role === 'admin'
   const isEmpOrAdmin = ['recepcion', 'admin'].includes(role)
+  if (order.rejectedAt && (fix !== undefined || price !== undefined)) return res.status(400).json({ error: 'El presupuesto rechazado se conserva como referencia y no se puede modificar.' })
+  const expected = req.body?.expected || {}
+  const comparableFields = ['deviceType', 'brand', 'model', 'pin', 'noPin', 'pattern', 'accessories', 'conditions', 'issue', 'fix', 'price']
+  if (typeof expected !== 'object' || Array.isArray(expected) || Object.keys(expected).some((key) => !comparableFields.includes(key))) return res.status(400).json({ error: 'Versión de edición inválida.' })
+  if (Object.entries(expected).some(([key, value]) => JSON.stringify(order[key]) !== JSON.stringify(value))) return res.status(409).json({ error: 'La orden cambió en otro equipo. Conservamos tu borrador; revisá los cambios antes de guardar.' })
+  if (sendToBudget && (!isAssignedTech || fix === undefined || order.status !== 'en_reparacion')) return res.status(400).json({ error: 'Solo el técnico encargado puede enviar un cambio de trabajo a presupuesto.' })
   if (price !== undefined) money(price, 'El presupuesto')
 
   if (fix !== undefined && !isAssignedTech) {
@@ -1178,7 +1202,8 @@ app.put('/api/orders/:id', auth, async (req, res) => {
     const partId = editSparePart?.id
     const entry = (order.spareParts || []).find((p) => p.id === partId)
     if (!entry) return res.status(404).json({ error: 'Repuesto no encontrado.' })
-    if (entry.by !== req.user.id && role !== 'admin') {
+    const receptionStatusOnly = role === 'recepcion' && order.status === 'falta_repuestos' && Object.keys(editSparePart).every((key) => ['id', 'status'].includes(key)) && (entry.status === 'necesario' && editSparePart.status === 'pedido' || entry.status === 'pedido' && editSparePart.status === 'recibido')
+    if (entry.by !== req.user.id && role !== 'admin' && !receptionStatusOnly) {
       return res.status(403).json({ error: 'Solo podés editar tus propios repuestos.' })
     }
   }
@@ -1201,12 +1226,20 @@ app.put('/api/orders/:id', auth, async (req, res) => {
 
   try {
     await commit(async (db) => {
+      if (Object.keys(expected).length || sendToBudget) {
+        const locked = await db.order.updateMany({ where: { id: order.id, deletedAt: null, status: order.status, ...expected, ...(expected.pattern ? { pattern: { equals: expected.pattern } } : {}) }, data: { status: order.status } })
+        if (!locked.count) throw Object.assign(new Error('La orden cambió en otro equipo. Revisá los cambios antes de guardar.'), { status: 409 })
+      }
       const budgetChanged =
         (fix !== undefined && normalizeList(String(fix)) !== normalizeList(String(order.fix || ''))) ||
         (price !== undefined && String(Math.max(0, Number(price) || 0)) !== String(order.price || 0))
 
       const updateData = {}
       const historyCreates = []
+      if (sendToBudget && budgetChanged) {
+        Object.assign(updateData, { status: 'presupuesto', confirmed: false, confirmedAt: null, confirmedBy: null, notified: false, notifiedAt: null, notifiedBy: null })
+        historyCreates.push({ status: 'presupuesto', at: new Date(), by: req.user.id, note: 'Trabajo actualizado; requiere nuevo presupuesto y aprobación' })
+      }
 
       if (deviceType !== undefined) updateData.deviceType = String(deviceType)
       if (brand !== undefined) updateData.brand = String(brand)
@@ -1230,8 +1263,10 @@ app.put('/api/orders/:id', auth, async (req, res) => {
       }
       if (fix !== undefined) {
         updateData.fix = normalizeList(String(fix))
-        historyCreates.push({ status: order.status, at: new Date(), by: req.user.id, note: `Arreglo: ${normalizeList(String(fix)) || 'sin definir'}` })
-        await bumpFixUsage(db, fix)
+        if (updateData.fix !== order.fix) {
+          historyCreates.push({ status: order.status, at: new Date(), by: req.user.id, note: `Arreglo: ${updateData.fix || 'sin definir'}${order.fix ? ` (anterior: ${order.fix})` : ''}` })
+          await bumpFixUsage(db, fix)
+        }
       }
 
       // Notas vía note (append a notesLog)
@@ -1314,7 +1349,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
     res.json({ ok: true })
   } catch (e) {
     logError('Error actualizando orden:', e)
-    res.status(500).json({ error: 'Error al actualizar la orden.' })
+    res.status(e.status || 500).json({ error: e.status ? e.message : 'Error al actualizar la orden.' })
   }
 })
 
@@ -1326,26 +1361,33 @@ app.post('/api/orders/:id/assign', auth, async (req, res) => {
   const canAssign = ['tecnico', 'admin', 'recepcion'].includes(req.user.role)
   if (!canAssign) return res.status(403).json({ error: 'No tenés permiso para asignar un técnico.' })
   const userId = req.body?.userId || null
+  if (req.user.role === 'tecnico' && (userId && userId !== req.user.id || order.assignedTo && order.assignedTo !== req.user.id)) return res.status(403).json({ error: 'Solo podés gestionar tu propia asignación.' })
+  const accepting = req.body?.accept === true
+  if (accepting && (req.user.role !== 'tecnico' || userId !== req.user.id || order.assignedTo !== userId || !['en_revision', 'en_reparacion', 'falta_repuestos'].includes(order.status))) return res.status(403).json({ error: 'Solo el técnico asignado puede aceptar este trabajo.' })
   if (userId) {
     const tech = await prisma.user.findFirst({ where: { id: userId, active: true, role: 'tecnico' } })
     if (!tech) return res.status(400).json({ error: 'Técnico no encontrado.' })
   }
   try {
-    const updated = await commit(async () => {
-      const techName = userId ? (await prisma.user.findUnique({ where: { id: userId } }))?.name || '—' : 'sin técnico'
-      await prisma.order.update({
+    const updated = await commit(async (db) => {
+      const locked = await db.order.updateMany({ where: { id: order.id, assignedTo: order.assignedTo, status: order.status, deletedAt: null }, data: { assignedTo: userId } })
+      if (!locked.count) throw Object.assign(new Error('La asignación cambió en otro equipo.'), { status: 409 })
+      const techName = userId ? (await db.user.findUnique({ where: { id: userId } }))?.name || '—' : 'sin técnico'
+      await db.order.update({
         where: { id: order.id },
         data: {
           assignedTo: userId,
-          history: { create: { status: order.status, at: new Date(), by: req.user.id, note: `Asignado a ${techName}` } },
+          ...(userId !== order.assignedTo ? { acceptedAt: null } : {}),
+          ...(accepting ? { acceptedAt: order.acceptedAt || new Date() } : {}),
+          history: { create: { status: order.status, at: new Date(), by: req.user.id, note: accepting ? 'Trabajo aceptado por el técnico' : `Asignado a ${techName}` } },
         },
       })
-      await audit('assign', 'orders', order.id, req.user.id, `${order.orderNumber} · asignado a ${userId || 'sin técnico'}`)
-      return prisma.order.findUnique({ where: { id: order.id }, include: orderInclude })
-    })
+      await audit('assign', 'orders', order.id, req.user.id, `${order.orderNumber} · ${accepting ? 'aceptación' : 'asignación'}: ${userId || 'sin técnico'}`, db)
+      return db.order.findUnique({ where: { id: order.id }, include: orderInclude })
+    }, { useTransaction: true })
     res.json({ ok: true, order: await decorateOrder(updated) })
-  } catch {
-    res.status(500).json({ error: 'Error al asignar el técnico.' })
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Error al asignar el técnico.' })
   }
 })
 
@@ -1524,7 +1566,7 @@ app.get('/api/metrics', auth, adminOnly, async (req, res) => {
 
   const startOfWeek = toISODate(new Date(now().getFullYear(), now().getMonth(), now().getDate() - ((now().getDay() + 6) % 7)))
   const startOfMonth = toISODate(new Date(now().getFullYear(), now().getMonth(), 1))
-  const sumPrice = (list) => list.reduce((acc, o) => acc + (Number(o.price) || 0), 0)
+  const sumPrice = (list) => list.reduce((acc, o) => acc + (o.rejectedCharge ?? (Number(o.price) || 0)), 0)
   const dateOf = businessDate
   const createdAtDate = (o) => businessDate(o.createdAt)
 

@@ -1,976 +1,204 @@
-// ============================================
-// OrderDetail: detalle completo de una orden, unificado en un solo elemento
-// (mismo esquema visual que el modal del taller y el formulario).
-// ============================================
-import { useNotify } from '../context/notifications.js'
-import { useEffect, useState } from 'react'
+import OrderActionsMenu from '../components/OrderActionsMenu.jsx'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import {
-  ArrowLeft, Printer, Trash2, Check, CheckCircle2, FileText,
-  PackageCheck, Package, RotateCcw, Sticker, Save, Phone, BellRing,
-  Lock, Smartphone, User, X, Pencil, MoreVertical, StickyNote, History, ChevronDown,
-  Tablet, Laptop, Monitor, Gamepad2, HelpCircle, Truck,
-} from 'lucide-react'
+import { Printer, Trash2, Check, PackageCheck, Package, RotateCcw, Sticker, Save, Pencil, StickyNote, History, Truck, Wrench } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useOrderDraft } from '../context/workspace.js'
 import { api } from '../utils/api.js'
 import { loadSession } from '../utils/storage.js'
-import Card from '../components/Card.jsx'
-import Badge from '../components/Badge.jsx'
+import { useNotify } from '../context/notifications.js'
+import Modal from '../components/Modal.jsx'
+import OrderSheet from '../components/OrderSheet.jsx'
 import TechnicianSelect from '../components/TechnicianSelect.jsx'
 import NotesModal from '../components/NotesModal.jsx'
 import SparePartsModal from '../components/SparePartsModal.jsx'
 import PrintOrderPanel from '../components/PrintOrderPanel.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import PickupModal from '../components/PickupModal.jsx'
-import PatternPad, { PatternPreview } from '../components/PatternPad.jsx'
-import {
-  ORDER_STATUS_LABEL,
-  orderStatusTone,
-  formatDate,
-  formatDateTime,
-  formatMoney,
-  titleCase,
-  sentenceCase,
-} from '../utils/helpers.js'
+import PatternPad from '../components/PatternPad.jsx'
+import { ORDER_STATUS_LABEL, ROLE_LABEL, formatDateTime, formatMoney, titleCase } from '../utils/helpers.js'
+import { equipmentChanges, equipmentEditRequest, rebaseEquipmentEdit } from '../utils/orderEdits.js'
 import { COMMON_FIXES } from '../utils/constants.js'
 import { DEVICE_TYPES } from '../../shared/fsm.js'
+import { orderAmounts, receptionQueue } from '../../shared/order-workspace.js'
 
-const DEVICE_TYPE_ICONS = {
-  'Celular': Smartphone,
-  'Tablet': Tablet,
-  'Notebook / PC': Laptop,
-  'Smart TV': Monitor,
-  'Consola': Gamepad2,
-  'Impresora': Printer,
-  'Otro': HelpCircle,
-}
+const equipmentFields = ['deviceType', 'brand', 'model', 'pin', 'noPin', 'pattern', 'accessories', 'conditions', 'issue']
+const equipmentLabels = { deviceType: 'Tipo de dispositivo', brand: 'Marca', model: 'Modelo', pin: 'Contraseña o PIN', noPin: 'Sin contraseña informada', pattern: 'Patrón', accessories: 'Accesorios', conditions: 'Estado del equipo', issue: 'Notas generales' }
+const taskTitles = { presupuestar: 'Presupuestar', avisar: 'Avisar al cliente', respuesta: 'Registrar respuesta', repuestos: 'Gestionar repuestos', retiros: 'Registrar retiro', externos: 'Gestionar externo', simples: 'Finalizar servicio' }
 
-function initials(name) {
-  return String(name || '')
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() || '')
-    .join('')
-}
-
-export default function OrderDetail() {
-  const { id } = useParams()
+export default function OrderDetail({ orderId, embedded = false, technical, onBack }) {
+  const params = useParams()
+  const id = orderId || params.id
   const navigate = useNavigate()
   const { currentUser } = useAuth()
-  const { orders, customers, loading, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote, addSparePart, editSparePart, deleteSparePart, catalogLists } = useData()
-  const [printOpen, setPrintOpen] = useState(false)
-  const [busy, setBusy] = useState(null)
-  const setNotice = useNotify('info')
-
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
-  const [confirm, setConfirm] = useState(null)
-  const [pickupModal, setPickupModal] = useState(null)
-  const [confirmNotify, setConfirmNotify] = useState(false)
-  const [sendExternalModal, setSendExternalModal] = useState(false)
-  const [externalTechDraft, setExternalTechDraft] = useState('')
-
-  // Edición de equipo
-  const [editingEquip, setEditingEquip] = useState(false)
-  const [equipDeviceType, setEquipDeviceType] = useState('Celular')
-  const [equipCustomDeviceType, setEquipCustomDeviceType] = useState('')
-  const [equipBrand, setEquipBrand] = useState('')
-  const [equipModel, setEquipModel] = useState('')
-  const [equipPin, setEquipPin] = useState('')
-  const [equipNoPin, setEquipNoPin] = useState(false)
-  const [equipPattern, setEquipPattern] = useState([])
-  const [equipAccessories, setEquipAccessories] = useState('')
-  const [equipConditions, setEquipConditions] = useState('')
-  const [equipIssue, setEquipIssue] = useState('')
-
-  // Edición de reparación (recepción/admin: técnico + precio)
-  const [editingRepair, setEditingRepair] = useState(false)
-  const [repairPriceText, setRepairPriceText] = useState('')
-
-  // Edición de arreglo (técnico asignado: fix)
-  const [editingFix, setEditingFix] = useState(false)
-  const [fixList, setFixList] = useState([])
-  const [fixCustom, setFixCustom] = useState('')
-
-  // Notas del técnico
-  const [notesModalOpen, setNotesModalOpen] = useState(false)
-  const [sparePartsModalOpen, setSparePartsModalOpen] = useState(false)
-
-  // Orden en modo "override" local: cuando el bootstrap deja de traer una orden
-  // entregada (las entregadas se filtran para no saturar la red), la seguimos
-  // mostrando trayéndola directo por GET /api/orders/:id.
+  const { orders, customers, loading, config, technicians, catalogLists, setOrderStatus, updateOrder, toggleNotified, confirmOrder, printLabel, deleteOrder, editNote, deleteNote, addSparePart, editSparePart, deleteSparePart } = useData()
+  const notify = useNotify('info')
+  const [draft, patchDraft] = useOrderDraft(`order:${id}`)
   const [localOrder, setLocalOrder] = useState(null)
-
-  const order = orders.find((o) => o.id === id) || (localOrder?.id === id ? localOrder : null)
-  const customer = customers.find((c) => c.id === order?.customerId) || order?.customer
-  const role = currentUser?.role
-  const isAdmin = role === 'admin'
-  const isTech = role === 'tecnico'
-  const isCounter = role === 'recepcion' || role === 'admin'
-  const isAssignedTech = isTech && order?.assignedTo === currentUser?.id
-
-  useEffect(() => {
-    const activeOrder = orders.find((o) => o.id === id)
-    if (activeOrder) {
-      // Conserva la última versión mientras bootstrap deja de incluir una orden
-      // entregada. Evita desmontar y reiniciar el modal de retiro al sincronizar.
-      setLocalOrder(activeOrder)
-      return
-    }
-    // Si la orden no está en el bootstrap (las entregadas se filtran para no
-    // saturar la red), la traemos directo por id para poder seguir viéndola.
-    if (!loading && !orders.some((o) => o.id === id)) {
-      let active = true
-      api(`/orders/${id}`)
-        .then((r) => { if (active) setLocalOrder(r.order) })
-        .catch(() => { if (active) setLocalOrder(null) })
-      return () => { active = false }
-    }
-  }, [id, loading, orders])
+  const [fetchError, setFetchError] = useState('')
+  const [retry, setRetry] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
+  const workInput = useRef(null)
+  const priceInput = useRef(null)
+  const equipmentForm = useRef(null)
+  const [windowName, setWindowName] = useState(null)
+  const [taskSnapshot, setTaskSnapshot] = useState(null)
+  const [printOpen, setPrintOpen] = useState(false)
+  const [pickup, setPickup] = useState(null)
+  const [confirmation, setConfirmation] = useState(null)
+  const order = orders.find((item) => item.id === id) || (localOrder?.id === id ? localOrder : null)
+  const customer = customers.find((item) => item.id === order?.customerId) || order?.customer
+  const isAdmin = currentUser.role === 'admin'
+  const counter = ['admin', 'recepcion'].includes(currentUser.role)
+  const own = isAdmin || currentUser.role === 'tecnico' && order?.assignedTo === currentUser.id
+  const technicianView = technical ?? currentUser.role === 'tecnico'
 
   useEffect(() => {
-    if (!order) return
-    setEditingEquip(false)
-    setEditingRepair(false)
-    setEditingFix(false)
-    setNotice('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order?.id])
+    const active = orders.find((item) => item.id === id)
+    if (active) { setLocalOrder(active); return }
+    if (loading) return
+    let live = true
+    setFetchError('')
+    api(`/orders/${id}`).then((result) => { if (live) setLocalOrder(result.order) }).catch((error) => { if (live) { setFetchError(error.message); if (error.status === 404) setLocalOrder(null) } })
+    return () => { live = false }
+  }, [orders, id, loading, retry])
 
-  if (!order) {
-    return (
-      <div className="py-16 text-center">
-        <p className="text-sm text-slate-400">Orden no encontrada.</p>
-        <button
-          onClick={() => navigate(-1)}
-          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
-        >
-          <ArrowLeft size={16} />
-          Volver
-        </button>
-      </div>
-    )
-  }
+  if (!order) return <div className="ws-order ws-empty"><p>{fetchError || 'Cargando orden…'}</p>{fetchError && <button className="ws-button" onClick={() => setRetry((value) => value + 1)}>Reintentar</button>}</div>
 
-  const status = order.status
-
-  const showNotice = (msg, error = false) => setNotice(error ? { type: 'error', text: msg } : typeof msg === 'object' ? msg : { type: 'success', text: msg })
-
-  const doStatus = async (next, extras = {}) => {
-    setBusy(next)
-    setNotice('')
+  const run = async (operation, success, after) => {
+    if (busyRef.current) return { error: 'Hay una operación en curso.' }
+    busyRef.current = true; setBusy(true)
     try {
-      const res = await setOrderStatus(order.id, next, extras)
-      if (res.error) { showNotice(res.error, true); return res }
-      if (next === 'entregado') {
-        showNotice('Equipo entregado.')
-        setLocalOrder(res.order)
-      } else if (next === 'terminado') {
-        showNotice('Equipo marcado como listo. Avisale al cliente.')
-        if (!order.isSimpleService) setPrintOpen(true)
-      } else if (next === 'en_tercero') {
-        showNotice(`Equipo enviado a ${extras.externalTech || 'técnico externo'}.`)
-      } else if (order?.status === 'en_tercero') {
-        showNotice('Equipo recibido de técnico externo.')
-      } else showNotice('Estado actualizado.')
-      return res
-    } finally {
-      setBusy(null)
-    }
+      const result = await operation()
+      if (result?.error) { notify({ type: 'error', text: result.error }); return result }
+      if (result?.order) setLocalOrder(result.order)
+      if (success) notify({ type: 'success', text: success })
+      after?.(result)
+      return result || { error: null }
+    } catch (error) { notify({ type: 'error', text: error.message }); return { error: error.message } }
+    finally { busyRef.current = false; setBusy(false) }
   }
-
-  const handleSendExternal = () => {
-    if (!externalTechDraft) return
-    doStatus('en_tercero', { externalTech: externalTechDraft })
-    setSendExternalModal(false)
-    setExternalTechDraft('')
+  const status = (next, extras = {}, after) => run(() => setOrderStatus(id, next, extras), next === 'entregado' ? 'Equipo entregado.' : 'Estado actualizado.', after)
+  const close = () => setWindowName(null)
+  const bill = orderAmounts(order)
+  const task = receptionQueue(order)
+  const finished = order.status === 'entregado'
+  const workLocked = order.diagnosisType === 'revision' && !order.fix?.trim() && (!order.assignedTo || order.status !== 'en_revision')
+  const taskDraft = { price: String(order.price || ''), basePrice: taskSnapshot?.price ?? order.price, baseFix: taskSnapshot?.fix ?? order.fix, response: 'approve', charge: String(config.revisionFee ?? 0), external: order.externalTech || catalogLists.externalTechnicians[0] || '', ...draft.task }
+  const setTask = (fields) => patchDraft({ task: { ...taskDraft, ...fields } })
+  const openTask = (name = task) => {
+    setTaskSnapshot({ price: order.price, fix: order.fix })
+    if (name === 'retiros') { setPickup({ mode: 'normal' }); return }
+    setWindowName(name)
   }
-
-  const handleRetiro = async (pickup) => {
-    setBusy('retiro')
-    const res = await setOrderStatus(order.id, 'entregado', { retiro: true, pickup })
-    if (res.error) {
-      showNotice(res.error, true)
-    } else {
-      showNotice('Equipo retirado por el cliente.')
-      setLocalOrder(res.order)
-    }
-    setBusy(null)
-    return res
+  const completeTask = async (event) => {
+    event.preventDefault()
+    let result
+    if (windowName === 'presupuestar' || windowName === 'precio') result = await run(() => updateOrder(id, { price: Number(taskDraft.price), expected: { price: taskDraft.basePrice, fix: taskDraft.baseFix } }), 'Presupuesto guardado.')
+    if (windowName === 'avisar') result = await run(() => toggleNotified(id, true), 'Aviso registrado.')
+    if (windowName === 'respuesta') result = taskDraft.response === 'reject' ? await status('presupuesto_rechazado', { rejectedCharge: taskDraft.charge }) : await run(() => confirmOrder(id, true), 'Presupuesto aprobado.')
+    if (windowName === 'simples') result = await status('terminado')
+    if (windowName === 'externos') result = await status(order.status === 'en_tercero' ? 'recibido' : 'en_tercero', order.status === 'en_tercero' ? {} : { externalTech: taskDraft.external })
+    if (result && !result.error) { patchDraft({ task: undefined }); close() }
   }
-
-  const handlePrintPickup = async () => {
-    try {
-      const session = loadSession()
-      const headers = {}
-      if (session?.token) headers.Authorization = `Bearer ${session.token}`
-      const res = await fetch(`/api/orders/${order.id}/pickup-pdf`, { headers })
-      if (!res.ok) throw new Error('No se pudo generar el PDF')
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      window.open(url, '_blank')
-    } catch {
-      showNotice('No se pudo generar la constancia de retiro.', true)
-    }
+  const startWorkEdit = () => { if (!draft.work) patchDraft({ work: { value: order.fix || '', base: order.fix || '' } }) }
+  const saveWork = () => run(() => updateOrder(id, { fix: draft.work.value, expected: { fix: draft.work.base }, sendToBudget: order.status === 'en_reparacion' && draft.work.value !== draft.work.base }), 'Trabajo guardado.', () => patchDraft({ work: undefined }))
+  const startEquipmentEdit = () => {
+    if (!draft.equipment) { const fields = Object.fromEntries(equipmentFields.map((key) => [key, order[key]])); patchDraft({ equipment: { fields, base: fields } }) }
+    setWindowName('equipo')
   }
-
-  const handleGarantia = async () => {
-    setBusy('recibido')
-    const res = await setOrderStatus(order.id, 'recibido')
-    showNotice(res.error ? { type: 'error', text: res.error } : 'Equipo reingresado por garantía.')
-    setBusy(null)
+  const equipment = draft.equipment?.fields || {}
+  const setEquipment = (fields) => patchDraft({ equipment: { ...draft.equipment, fields: { ...equipment, ...fields } } })
+  const currentEquipment = Object.fromEntries(equipmentFields.map((key) => [key, order[key]]))
+  const equipmentConflicts = draft.equipment ? Object.keys(equipmentChanges(draft.equipment.base, equipment)).filter((key) => JSON.stringify(draft.equipment.base[key]) !== JSON.stringify(order[key])) : []
+  const saveEquipment = (event) => {
+    event.preventDefault()
+    const payload = equipmentEditRequest(draft.equipment.base, equipment)
+    for (const key of ['brand', 'model']) if (payload[key] !== undefined) payload[key] = titleCase(payload[key])
+    if (payload.deviceType !== undefined && !DEVICE_TYPES.includes(payload.deviceType)) payload.deviceType = titleCase(payload.deviceType)
+    if (!Object.keys(payload.expected).length) { patchDraft({ equipment: undefined }); close(); return }
+    run(() => updateOrder(id, payload), 'Equipo actualizado.', () => { patchDraft({ equipment: undefined }); close() })
   }
-
-  const handleNotified = async () => {
-    setBusy('notified')
-    const res = await toggleNotified(order.id, !order.notified)
-    showNotice(res.error ? { type: 'error', text: res.error } : order.notified ? 'Cliente desmarcado como avisado.' : 'Cliente marcado como avisado.')
-    setBusy(null)
+  const printPickup = () => run(async () => {
+    const session = loadSession()
+    const response = await fetch(`/api/orders/${id}/pickup-pdf`, { headers: session?.token ? { Authorization: `Bearer ${session.token}` } : {} })
+    if (!response.ok) throw new Error('No se pudo generar la constancia de retiro.')
+    const url = URL.createObjectURL(await response.blob()); window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 60000)
+  })
+  const confirm = (title, operation) => { setConfirmation({ title, operation }) }
+  const menu = [
+    { label: 'Imprimir orden', Icon: Printer, action: () => setPrintOpen(true) },
+    { label: 'Imprimir etiqueta', Icon: Sticker, action: () => run(() => printLabel(id), 'Etiqueta enviada a la cola de impresión.') },
+    ...(currentUser.role === 'tecnico' && own && !order.acceptedAt && ['en_revision', 'en_reparacion', 'falta_repuestos'].includes(order.status) ? [{ label: 'Aceptar trabajo', Icon: Check, action: () => run(() => api(`/orders/${id}/assign`, { method: 'POST', body: { userId: currentUser.id, accept: true } }), 'Trabajo aceptado.') }] : []),
+    ...(counter && !finished ? [{ label: 'Editar datos del equipo', Icon: Pencil, action: startEquipmentEdit }, ...(!order.rejectedAt ? [{ label: 'Editar presupuesto', Icon: Pencil, action: () => openTask('precio') }] : []), { label: 'Asignar técnico', Icon: Wrench, action: () => setWindowName('tecnico') }, { label: 'Retirar equipo', Icon: PackageCheck, action: () => setPickup({ mode: 'normal', early: true }) }, { label: 'Retirar sin orden', Icon: PackageCheck, action: () => setPickup({ mode: 'sin-orden', early: true }) }] : []),
+    ...(counter && order.status === 'recibido' ? [{ label: 'Enviar a tercero', Icon: Truck, action: () => openTask('externos') }] : []),
+    ...(counter && ['presupuesto', 'terminado'].includes(order.status) && order.notified ? [{ label: 'Desmarcar aviso', Icon: RotateCcw, action: () => confirm('Desmarcar aviso', () => run(() => toggleNotified(id, false), 'Aviso desmarcado.')) }] : []),
+    ...(counter && order.confirmed && order.status === 'presupuesto' ? [{ label: 'Desmarcar aprobación', Icon: RotateCcw, action: () => confirm('Desmarcar aprobación', () => run(() => confirmOrder(id, false), 'Aprobación desmarcada.')) }] : []),
+    ...(own && order.status === 'en_reparacion' ? [{ label: 'Esperar repuestos', Icon: Package, action: () => confirm('Esperar repuestos', () => status('falta_repuestos')) }] : []),
+    ...(own && order.status === 'terminado' ? [{ label: 'Volver a reparación', Icon: Wrench, action: () => confirm('Volver a reparación', () => status('en_reparacion')) }] : []),
+    ...(counter && finished ? [{ label: 'Reimprimir constancia', Icon: Printer, action: printPickup }, { label: 'Reingresar por garantía', Icon: RotateCcw, action: () => confirm('Reingresar por garantía', () => status('recibido')) }] : []),
+    ...(isAdmin ? [{ label: 'Eliminar', Icon: Trash2, action: () => confirm('Mover orden a la papelera', () => run(() => deleteOrder(id), 'Orden eliminada.', () => navigate('/ordenes'))) }] : []),
+  ]
+  let technicalAction
+  if (technicianView) {
+    const canTake = !order.assignedTo || own
+    if (['admin', 'tecnico'].includes(currentUser.role) && canTake && (order.status === 'recibido' || order.status === 'presupuesto' && order.confirmed)) technicalAction = { label: order.diagnosisType === 'revision' && order.status === 'recibido' ? 'Tomar e iniciar revisión' : 'Iniciar reparación', next: order.diagnosisType === 'revision' && order.status === 'recibido' ? 'en_revision' : 'en_reparacion' }
+    if (own && order.status === 'en_revision') technicalAction = { label: 'Enviar a recepción', next: 'presupuesto', disabled: !order.fix?.trim() }
+    if (own && order.status === 'en_reparacion') technicalAction = { label: 'Finalizar reparación', next: 'terminado' }
+    if (own && order.status === 'falta_repuestos') technicalAction = { label: 'Retomar reparación', next: 'en_reparacion' }
   }
-
-  const handleConfirm = async () => {
-    setBusy('confirm')
-    const res = await confirmOrder(order.id, !order.confirmed)
-    showNotice(res.error ? { type: 'error', text: res.error } : order.confirmed ? 'Confirmación desmarcada.' : 'Arreglo confirmado por el cliente.')
-    setBusy(null)
+  const advanceWork = () => {
+    if (!technicalAction) return
+    const assignedTo = order.assignedTo || (currentUser.role === 'tecnico' ? currentUser.id : draft.technician)
+    if (!assignedTo) { setWindowName('tomar'); return }
+    status(technicalAction.next, order.assignedTo ? {} : { assignedTo }, () => { patchDraft({ technician: undefined }); close(); if (technicalAction.next === 'terminado') setPrintOpen(true) })
   }
+  const notes = order.notesLog || []
+  const parts = order.sparePartsLog || []
+  const workEvent = [...(order.history || [])].reverse().find((entry) => entry.note?.startsWith('Arreglo:'))
+  const workAuthor = workEvent?.byName || (order.diagnosisType === 'visible' && order.fix ? order.receivedByName : null)
+  const workRole = workEvent?.user?.role || (!workEvent ? order.received?.role : null)
+  const footer = <>{!technicianView && <section className="ws-finance" aria-label="Importes"><p>{order.rejectedCharge != null ? 'Importe de retiro' : 'Presupuesto'} <strong>{bill.total || order.rejectedCharge === 0 ? formatMoney(bill.total) : 'a definir'}</strong></p><p>Seña <strong>{formatMoney(order.advance)}</strong> · {(order.price || order.rejectedCharge != null) && bill.credit ? 'Saldo a favor' : 'Saldo'} <strong>{bill.total || order.rejectedCharge === 0 ? formatMoney(Math.abs(bill.balance)) : '—'}</strong></p>{order.rejectedCharge != null && <p>Presupuesto rechazado <strong>{formatMoney(order.price)}</strong></p>}</section>}{draft.work ? <button className="ws-button primary" disabled={busy} onClick={saveWork}><Save size={16} />Guardar</button> : technicianView ? technicalAction ? <button className="ws-button primary" disabled={busy || technicalAction.disabled} onClick={advanceWork}>{technicalAction.label}</button> : <p>{finished ? 'Equipo entregado' : order.status === 'presupuesto' ? order.confirmed ? 'Presupuesto aprobado' : 'Presupuesto pendiente' : 'Sin acciones pendientes'}</p> : counter && task ? <button className="ws-button primary" disabled={busy} onClick={() => openTask()}>{taskTitles[task]}</button> : <p>Sin pendientes de recepción</p>}</>
 
-  const handleDelete = async () => {
-    const res = await deleteOrder(order.id)
-    if (!res.error) navigate('/ordenes')
-    else showNotice(res.error, true)
-  }
-
-  // ─── Equipo: abrir/cerrar edición ───
-  const startEditEquip = () => {
-    setEquipDeviceType(order.deviceType || 'Celular')
-    setEquipCustomDeviceType(!['Celular','Tablet','Notebook / PC','Smart TV','Consola','Impresora','Otro'].includes(order.deviceType) ? order.deviceType : '')
-    setEquipBrand(order.brand || '')
-    setEquipModel(order.model || '')
-    setEquipPin(order.pin || '')
-    setEquipNoPin(!!order.noPin)
-    setEquipPattern(order.pattern || [])
-    setEquipAccessories(order.accessories || '')
-    setEquipConditions(order.conditions || '')
-    setEquipIssue(order.issue || '')
-    setEditingEquip(true)
-  }
-  const cancelEditEquip = () => setEditingEquip(false)
-  const saveEditEquip = async () => {
-    setBusy('equip')
-    const res = await updateOrder(order.id, {
-      deviceType: equipDeviceType === 'Otro' ? titleCase(equipCustomDeviceType.trim()) || 'Otro' : equipDeviceType, brand: titleCase(equipBrand), model: titleCase(equipModel), pin: equipNoPin ? '' : equipPin, noPin: equipNoPin,
-      pattern: equipPattern, accessories: equipAccessories, conditions: equipConditions, issue: equipIssue,
-    })
-    if (!res.error) { setEditingEquip(false); showNotice('Equipo actualizado.') } else showNotice(res.error, true)
-    setBusy(null)
-  }
-
-  // ─── Reparación: abrir/cerrar edición (recepción/admin: técnico + precio) ───
-  const startEditRepair = () => {
-    setRepairPriceText(order.price ? String(order.price) : '')
-    setEditingRepair(true)
-  }
-  const cancelEditRepair = () => setEditingRepair(false)
-  const saveEditRepair = async () => {
-    setBusy('repair')
-    const res = await updateOrder(order.id, { price: Number(repairPriceText) || 0 })
-    if (!res.error) { setEditingRepair(false); showNotice('Reparación actualizada.') } else showNotice(res.error, true)
-    setBusy(null)
-  }
-
-  // ─── Arreglo: abrir/cerrar edición (técnico asignado: fix) ───
-  const startEditFix = () => {
-    setFixList((order.fix || '').split(',').map((s) => s.trim()).filter(Boolean))
-    setFixCustom('')
-    setEditingFix(true)
-  }
-  const cancelEditFix = () => setEditingFix(false)
-  const toggleFix = (name) => setFixList((l) => l.includes(name) ? l.filter((f) => f !== name) : l.length >= 8 ? l : [...l, name])
-  const addCustomFix = () => {
-    const v = fixCustom.trim()
-    if (!v) return
-    setFixList((l) => (l.includes(v) || l.length >= 8 ? l : [...l, v]))
-    setFixCustom('')
-  }
-  const saveEditFix = async () => {
-    const fix = [...fixList, fixCustom.trim()].filter(Boolean).map((f) => titleCase(f)).join(', ')
-    setBusy('fix')
-    const res = await updateOrder(order.id, { fix })
-    if (!res.error) { setEditingFix(false); showNotice('Tipo de reparación actualizado.') } else showNotice(res.error, true)
-    setBusy(null)
-  }
-
-  // ─── Notas del técnico: guardar (append) ───
-  const saveNote = async (text) => {
-    setBusy('note')
-    const res = await updateOrder(order.id, { note: text })
-    if (!res.error) showNotice('Nota guardada.'); else showNotice(res.error, true)
-    setBusy(null)
-  }
-
-  const btnPrimary =
-    'inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50'
-  const btnGhost =
-    'inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-  const chipReadonly =
-    'inline-flex items-center rounded-full border border-slate-400 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200'
-  const chipSelected =
-    'inline-flex items-center gap-1 rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700'
-  const chipIdle =
-    'inline-flex items-center gap-1 rounded-full border border-slate-400 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
-  const inputCls =
-    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
-  const labelCls = 'mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400'
-  const sectionHead =
-    'border-b border-slate-200 pb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-700'
-
-  const accessories = (order.accessories || '').split(',').map((a) => a.trim()).filter(Boolean)
-  const conditions = (order.conditions || '').split(',').map((c) => c.trim()).filter(Boolean)
-  const displayedFixes = (order.fix || '').split(',').map((f) => f.trim()).filter(Boolean)
-  const notesLog = order.notesLog || []
-  const sparePartsLog = order.sparePartsLog || []
-
-  const menuItems = []
-  if (isCounter && status !== 'entregado') {
-    menuItems.push({ key: 'retiro', label: 'Retirar equipo', Icon: PackageCheck, onClick: () => { setMenuOpen(false); setPickupModal({ onConfirm: handleRetiro }) } })
-    menuItems.push({ key: 'retiro-sin-orden', label: 'Retirar sin orden', Icon: PackageCheck, onClick: () => { setMenuOpen(false); setPickupModal({ onConfirm: handleRetiro, mode: 'sin-orden' }) } })
-  }
-  if (isCounter && status === 'recibido') {
-    menuItems.push({ key: 'enviar-tercero', label: 'Enviar a tercero', Icon: Truck, onClick: () => { setMenuOpen(false); setSendExternalModal(true) } })
-  }
-  if (isCounter && status === 'entregado') {
-    menuItems.push({ key: 'reprint-pickup', label: 'Reimprimir constancia', Icon: Printer, onClick: () => { setMenuOpen(false); handlePrintPickup() } })
-  }
-  if (isAdmin) {
-    menuItems.push({ key: 'delete', label: 'Eliminar', Icon: Trash2, danger: true, onClick: () => { setMenuOpen(false); setConfirm({ title: 'Eliminar orden', message: `¿Mover la orden ${order.orderNumber} a la papelera? Podés recuperarla durante 30 días.`, onConfirm: handleDelete, danger: true }) } })
-  }
-
-  return (
-    <div className="space-y-6">
-      <button
-        onClick={() => navigate(-1)}
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-      >
-        <ArrowLeft size={16} />
-        Volver
-      </button>
-
-      <Card className="overflow-hidden">
-        {/* Encabezado */}
-        <div className="px-6 py-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{order.orderNumber}</h1>
-                <Badge tone={order.diagnosisType === 'revision' ? 'primary' : 'slate'}>
-                  {order.diagnosisType === 'revision' ? 'Revisión' : 'Reparación'}
-                </Badge>
-                <Badge tone={orderStatusTone(status)}>{ORDER_STATUS_LABEL[status]}</Badge>
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                <span>Recibió {titleCase(order.receivedByName)} · {formatDate(order.createdAt)}</span>
-                {['presupuesto', 'terminado'].includes(status) && (
-                  <span className="flex items-center gap-1">
-                    {order.notified ? <CheckCircle2 size={13} className="text-emerald-500" /> : <BellRing size={13} className="text-amber-500" />}
-                    {order.notified ? 'Avisado' : 'Sin avisar'}
-                  </span>
-                )}
-                {order.confirmed && (
-                  <span className="flex items-center gap-1">
-                    <CheckCircle2 size={13} className="text-emerald-500" />
-                    Confirmado
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                onClick={async () => {
-                  const res = await printLabel(order.id)
-                  showNotice(res.error ? { type: 'error', text: res.error } : 'Etiqueta enviada a la cola de impresión.')
-                }}
-                className={`${btnGhost} !px-3 !py-1.5 !text-xs`}
-              >
-                <Sticker size={14} />
-                Imprimir etiqueta
-              </button>
-              <button onClick={() => setPrintOpen(true)} className={`${btnPrimary} !px-3 !py-1.5 !text-xs`}>
-                <Printer size={14} />
-                Imprimir orden
-              </button>
-              {menuItems.length > 0 && (
-                <div className="relative">
-                  <button onClick={() => setMenuOpen(!menuOpen)} className={btnGhost}><MoreVertical size={14} /></button>
-                  {menuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                      <div className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                        {menuItems.map((item) => (
-                          <button key={item.key} onClick={item.onClick} disabled={busy === item.key}
-                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-700 ${item.danger ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
-                            <item.Icon size={14} /> {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Cliente */}
-        <section>
-          <div className="px-6 pb-2 pt-5">
-            <p className={sectionHead}>Cliente</p>
-          </div>
-          <div className="px-6 py-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-600 dark:bg-primary-500/15 dark:text-primary-400">
-                  {initials(customer?.fullName || order.customerName)}
-                </div>
-                <div className="min-w-0">
-                  <p className="flex items-center gap-1.5 truncate text-lg font-bold text-slate-900 dark:text-white">
-                    <User size={16} className="shrink-0 text-slate-400" />
-                    <button
-                      onClick={() => navigate(`/clientes/${customer?.id}`)}
-                      className="truncate text-primary-600 transition hover:text-primary-700 dark:text-primary-400"
-                    >
-                      {customer?.fullName || order.customerName}
-                    </button>
-                  </p>
-                  <p className="flex items-center gap-1.5 text-base text-slate-500 dark:text-slate-400">
-                    <Phone size={14} className="shrink-0" />
-                    {[customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' · ') || '—'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1 text-sm">
-                <p className="text-slate-600 dark:text-slate-300">
-                  <span className="text-slate-400">DNI:</span> {customer?.dni || '—'}
-                </p>
-                <p className="text-slate-600 dark:text-slate-300">
-                  <span className="text-slate-400">Domicilio:</span> {customer?.address || '—'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Detalles del equipo */}
-        <section>
-          <div className="px-6 pb-2 pt-5">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 dark:border-slate-700">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Detalles del equipo</p>
-              {isCounter && status !== 'entregado' && !editingEquip && (
-                <button onClick={startEditEquip} className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10">
-                  <Pencil size={12} /> Editar
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="px-6 py-4">
-            {editingEquip ? (
-              <div className="space-y-4">
-                <div>
-                  <label className={labelCls}>Tipo de dispositivo</label>
-                  <div className="flex items-center gap-2 pt-1">
-                    {DEVICE_TYPES.map((t) => {
-                      const Icon = DEVICE_TYPE_ICONS[t]
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          title={t}
-                          onClick={() => setEquipDeviceType(t)}
-                          className={`inline-flex h-11 w-11 items-center justify-center rounded-lg border transition ${
-                            equipDeviceType === t
-                              ? 'border-primary-600 bg-primary-50 text-primary-600 dark:border-primary-400 dark:bg-primary-500/15 dark:text-primary-400'
-                              : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                          }`}
-                        >
-                          <Icon size={20} />
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {equipDeviceType === 'Otro' && (
-                    <input
-                      type="text"
-                      value={equipCustomDeviceType}
-                      onChange={(e) => setEquipCustomDeviceType(e.target.value)}
-                      placeholder="Describí el tipo de dispositivo..."
-                      className={`${inputCls} mt-2`}
-                      autoFocus
-                    />
-                  )}
-                </div>
-                {equipDeviceType !== 'Otro' && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className={labelCls}>Marca</label>
-                    <input value={equipBrand} onChange={(e) => setEquipBrand(e.target.value)} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Modelo</label>
-                    <input value={equipModel} onChange={(e) => setEquipModel(e.target.value)} className={inputCls} />
-                  </div>
-                </div>
-                )}
-                {equipDeviceType !== 'Otro' && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className={labelCls}>PIN / contraseña</label>
-                    <input value={equipPin} onChange={(e) => setEquipPin(e.target.value)} disabled={equipNoPin} className={`${inputCls} ${equipNoPin ? 'opacity-50 cursor-not-allowed' : ''}`} />
-                    <label className="flex items-center gap-2 mt-1 text-sm text-slate-500 dark:text-slate-400 select-none cursor-pointer">
-                      <input type="checkbox" checked={equipNoPin} onChange={(e) => { setEquipNoPin(e.target.checked); if (e.target.checked) setEquipPin('') }} className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
-                      El cliente no dejó contraseña
-                    </label>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Patrón de desbloqueo</label>
-                    <PatternPad key={equipNoPin ? 'nopin' : 'pin'} value={equipPattern} onChange={setEquipPattern} disabled={equipNoPin} />
-                  </div>
-                </div>
-                )}
-                <div>
-                  <label className={labelCls}>Accesorios (separados por coma)</label>
-                  <input value={equipAccessories} onChange={(e) => setEquipAccessories(e.target.value)} className={inputCls} placeholder="Funda, cargador..." />
-                </div>
-                <div>
-                  <label className={labelCls}>Estado del equipo (separados por coma)</label>
-                  <input value={equipConditions} onChange={(e) => setEquipConditions(e.target.value)} className={inputCls} placeholder="Roto, golpeado..." />
-                </div>
-                <div>
-                  <label className={labelCls}>Chequeos / notas generales</label>
-                  <textarea value={equipIssue} onChange={(e) => setEquipIssue(e.target.value)} maxLength={200} rows={3} className={inputCls} />
-                  <p className="mt-1 text-right text-xs text-slate-400">{equipIssue.length} / 200</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={saveEditEquip} disabled={busy === 'equip'} className={btnPrimary}><Save size={14} /> Guardar</button>
-                  <button onClick={cancelEditEquip} className={btnGhost}>Cancelar</button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div className="flex items-center gap-2 pb-2 text-base">
-                  {(() => { const Icon = DEVICE_TYPE_ICONS[order.deviceType] || Smartphone; return <Icon size={15} className="shrink-0 text-slate-400" /> })()}
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{order.deviceType || 'Celular'}</span>
-                  <span className="truncate font-semibold text-slate-900 dark:text-white">
-                    {titleCase(order.brand)} {titleCase(order.model)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  <div className="flex flex-col gap-4">
-                    <div>
-                      <label className={labelCls}>Con accesorios</label>
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {accessories.length > 0 ? (
-                          accessories.map((a) => <span key={a} className={chipReadonly}>{a}</span>)
-                        ) : <span className="text-sm text-slate-400">Sin accesorios</span>}
-                      </div>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Estado del equipo</label>
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {conditions.length > 0 ? (
-                          conditions.map((c) => <span key={c} className={chipReadonly}>{c}</span>)
-                        ) : <span className="text-sm text-slate-400">Sin estado registrado</span>}
-                      </div>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Chequeos / notas generales</label>
-                      <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {order.issue ? sentenceCase(order.issue) : '—'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-4">
-                    <div>
-                      <label className={labelCls}>PIN / contraseña del equipo</label>
-                      {order.pin ? (
-                        <p className="inline-block rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                          {order.pin}
-                        </p>
-                      ) : order.noPin ? (
-                        <p className="text-sm italic text-slate-400">El cliente no proporcionó contraseña</p>
-                      ) : (
-                        <p className="text-sm text-slate-400">Sin PIN / contraseña</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className={labelCls}>Patrón de desbloqueo</label>
-                      <div className="flex items-center py-1">
-                        {order.pattern?.length > 0 ? (
-                          <PatternPreview value={order.pattern} size={140} className="h-full w-auto" />
-                        ) : (
-                          <span className="text-sm text-slate-400">Sin patrón configurado</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Reparación */}
-        <section>
-          <div className="px-6 pb-2 pt-5">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 dark:border-slate-700">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Reparación</p>
-              {isCounter && status !== 'entregado' && !editingRepair && (
-                <button onClick={startEditRepair} className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10">
-                  <Pencil size={12} /> Editar
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="px-6 py-4">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div className="space-y-3">
-                <div>
-                  <label className={labelCls}>Técnico encargado</label>
-                  {editingRepair ? (
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      {isAdmin && <TechnicianSelect order={order} onChanged={() => showNotice('Técnico asignado.')} />}
-                      <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {order.assignedToName || '—'}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {order.assignedToName || '—'}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <label className={labelCls}>Tipo de reparación</label>
-                    {isAssignedTech && !editingFix && ['en_revision', 'presupuesto'].includes(status) && (
-                      <button onClick={startEditFix} className="inline-flex items-center gap-1 rounded-lg border border-primary-200 px-2 py-0.5 text-xs font-semibold text-primary-600 transition hover:bg-primary-50 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10">
-                        <Pencil size={12} /> Editar arreglo
-                      </button>
-                    )}
-                  </div>
-                  {editingFix ? (
-                    <div className="space-y-3 pt-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {COMMON_FIXES.map((f) => (
-                          <button key={f} type="button" onClick={() => toggleFix(f)} className={fixList.includes(f) ? chipSelected : chipIdle}>{f}</button>
-                        ))}
-                        {fixList.filter((f) => !COMMON_FIXES.includes(f)).map((f) => (
-                          <span key={f} className={chipReadonly}>
-                            {f}
-                            <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500"><X size={12} /></button>
-                          </span>
-                        ))}
-                        <span className="flex items-center gap-1">
-                          <input type="text" value={fixCustom} onChange={(e) => setFixCustom(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomFix() } }}
-                            placeholder="Otro arreglo..." className={`${inputCls} !w-36`} />
-                          <button type="button" onClick={addCustomFix} className={chipIdle}><Check size={13} /></button>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={saveEditFix} disabled={busy === 'fix'} className={btnPrimary}><Save size={14} /> Guardar</button>
-                        <button onClick={cancelEditFix} className={btnGhost}>Cancelar</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      {displayedFixes.length > 0 ? (
-                        displayedFixes.map((f) => <span key={f} className={chipReadonly}>{f}</span>)
-                      ) : <span className="text-sm text-slate-400">Sin definir</span>}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className={labelCls}>{editingRepair ? 'Presupuesto ($)' : 'Presupuesto'}</label>
-                  {editingRepair ? (
-                    <input type="number" min="0" step="0.01" value={repairPriceText} onChange={(e) => setRepairPriceText(e.target.value)} className={inputCls} />
-                  ) : (
-                    <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {formatMoney(order.price)}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className={labelCls}>Seña recibida</label>
-                  <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    {formatMoney(order.advance)}
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label className={labelCls}>Notas del técnico</label>
-                <div className="mt-1">
-                  <button
-                    onClick={() => setNotesModalOpen(true)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                      isAssignedTech
-                        ? 'bg-primary-600 text-white hover:bg-primary-700'
-                        : 'border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    {!isAssignedTech ? <History size={15} /> : <StickyNote size={15} />}
-                    {!isAssignedTech ? `Ver notas${notesLog.length > 0 ? ` (${notesLog.length})` : ''}` : `Agregar nota${notesLog.length > 0 ? ` (${notesLog.length})` : ''}`}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className={labelCls}>Repuestos</label>
-                <div className="mt-1">
-                  <button
-                    onClick={() => setSparePartsModalOpen(true)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                      isAssignedTech
-                        ? 'bg-amber-500 text-white hover:bg-amber-600'
-                        : 'border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <Package size={15} />
-                    Repuestos{sparePartsLog.length > 0 ? ` (${sparePartsLog.length})` : ''}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-              {editingRepair && (
-                <div className="mt-4 flex items-center gap-2">
-                  <button onClick={saveEditRepair} disabled={busy === 'repair'} className={btnPrimary}><Save size={14} /> Guardar</button>
-                  <button onClick={cancelEditRepair} className={btnGhost}>Cancelar</button>
-                </div>
-              )}
-
-              {/* Acciones según el estado */}
-            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
-
-              {/* === ACCIONES RECEPCIÓN / ADMIN === */}
-              {isCounter && status === 'recibido' && order.isSimpleService && (
-                <button key="terminar" onClick={() => setConfirm({ title: 'Terminar servicio', message: '¿Marcar este servicio como terminado?', onConfirm: () => doStatus('terminado') })} disabled={busy === 'terminado'} className={btnPrimary}>
-                  <CheckCircle2 size={16} />
-                  Terminar
-                </button>
-              )}
-              {isCounter && status === 'presupuesto' && !order.notified && !order.price && (
-                <p key="no-price" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-                  <FileText size={14} className="text-amber-500" />
-                  Cargá el presupuesto antes de avisar al cliente.
-                </p>
-              )}
-              {isCounter && status === 'presupuesto' && !order.notified && order.price && (
-                <button key="avisar" onClick={() => setConfirmNotify(true)} disabled={busy === 'notified'} className={btnPrimary}>
-                  <BellRing size={16} />
-                  Avisar al cliente
-                </button>
-              )}
-              {isCounter && status === 'presupuesto' && order.notified && !order.confirmed && (
-                <div key="confirm" className="flex flex-wrap items-center gap-2">
-                  <button onClick={() => setConfirm({ title: 'Confirmar', message: '¿El cliente aprobó el presupuesto?', onConfirm: handleConfirm })} disabled={busy === 'confirm'} className={btnPrimary}>
-                    <CheckCircle2 size={16} />
-                    Aceptó
-                  </button>
-                  <button onClick={() => setPickupModal({ onConfirm: (pickup) => doStatus('entregado', { pickup }) })} disabled={busy === 'entregado'} className={btnGhost}>
-                    Rechazó
-                  </button>
-                </div>
-              )}
-              {isCounter && status === 'presupuesto' && order.notified && order.confirmed && (
-                <p key="wait" className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-                  <Lock size={14} className="text-amber-500" />
-                  Esperando reparación del técnico...
-                </p>
-              )}
-              {isCounter && status === 'terminado' && !order.notified && (
-                <button key="avisar2" onClick={() => setConfirmNotify(true)} disabled={busy === 'notified'} className={btnPrimary}>
-                  <BellRing size={16} />
-                  Avisar al cliente
-                </button>
-              )}
-              {isCounter && status === 'terminado' && order.notified && (
-                <button key="entregar" onClick={() => setPickupModal({ onConfirm: (pickup) => doStatus('entregado', { pickup }) })} disabled={busy === 'entregado'} className={btnPrimary}>
-                  <PackageCheck size={16} />
-                  Entregar al cliente
-                </button>
-              )}
-              {isCounter && status === 'entregado' && (
-                <button onClick={() => setConfirm({ title: 'Garantía', message: '¿Reingresar el equipo por garantía? Aparecerá en Entrantes.', onConfirm: handleGarantia })} disabled={busy === 'recibido'} className={btnGhost}>
-                  <RotateCcw size={16} />
-                  Reingresar por garantía
-                </button>
-              )}
-            </div>
-
-            {/* === INFORMACIÓN TÉCNICO EXTERNO === */}
-            {order.externalTech && order.status === 'en_tercero' && (
-              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-500/10">
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                  Enviado a técnico externo: <strong>{order.externalTech}</strong>
-                  {order.externalSentAt && ` — ${formatDateTime(order.externalSentAt)}`}
-                </p>
-              </div>
-            )}
-            {order.externalTech && order.externalReturnAt && order.status !== 'en_tercero' && (
-              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Último técnico externo: <strong>{order.externalTech}</strong> — devuelto el {formatDateTime(order.externalReturnAt)}
-                </p>
-              </div>
-            )}
-
-            {/* === ACCIONES RECIBIR DE TERCERO === */}
-            {isCounter && order.status === 'en_tercero' && (
-              <div className="mt-4 flex justify-end">
-                <button onClick={() => setConfirm({
-                  title: 'Recibir de tercero',
-                  message: '¿Confirmar que el equipo llegó del técnico externo?',
-                  onConfirm: () => doStatus('recibido'),
-                })} disabled={busy === 'recibido'} className={btnPrimary}>
-                  <RotateCcw size={16} />
-                  Recibir de tercero
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Separador */}
-        <div className="mx-6 border-t border-slate-200 dark:border-slate-700" />
-
-        {/* Historial */}
-        {(order.history || []).length > 0 && (
-          <section className="mb-8">
-            <div className="px-6 pb-2 pt-5">
-              <button
-                onClick={() => setShowHistory((s) => !s)}
-                className="flex w-full items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                <History size={13} />
-                Historial
-                <ChevronDown size={13} className={`ml-1 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
-                <span className="ml-auto text-slate-300 dark:text-slate-600">{order.history.length} eventos</span>
-              </button>
-            </div>
-            {showHistory && (
-            <div className="px-6 py-4">
-              {(order.history || []).map((h, idx) => {
-                const isLast = idx === (order.history || []).length - 1
-                return (
-                  <div key={idx} className="flex gap-3">
-                    <div className="flex w-3 flex-col items-center">
-                      <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                        isLast ? 'bg-primary-500' : 'bg-slate-300 dark:bg-slate-600'
-                      }`} />
-                      <div className={`w-px flex-1 ${isLast ? 'bg-transparent' : 'bg-slate-200 dark:bg-slate-700'}`} />
-                    </div>
-                    <div className={`min-w-0 flex-1 -mt-2 ${isLast ? '' : 'pb-5'}`}>
-                      <p className={`text-sm font-semibold ${isLast ? 'text-primary-600 dark:text-primary-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                        {ORDER_STATUS_LABEL[h.status] || h.status}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                        {h.byName || '—'} · {formatDateTime(h.at)}
-                      </p>
-                      {h.note && (
-                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{h.note}</p>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            )}
-          </section>
-        )}
-      </Card>
-
-      <PrintOrderPanel
-        open={printOpen}
-        order={order}
-        customer={customer}
-        onClose={() => setPrintOpen(false)}
-      />
-      <ConfirmModal
-        open={!!confirm}
-        onClose={() => setConfirm(null)}
-        onConfirm={confirm?.onConfirm}
-        title={confirm?.title}
-        message={confirm?.message}
-        danger={confirm?.danger}
-      />
-      <ConfirmModal
-        open={confirmNotify}
-        onClose={() => setConfirmNotify(false)}
-        onConfirm={() => { setConfirmNotify(false); handleNotified() }}
-        title="Avisar al cliente"
-        message="¿Marcar al cliente como avisado?"
-      />
-      <PickupModal
-        open={!!pickupModal}
-        onClose={() => setPickupModal(null)}
-        onConfirm={pickupModal?.onConfirm}
-        order={order}
-        mode={pickupModal?.mode || 'normal'}
-      />
-
-      {/* Modal de notas del técnico */}
-      <NotesModal
-        open={notesModalOpen}
-        onClose={() => setNotesModalOpen(false)}
-        notesLog={notesLog}
-        isAssignedTech={isAssignedTech}
-        currentUser={currentUser}
-        onSave={saveNote}
-        onEdit={(noteId, text) => editNote(order.id, noteId, text)}
-        onDelete={(noteId) => deleteNote(order.id, noteId)}
-      />
-
-      {/* Modal de repuestos */}
-      <SparePartsModal
-        open={sparePartsModalOpen}
-        onClose={() => setSparePartsModalOpen(false)}
-        sparePartsLog={sparePartsLog}
-        isAssignedTech={isAssignedTech}
-        currentUser={currentUser}
-        onSave={(name, quantity) => addSparePart(order.id, name, quantity)}
-        onEdit={(partId, data) => editSparePart(order.id, partId, data)}
-        onDelete={(partId) => deleteSparePart(order.id, partId)}
-      />
-
-      {/* Modal enviar a técnico externo */}
-      {sendExternalModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Enviar a técnico externo</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Seleccioná el técnico externo al que se enviará el equipo.</p>
-            <select
-              value={externalTechDraft}
-              onChange={(e) => setExternalTechDraft(e.target.value)}
-              className="mt-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-            >
-              <option value="">Seleccionar...</option>
-              {(catalogLists?.externalTechnicians || []).map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-            <div className="mt-5 flex justify-end gap-2">
-              <button onClick={() => { setSendExternalModal(false); setExternalTechDraft('') }} className={btnGhost}>Cancelar</button>
-              <button onClick={handleSendExternal} disabled={!externalTechDraft || busy} className={btnPrimary}>Enviar</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+  const sheet = <OrderSheet order={order} customer={customer} technical={technicianView} onBack={onBack || (() => navigate(-1))} footer={footer} tools={<>
+    <button onClick={() => setWindowName('notas')}><StickyNote size={16} />Notas {notes.length}</button><button onClick={() => setWindowName('repuestos')}><Package size={16} />Repuestos {parts.length}</button><button onClick={() => setWindowName('historial')}><History size={16} />Historial {order.history?.length || 0}</button>
+    <OrderActionsMenu>{menu.map(({ label, Icon, action }) => <button key={label} role="menuitem" disabled={busy} onClick={action}><Icon size={16} />{label}</button>)}</OrderActionsMenu>
+  </>}>
+    <section><h3>Notas generales</h3><p className="ws-read-value">{order.issue || 'Sin notas generales'}</p></section>
+    <section className="ws-work"><div className="ws-section-heading"><h3>{order.rejectedCharge != null ? 'Trabajo propuesto · sin realizar' : ['terminado', 'entregado'].includes(order.status) ? 'Trabajo realizado' : 'Trabajo a realizar'}</h3>{own && !workLocked && !finished && order.status !== 'presupuesto_rechazado' && !draft.work && <button onClick={startWorkEdit}><Pencil size={14} /> Editar</button>}</div>
+      {draft.work ? <div className="ws-form">{draft.work.base !== order.fix && <div className="ws-conflict"><p>Trabajo actual: {order.fix || 'Trabajo por definir'}</p><button className="ws-button" disabled={busy} onClick={() => { patchDraft({ work: { ...draft.work, base: order.fix } }); workInput.current?.focus() }}>Conservar mi edición</button></div>}<label>Trabajo a realizar<textarea ref={workInput} value={draft.work.value} onChange={(event) => patchDraft({ work: { ...draft.work, value: event.target.value } })} /></label><div className="flex flex-wrap gap-2">{(catalogLists.fixes.length ? catalogLists.fixes : COMMON_FIXES).map((fix) => <button key={fix} className="ws-button" onClick={() => { const list = draft.work.value.split(',').map((value) => value.trim()).filter(Boolean); patchDraft({ work: { ...draft.work, value: (list.includes(fix) ? list.filter((value) => value !== fix) : list.length < 8 ? [...list, fix] : list).join(', ') } }) }}>{fix}</button>)}</div><div className="ws-buttons"><button className="ws-button" onClick={() => { if (window.confirm('¿Descartar los cambios del trabajo?')) patchDraft({ work: undefined }) }}>Cancelar</button><button className="ws-button primary" disabled={busy} onClick={saveWork}>Guardar</button></div></div> : <p className="ws-read-value">{order.fix || 'Trabajo por definir'}</p>}
+      {workAuthor && <p className="ws-work-origin">Por {workAuthor}{workRole && ` · ${ROLE_LABEL[workRole]}`}</p>}
+      {order.status === 'falta_repuestos' && <p className="ws-read-value">{parts.filter((part) => part.status !== 'recibido').map((part) => `${part.name} (${part.quantity})`).join(' · ') || 'Espera de repuestos'}</p>}
+    </section>
+    {order.technicianNotes && !notes.some((note) => note.text === order.technicianNotes) && <section><h3>Notas del técnico</h3><p className="ws-read-value">{order.technicianNotes}</p></section>}
+  </OrderSheet>
+  return <>{embedded ? sheet : <div className="ws-standalone">{sheet}</div>}
+    <PrintOrderPanel open={printOpen} order={order} onClose={() => setPrintOpen(false)} />
+    <NotesModal open={windowName === 'notas'} onClose={close} notesLog={notes} isAssignedTech={own && !finished} currentUser={currentUser} draft={draft.notes} onDraftChange={(value) => patchDraft({ notes: value })} onSave={(text) => run(() => updateOrder(id, { note: text }), 'Nota guardada.')} onEdit={(noteId, text) => run(() => editNote(id, noteId, text))} onDelete={(noteId) => run(() => deleteNote(id, noteId))} />
+    <SparePartsModal open={windowName === 'repuestos' && !(counter && !own)} onClose={close} sparePartsLog={parts} isAssignedTech={own && !finished} currentUser={currentUser} draft={draft.parts} onDraftChange={(value) => patchDraft({ parts: value })} onSave={(name, quantity) => run(() => addSparePart(id, name, quantity), 'Repuesto agregado.')} onEdit={(partId, fields) => run(() => editSparePart(id, partId, fields))} onDelete={(partId) => run(() => deleteSparePart(id, partId))} />
+    <PickupModal open={!!pickup} onClose={() => setPickup(null)} order={order} mode={pickup?.mode || 'normal'} draft={draft.pickup} onDraftChange={(value) => patchDraft({ pickup: value })} onConfirm={(fields) => status('entregado', { ...(pickup?.early ? { retiro: true } : {}), pickup: fields }, () => patchDraft({ pickup: undefined, task: undefined }))} />
+    <ConfirmModal open={!!confirmation} onClose={() => setConfirmation(null)} title={confirmation?.title} message="¿Confirmar esta acción?" onConfirm={confirmation?.operation} />
+    <Modal open={windowName === 'historial'} onClose={close} title={`Historial · ${order.orderNumber}`}><ol className="ws-history">{[...(order.history || [])].reverse().map((entry, index) => <li key={entry.id || index}><p>{ORDER_STATUS_LABEL[entry.status]}</p><small>{entry.byName} · {formatDateTime(entry.at)}</small>{entry.note && <p>{entry.note}</p>}</li>)}</ol></Modal>
+    <Modal open={windowName === 'equipo'} onClose={close} title={`Editar equipo · ${order.orderNumber}`} maxWidth="max-w-2xl"><form className="ws-form" onSubmit={saveEquipment} ref={equipmentForm}>
+      {equipmentConflicts.length > 0 && <div className="ws-conflict"><p>Datos actuales</p><dl>{equipmentConflicts.map((key) => <div key={key}><dt>{equipmentLabels[key]}</dt><dd>{Array.isArray(order[key]) ? order[key].map((value) => value + 1).join(', ') : typeof order[key] === 'boolean' ? order[key] ? 'Sí' : 'No' : order[key] || '—'}</dd></div>)}</dl><button type="button" className="ws-button" disabled={busy} onClick={() => { patchDraft({ equipment: rebaseEquipmentEdit(draft.equipment, currentEquipment) }); equipmentForm.current?.querySelector('input:not(:disabled)')?.focus() }}>Conservar mi edición</button></div>}
+      <label>Tipo de dispositivo<input list="device-types" required value={equipment.deviceType || ''} onChange={(event) => setEquipment({ deviceType: event.target.value })} /><datalist id="device-types">{DEVICE_TYPES.map((type) => <option key={type}>{type}</option>)}</datalist></label>
+      {['brand', 'model', 'pin'].map((key) => <label key={key}>{({ brand: 'Marca', model: 'Modelo', pin: 'Contraseña o PIN' })[key]}<input required={key !== 'pin'} disabled={key === 'pin' && equipment.noPin} value={equipment[key] || ''} onChange={(event) => setEquipment({ [key]: event.target.value })} /></label>)}
+      <label className="ws-checkbox"><input type="checkbox" checked={equipment.noPin || false} onChange={(event) => setEquipment({ noPin: event.target.checked, ...(event.target.checked ? { pin: '', pattern: [] } : {}) })} />El cliente no dejó contraseña</label><div><label>Patrón</label><PatternPad value={equipment.pattern || []} onChange={(pattern) => setEquipment({ pattern })} disabled={equipment.noPin} /></div>
+      {['accessories', 'conditions', 'issue'].map((key) => <label key={key}>{({ accessories: 'Accesorios', conditions: 'Estado del equipo', issue: 'Notas generales' })[key]}<textarea maxLength={key === 'issue' ? 200 : undefined} value={equipment[key] || ''} onChange={(event) => setEquipment({ [key]: event.target.value })} /></label>)}
+      <div className="ws-buttons"><button type="button" className="ws-button" onClick={close}>Cerrar</button><button className="ws-button primary" disabled={busy}>Guardar</button></div>
+    </form></Modal>
+    <Modal open={['tecnico', 'tomar'].includes(windowName)} onClose={close} title={windowName === 'tomar' ? 'Iniciar trabajo' : 'Asignar técnico'}>{windowName === 'tomar' ? <div className="ws-form"><label>Técnico<select value={draft.technician || ''} onChange={(event) => patchDraft({ technician: event.target.value || undefined })}><option value="">Seleccionar…</option>{technicians.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><div className="ws-buttons"><button className="ws-button primary" disabled={busy || !draft.technician} onClick={advanceWork}>Iniciar</button></div></div> : <TechnicianSelect order={order} />}</Modal>
+    <Modal open={['presupuestar', 'precio', 'avisar', 'respuesta', 'simples', 'externos'].includes(windowName)} onClose={close} title={`${taskTitles[windowName] || 'Presupuesto'} · ${order.orderNumber}`}><form className="ws-form" onSubmit={completeTask}>
+      {['presupuestar', 'precio'].includes(windowName) && (taskDraft.basePrice !== order.price || taskDraft.baseFix !== order.fix) && <div className="ws-conflict"><p>Presupuesto actual: {formatMoney(order.price)}</p><p>Trabajo actual: {order.fix || 'Trabajo por definir'}</p><button type="button" className="ws-button" disabled={busy} onClick={() => { setTask({ basePrice: order.price, baseFix: order.fix }); priceInput.current?.focus() }}>Conservar mi importe</button></div>}
+      {['presupuestar', 'precio'].includes(windowName) && <label>Presupuesto ($)<input ref={priceInput} type="number" required min={windowName === 'presupuestar' ? '0.01' : '0'} step="0.01" value={taskDraft.price ?? ''} onChange={(event) => setTask({ price: event.target.value })} /></label>}
+      {windowName === 'avisar' && <><p>{order.status === 'terminado' ? 'Equipo listo para retirar' : 'Presupuesto'} · {formatMoney(bill.total)}</p><p>{customer?.phone || 'Sin teléfono registrado'}</p></>}
+      {windowName === 'respuesta' && <><label>Respuesta<select value={taskDraft.response || 'approve'} onChange={(event) => setTask({ response: event.target.value })}><option value="approve">Aprobó el presupuesto</option><option value="reject">Rechazó el presupuesto</option></select></label>{taskDraft.response === 'reject' && <label>Importe de retiro ($)<input type="number" required min="0" step="0.01" value={taskDraft.charge ?? ''} onChange={(event) => setTask({ charge: event.target.value })} /></label>}</>}
+      {windowName === 'externos' && (order.status === 'en_tercero' ? <p>Registrar regreso de {order.externalTech}</p> : <label>Técnico externo<select required value={taskDraft.external || ''} onChange={(event) => setTask({ external: event.target.value })}><option value="">Seleccionar…</option>{catalogLists.externalTechnicians.map((name) => <option key={name}>{name}</option>)}</select></label>)}
+      {windowName === 'simples' && <p>Presupuesto {formatMoney(order.price)} · Seña {formatMoney(order.advance)}</p>}
+      <div className="ws-buttons"><button type="button" className="ws-button" disabled={busy} onClick={close}>Cerrar</button><button className="ws-button primary" disabled={busy}><Check size={16} />{['presupuestar', 'precio'].includes(windowName) ? 'Guardar presupuesto' : windowName === 'avisar' ? 'Registrar aviso' : windowName === 'externos' ? order.status === 'en_tercero' ? 'Registrar regreso' : 'Enviar' : windowName === 'simples' ? 'Finalizar servicio' : 'Guardar respuesta'}</button></div>
+    </form></Modal>
+    <Modal open={windowName === 'repuestosGestion' || windowName === 'repuestos' && counter && !own} onClose={close} title={`Gestionar repuestos · ${order.orderNumber}`}><div className="ws-form">{parts.length ? parts.map((part) => <div key={part.id}><p>{part.name} · {part.quantity}</p><div className="ws-buttons"><span>{part.status}</span>{part.status !== 'recibido' && <button className="ws-button" disabled={busy} onClick={() => run(() => editSparePart(id, part.id, { status: part.status === 'necesario' ? 'pedido' : 'recibido' }), 'Repuesto actualizado.')}>{part.status === 'necesario' ? 'Registrar pedido' : 'Registrar llegada'}</button>}</div></div>) : <p>Sin repuestos registrados</p>}</div></Modal>
+  </>
 }

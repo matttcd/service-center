@@ -1,3 +1,5 @@
+import { useFormDraft } from '../utils/useFormDraft.js'
+import { useOrderDraft } from '../context/workspace.js'
 // ============================================
 // OrderForm: alta de una orden de servicio (un solo dispositivo)
 // Marcas/modelos con badges del catálogo + "otro" (búsqueda y alta en BD).
@@ -40,35 +42,38 @@ const FIX_FALLBACK = ['Cambio de pantalla', 'Cambio de módulo', 'Cambio de bate
 
 export default function OrderForm({ open, onClose, onCreated }) {
   const { customers, catalog, addCustomer, addOrder, addCatalogBrand, addCatalogModel, catalogLists } = useData()
-  const [custQuery, setCustQuery] = useState('')
-  const [selectedCustomerId, setSelectedCustomerId] = useState('')
-  const [newCustomer, setNewCustomer] = useState({ fullName: '', dni: '', phone: '', address: '' })
-  const [brand, setBrand] = useState('')
-  const [model, setModel] = useState('')
-  const [deviceType, setDeviceType] = useState('')
-  const [customDeviceType, setCustomDeviceType] = useState('')
+  const [orderDraft, patchOrderDraft] = useOrderDraft('new-order')
+  const [requestId, setRequestId] = useState(() => orderDraft.requestId || uid())
+  const [fields, patchFields, clearFields] = useFormDraft({ custQuery: '', selectedCustomerId: '', newCustomer: { fullName: '', dni: '', phone: '', address: '' }, brand: '', model: '', deviceType: '', customDeviceType: '', accessories: [], customAccessory: '', conditions: [], pin: '', noPin: false, pattern: [], diagnosisType: 'visible', isSimpleService: false, isExternal: false, issue: '', fixes: [], customFix: '', price: '', advance: '' }, orderDraft.values, (values) => patchOrderDraft({ values, requestId: values ? requestId : undefined }))
+  const { custQuery, selectedCustomerId, newCustomer, brand, model, deviceType, customDeviceType, accessories, customAccessory, conditions, pin, noPin, pattern, diagnosisType, isSimpleService, isExternal, issue, fixes, customFix, price, advance } = fields
+  const setCustQuery = (value) => patchFields({ custQuery: typeof value === 'function' ? value(fields.custQuery) : value })
+  const setSelectedCustomerId = (value) => patchFields({ selectedCustomerId: typeof value === 'function' ? value(fields.selectedCustomerId) : value })
+  const setNewCustomer = (value) => patchFields({ newCustomer: typeof value === 'function' ? value(fields.newCustomer) : value })
+  const setBrand = (value) => patchFields({ brand: typeof value === 'function' ? value(fields.brand) : value })
+  const setModel = (value) => patchFields({ model: typeof value === 'function' ? value(fields.model) : value })
+  const setDeviceType = (value) => patchFields({ deviceType: typeof value === 'function' ? value(fields.deviceType) : value })
+  const setCustomDeviceType = (value) => patchFields({ customDeviceType: typeof value === 'function' ? value(fields.customDeviceType) : value })
+  const setAccessories = (value) => patchFields({ accessories: typeof value === 'function' ? value(fields.accessories) : value })
+  const setCustomAccessory = (value) => patchFields({ customAccessory: typeof value === 'function' ? value(fields.customAccessory) : value })
+  const setConditions = (value) => patchFields({ conditions: typeof value === 'function' ? value(fields.conditions) : value })
+  const setPin = (value) => patchFields({ pin: typeof value === 'function' ? value(fields.pin) : value })
+  const setNoPin = (value) => patchFields({ noPin: typeof value === 'function' ? value(fields.noPin) : value })
+  const setPattern = (value) => patchFields({ pattern: typeof value === 'function' ? value(fields.pattern) : value })
+  const setDiagnosisType = (value) => patchFields({ diagnosisType: typeof value === 'function' ? value(fields.diagnosisType) : value })
+  const setIsSimpleService = (value) => patchFields({ isSimpleService: typeof value === 'function' ? value(fields.isSimpleService) : value })
+  const setIsExternal = (value) => patchFields({ isExternal: typeof value === 'function' ? value(fields.isExternal) : value })
+  const setIssue = (value) => patchFields({ issue: typeof value === 'function' ? value(fields.issue) : value })
+  const setFixes = (value) => patchFields({ fixes: typeof value === 'function' ? value(fields.fixes) : value })
+  const setCustomFix = (value) => patchFields({ customFix: typeof value === 'function' ? value(fields.customFix) : value })
+  const setPrice = (value) => patchFields({ price: typeof value === 'function' ? value(fields.price) : value })
+  const setAdvance = (value) => patchFields({ advance: typeof value === 'function' ? value(fields.advance) : value })
   const [picker, setPicker] = useState(null) // null | 'brand' | 'model'
   const [pickerQuery, setPickerQuery] = useState('')
   const [pickerNew, setPickerNew] = useState('')
-  const [accessories, setAccessories] = useState([])
-  const [customAccessory, setCustomAccessory] = useState('')
-  const [conditions, setConditions] = useState([])
-  const [pin, setPin] = useState('')
-  const [noPin, setNoPin] = useState(false)
-  const [pattern, setPattern] = useState([])
-  const [diagnosisType, setDiagnosisType] = useState('visible') // 'visible' | 'revision'
-  const [isSimpleService, setIsSimpleService] = useState(false)
-  const [isExternal, setIsExternal] = useState(false)
-  const [issue, setIssue] = useState('')
-  const [fixes, setFixes] = useState([])
-  const [customFix, setCustomFix] = useState('')
-  const [price, setPrice] = useState('')
-  const [advance, setAdvance] = useState('')
   const setError = useNotify('error')
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [filteredCatalog, setFilteredCatalog] = useState(null)
-  const [requestId, setRequestId] = useState(uid)
 
   const accessoryOptions = catalogLists?.accessories?.length ? catalogLists.accessories : ACCESSORY_FALLBACK
   const conditionOptions = catalogLists?.conditions?.length ? catalogLists.conditions : CONDITION_FALLBACK
@@ -76,34 +81,8 @@ export default function OrderForm({ open, onClose, onCreated }) {
 
   useEffect(() => {
     if (!open) return
-    setCustQuery('')
-    setSelectedCustomerId('')
-    setNewCustomer({ fullName: '', dni: '', phone: '', address: '' })
-    setBrand('')
-    setModel('')
-    setDeviceType('')
-    setCustomDeviceType('')
-    setPicker(null)
-    setPickerQuery('')
-    setPickerNew('')
-    setAccessories([])
-    setCustomAccessory('')
-    setConditions([])
-    setPin('')
-    setNoPin(false)
-setPattern([])
-    setDiagnosisType('visible')
-    setIsSimpleService(false)
-    setIsExternal(false)
-    setRequestId(uid())
-setIssue('')
-    setFixes([])
-    setCustomFix('')
-    setPrice('')
-    setAdvance('')
     setError('')
     setConfirming(false)
-    setFilteredCatalog({ brands: [], models: [] })
   }, [open, setError])
 
   // Fetch de marcas y modelos cuando cambia el tipo de dispositivo.
@@ -187,13 +166,7 @@ setIssue('')
     fixes.length > 0 ||
     !!customFix
 
-  const requestClose = () => {
-    if (dirty && !confirming) {
-      setConfirming(true)
-      return
-    }
-    onClose()
-  }
+  const requestClose = () => { if (!saving) onClose() }
 
   const toggleAccessory = (name) =>
     setAccessories((list) => {
@@ -299,6 +272,8 @@ setIssue('')
         advance: Number(advance) || 0,
       })
       if (res.error) throw new Error(res.error)
+      clearFields()
+      setRequestId(uid())
       onClose()
       onCreated(res.order)
     } catch (err) {
@@ -317,11 +292,12 @@ setIssue('')
       {confirming ? (
         <ConfirmDiscard
           onStay={() => setConfirming(false)}
-          onDiscard={onClose}
+          onDiscard={() => { clearFields(); setRequestId(uid()); onClose() }}
           message="La orden todavía no se guardó. Si salís, los datos que escribiste se perderán."
         />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
+          {dirty && <div className="flex justify-end"><button type="button" onClick={() => setConfirming(true)} className="text-sm text-slate-500">Descartar borrador</button></div>}
           {/* Cliente */}
           <div>
             <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">

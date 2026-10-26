@@ -10,11 +10,12 @@ import {
 } from '../../shared/fsm.js'
 
 describe('FSM - Estados y Etiquetas', () => {
-  it('debe contener los 8 estados oficiales del sistema', () => {
+  it('debe contener los 9 estados oficiales del sistema', () => {
     expect(ORDER_STATUSES).toEqual([
       'recibido',
       'en_revision',
       'presupuesto',
+      'presupuesto_rechazado',
       'en_reparacion',
       'falta_repuestos',
       'terminado',
@@ -66,7 +67,7 @@ describe('FSM - allowedTransitions', () => {
 
   it('desde presupuesto solo puede pasar a en_reparacion, entregado o en_tercero', () => {
     const order = { status: 'presupuesto' }
-    expect(allowedTransitions(order)).toEqual(['en_reparacion', 'entregado', 'en_tercero'])
+    expect(allowedTransitions(order)).toEqual(['en_reparacion', 'entregado', 'en_tercero', 'presupuesto_rechazado'])
   })
 
   it('desde en_reparacion puede avanzar a terminado, retroceder a presupuesto o pausar por repuestos', () => {

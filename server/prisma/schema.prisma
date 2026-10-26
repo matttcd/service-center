@@ -74,6 +74,10 @@ model Order {
   status          String   @default("recibido")
   technicianNotes String   @default("")
   assignedTo      String?
+  acceptedAt      DateTime?
+  rejectedCharge  Float?
+  rejectedAt      DateTime?
+  rejectedBy      String?
   repairedBy      String?
   receivedBy      String?
   createdAt       DateTime @default(now())

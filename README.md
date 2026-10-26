@@ -6,6 +6,8 @@ La evaluación del código y los pasos pendientes están en [docs/REVISION.md](d
 
 El despliegue principal en preparación es el instalador Windows completo, con impresión nativa y sin bridge separado. Instalación, actualización y recuperación: [docs/WINDOWS.md](docs/WINDOWS.md). Los comandos Docker siguientes conservan la alternativa existente.
 
+La integración del diseño de Taller y Recepción se revisa con una base de pruebas independiente: [recorridos, migración y revisión local](docs/INTEGRACION-UI.md). No modifica la instalación Windows existente.
+
 ## Estado de verificación
 
 Verificado con PostgreSQL 16 real y Chrome: alta de clientes y órdenes, roles, presupuestos, reparaciones, derivación externa, entrega, garantía, comprobantes PDF, CSV de varias páginas, papelera, cambio de contraseña y recuperación desde un respaldo cifrado. También se probó adoptar una base anterior creada con `db push` conservando sus datos. Las pruebas usan bases descartables y secretos nuevos.
@@ -60,7 +62,7 @@ Los datos viven en el volumen `service-center_pgdata`. Los respaldos viven en `s
 
 El arranque usa `prisma migrate deploy`, con una migración inicial versionada. Si encuentra una base anterior creada con `db push`, solo adopta esa base cuando su estructura coincide con el esquema esperado. Si hay diferencias, se detiene para revisarlas; no ejecuta reset ni acepta pérdida de datos. Se verificó esta adopción sobre una base descartable; antes de actualizar una instalación existente, repetirla con una copia de esa base. Un volumen de respaldos creado por una versión que corría como root también requiere revisar sus permisos para el usuario 1000 del backend actual.
 
-Para futuros cambios: crear y revisar migraciones en una base de desarrollo; no usar `prisma db push --accept-data-loss` en producción. Si se agregan migraciones después de la inicial, revisar también la lógica de adopción de bases antiguas de `server/start-production.js`.
+Para futuros cambios: crear y revisar migraciones en una base de desarrollo; no usar `prisma db push --accept-data-loss` en producción. Si se agregan migraciones después de la inicial, revisar también la lógica de adopción y recuperación de bases antiguas de `server/migrations.js`.
 
 ## Respaldos y recuperación
 

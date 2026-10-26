@@ -2,7 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomBytes } from 'node:crypto'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
+import { encryptBackup, postgresConnection } from '../server/backup-crypto.js'
+import bcrypt from '../server/node_modules/bcryptjs/index.js'
 import net from 'node:net'
 import { once } from 'node:events'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -78,9 +80,10 @@ try {
   await database.start()
   await database.createDatabase('service_center_verify')
   const env = {
-    ...process.env, NODE_ENV: 'production', PORT: '8181', HOST: '127.0.0.1',
+    ...process.env, SERVICE_CENTER_ENV_FILE: '', NODE_ENV: 'production', PORT: '8181', HOST: '127.0.0.1',
     DATABASE_URL: `postgresql://verify:${pgPassword}@127.0.0.1:${pgPort}/service_center_verify`,
     DATA_DIR: path.join(temporary, 'data'),
+    BROWSER_DATA_DIR: path.join(temporary, 'browser'),
     BACKUP_EXPORT_DIR: path.join(temporary, 'exported'),
     JWT_SECRET: randomBytes(48).toString('hex'),
     BACKUP_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
@@ -97,22 +100,41 @@ try {
   await stopServer()
   await database.createDatabase('service_center_verify_legacy')
   const legacyEnv = { ...env, DATABASE_URL: env.DATABASE_URL.replace('/service_center_verify', '/service_center_verify_legacy') }
-  await run(process.execPath, ['server/node_modules/prisma/build/index.js', 'db', 'push', '--schema', 'server/prisma/schema.prisma', '--skip-generate'], legacyEnv)
+  await run(process.execPath, ['server/node_modules/prisma/build/index.js', 'db', 'push', '--schema', 'server/prisma/baseline.prisma', '--skip-generate'], legacyEnv)
   const legacy = database.getPgClient('service_center_verify_legacy')
   await legacy.connect()
   try {
     await legacy.query('INSERT INTO "Customer" (id, "fullName") VALUES ($1, $2)', ['legacy-customer', 'Cliente anterior'])
+    await legacy.query('INSERT INTO "Order" (id, "orderNumber", "customerId", brand, model, pin, pattern, price, advance) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', ['legacy-order', 'OS0001', 'legacy-customer', 'Samsung', 'A15', '1234', [0, 1, 2], 15000, 5000])
+    await legacy.query('INSERT INTO "User" (id, name, email, password, role, active) VALUES ($1,$2,$3,$4,$5,$6)', ['legacy-admin', 'Admin anterior', 'admin@local.com', bcrypt.hashSync('Legacy-verification-2026', 4), 'admin', true])
+    const oldDump = execFileSync(dump, ['--format=custom'], { env: { ...process.env, ...postgresConnection(legacyEnv.DATABASE_URL) }, windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
+    const oldBackupName = `db-${Date.now()}.dump`
+    fs.writeFileSync(path.join(env.DATA_DIR, 'backups', oldBackupName), encryptBackup(oldDump, env.BACKUP_ENCRYPTION_KEY))
     await startServer(legacyEnv)
     const migration = await legacy.query('SELECT COUNT(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL')
     const customer = await legacy.query('SELECT "fullName" FROM "Customer" WHERE id = $1', ['legacy-customer'])
-    if (Number(migration.rows[0].count) !== 1 || customer.rows[0]?.fullName !== 'Cliente anterior') throw new Error('La adopción de la base anterior no conservó los datos.')
+    if (Number(migration.rows[0].count) !== 2 || customer.rows[0]?.fullName !== 'Cliente anterior') throw new Error('La adopción de la base anterior no conservó los datos.')
+    const preserved = (await legacy.query('SELECT pin, pattern, price, advance, "acceptedAt", "rejectedCharge" FROM "Order" WHERE id = $1', ['legacy-order'])).rows[0]
+    if (preserved.pin !== '1234' || preserved.price !== 15000 || preserved.advance !== 5000 || JSON.stringify(preserved.pattern) !== '[0,1,2]' || preserved.acceptedAt !== null || preserved.rejectedCharge !== null) throw new Error('La migración alteró una orden anterior.')
     console.log('✓ Adopción de base anterior creada con db push: migración registrada y cliente conservado.')
+    const login = await fetch('http://127.0.0.1:8181/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@local.com', password: 'Legacy-verification-2026' }) }).then((response) => response.json())
+    const restored = await fetch(`http://127.0.0.1:8181/api/backups/${oldBackupName}/restore`, { method: 'POST', headers: { Authorization: `Bearer ${login.token}` } })
+    if (!restored.ok) throw new Error(`Falló restauración de copia anterior: ${JSON.stringify(await restored.json())}`)
+    const afterRestore = (await legacy.query('SELECT pin, price, "acceptedAt", "rejectedCharge" FROM "Order" WHERE id = $1', ['legacy-order'])).rows[0]
+    if (afterRestore.pin !== '1234' || afterRestore.price !== 15000 || afterRestore.acceptedAt !== null || afterRestore.rejectedCharge !== null) throw new Error('La recuperación de una copia anterior perdió datos.')
+    console.log('✓ Restauración cifrada de un esquema anterior: migraciones aplicadas y datos conservados.')
+
   } finally { await legacy.end() }
   if (process.argv.includes('--ui')) {
     await stopServer()
     await database.createDatabase('service_center_verify_ui')
     await startServer({ ...env, DATABASE_URL: env.DATABASE_URL.replace('/service_center_verify', '/service_center_verify_ui') })
     await run(process.execPath, ['tests/integration/browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
+    await run(process.execPath, ['tests/integration/workspace-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
+  }
+  if (process.argv.includes('--keep-open') && process.argv.includes('--ui')) {
+    console.log('Sistema de revisión: http://127.0.0.1:8181 — base de pruebas aislada. Ctrl+C cierra y elimina este entorno.')
+    await new Promise((resolve) => { process.once('SIGINT', resolve); process.once('SIGTERM', resolve) })
   }
   console.log('Verificación real completada. Base y procesos descartables se cerrarán ahora.')
 } catch (err) {

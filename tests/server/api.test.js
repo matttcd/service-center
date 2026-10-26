@@ -49,6 +49,55 @@ beforeEach(async () => {
 })
 
 describe('API HTTP: contratos y seguridad (persistencia simulada)', () => {
+  it('el cambio de trabajo vuelve a presupuesto dentro de la misma transacción', async () => {
+    db.order.findUnique.mockResolvedValue(order({ status: 'en_reparacion', price: 45000, confirmed: true, notified: true }))
+    expect((await put('/orders/order-1', { fix: 'Carga', expected: { fix: 'Limpieza' }, sendToBudget: true })).status).toBe(200)
+    expect(db.order.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ fix: 'Carga', status: 'presupuesto', confirmed: false, notified: false }) }))
+  })
+  it('un técnico no toma trabajos ajenos ni acepta en nombre de otro', async () => {
+    user.role = 'tecnico'
+    db.order.findUnique.mockResolvedValue(order({ assignedTo: 'other', status: 'en_revision' }))
+    expect((await post('/orders/order-1/status', { status: 'presupuesto', assignedTo: user.id })).status).toBe(403)
+    expect((await post('/orders/order-1/assign', { userId: user.id, accept: true })).status).toBe(403)
+    expect(db.order.update).not.toHaveBeenCalled()
+  })
+  it('registra rechazo sin entregar y conserva presupuesto y seña', async () => {
+    db.order.findUnique.mockResolvedValue(order({ status: 'presupuesto', price: 45000, advance: 5000, notified: true }))
+    const result = await post('/orders/order-1/status', { status: 'presupuesto_rechazado', rejectedCharge: 0 })
+    expect(result.status).toBe(200)
+    const data = db.order.update.mock.calls.at(-1)[0].data
+    expect(data).toMatchObject({ status: 'presupuesto_rechazado', rejectedCharge: 0, rejectedBy: 'admin' })
+    expect(data.rejectedAt).toBeInstanceOf(Date)
+    expect(data).not.toHaveProperty('price')
+    expect(data).not.toHaveProperty('advance')
+    expect(data).not.toHaveProperty('deliveredAt')
+  })
+  it('rechaza importes vacíos, negativos y permisos del técnico', async () => {
+    db.order.findUnique.mockResolvedValue(order({ status: 'presupuesto', price: 45000, notified: true }))
+    for (const value of [undefined, null, '', -1, 'abc', true, []]) expect((await post('/orders/order-1/status', { status: 'presupuesto_rechazado', rejectedCharge: value })).status).toBe(400)
+    user.role = 'tecnico'
+    expect((await post('/orders/order-1/status', { status: 'presupuesto_rechazado', rejectedCharge: 0 })).status).toBe(403)
+    expect(db.order.update).not.toHaveBeenCalled()
+  })
+  it('conserva el presupuesto original después del rechazo', async () => {
+    db.order.findUnique.mockResolvedValue(order({ status: 'presupuesto_rechazado', price: 45000, rejectedAt: new Date(), rejectedCharge: 3500 }))
+    expect((await put('/orders/order-1', { price: 0 })).status).toBe(400)
+    expect((await put('/orders/order-1', { fix: 'Otro trabajo' })).status).toBe(400)
+    expect(db.order.update).not.toHaveBeenCalled()
+  })
+  it('protege los borradores ante una versión distinta y conflictos transaccionales', async () => {
+    expect((await put('/orders/order-1', { fix: 'Nuevo', expected: { fix: 'Anterior' } })).status).toBe(409)
+    expect(db.order.update).not.toHaveBeenCalled()
+    db.order.updateMany.mockResolvedValue({ count: 0 })
+    expect((await put('/orders/order-1', { fix: 'Nuevo', expected: { fix: 'Limpieza' } })).status).toBe(409)
+    expect(db.order.update).not.toHaveBeenCalled()
+  })
+  it('recepción gestiona el estado del repuesto sin editar la solicitud técnica', async () => {
+    user.role = 'recepcion'
+    db.order.findUnique.mockResolvedValue(order({ status: 'falta_repuestos', spareParts: [{ id: 'part-1', by: 'tech', status: 'necesario' }] }))
+    expect((await put('/orders/order-1', { editSparePart: { id: 'part-1', status: 'pedido' } })).status).toBe(200)
+    expect((await put('/orders/order-1', { editSparePart: { id: 'part-1', name: 'Otro', status: 'pedido' } })).status).toBe(403)
+  })
   it('solo administradores pueden configurar impresoras o enviar pruebas', async () => {
     user.role = 'tecnico'
     expect((await request('/printing/config')).status).toBe(403)

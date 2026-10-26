@@ -1,0 +1,4 @@
+ALTER TABLE "Order" ADD COLUMN "acceptedAt" TIMESTAMP(3),
+ADD COLUMN "rejectedCharge" DOUBLE PRECISION,
+ADD COLUMN "rejectedAt" TIMESTAMP(3),
+ADD COLUMN "rejectedBy" TEXT;

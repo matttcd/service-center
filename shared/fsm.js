@@ -8,6 +8,7 @@ export const ORDER_STATUSES = [
   'recibido',
   'en_revision',
   'presupuesto',
+  'presupuesto_rechazado',
   'en_reparacion',
   'falta_repuestos',
   'terminado',
@@ -20,6 +21,7 @@ export const ORDER_STATUS_LABEL = {
   recibido: 'Recibido',
   en_revision: 'En revision',
   presupuesto: 'Presupuesto',
+  presupuesto_rechazado: 'Presupuesto rechazado',
   en_reparacion: 'En reparacion',
   falta_repuestos: 'Falta de repuestos',
   terminado: 'Listo para retirar',
@@ -40,7 +42,9 @@ export function allowedTransitions(order) {
     case 'en_revision':
       return ['presupuesto', 'entregado', 'en_tercero']
     case 'presupuesto':
-      return ['en_reparacion', 'entregado', 'en_tercero']
+      return ['en_reparacion', 'entregado', 'en_tercero', 'presupuesto_rechazado']
+    case 'presupuesto_rechazado':
+      return ['entregado']
     case 'en_reparacion':
       return ['terminado', 'presupuesto', 'entregado', 'falta_repuestos', 'en_tercero']
     case 'falta_repuestos':
@@ -94,6 +98,7 @@ const COUNTER_ROLES = ['recepcion', 'admin']
 
 // Indica si un rol puede disparar la transición hacia `to`.
 export function canTransitionForRole(to, role, order) {
+  if (to === 'presupuesto_rechazado') return COUNTER_ROLES.includes(role)
   if (to === 'terminado' && COUNTER_ROLES.includes(role) && order?.isSimpleService) {
     return true
   }

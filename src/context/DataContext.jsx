@@ -134,8 +134,16 @@ export function DataProvider({ children }) {
       // token expirado: validamos contra la API (refresh hace logout en 401).
       if (connected) refresh({ silent: true })
     }
+    // Una navegación completa no desmonta React si el navegador conserva la
+    // página en bfcache; cerrar SSE evita agotar las conexiones del mismo local.
+    const hidePage = () => es.close()
+    const showPage = (event) => { if (event.persisted) window.location.reload() }
+    window.addEventListener('pagehide', hidePage)
+    window.addEventListener('pageshow', showPage)
     return () => {
       es.close()
+      window.removeEventListener('pagehide', hidePage)
+      window.removeEventListener('pageshow', showPage)
       refreshQueue.cancel()
       invalidateRefresh()
     }

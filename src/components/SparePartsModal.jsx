@@ -1,8 +1,9 @@
+import { useFormDraft } from '../utils/useFormDraft.js'
 // ============================================
 // SparePartsModal: modal para ver, agregar,
 // editar y eliminar repuestos necesarios.
 // ============================================
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Save, Package, Pencil, Trash2, X, Check } from 'lucide-react'
 import Modal from './Modal.jsx'
 import { formatDateTime } from '../utils/helpers.js'
@@ -23,28 +24,24 @@ function StatusBadge({ status }) {
   )
 }
 
-export default function SparePartsModal({ open, onClose, sparePartsLog = [], isAssignedTech, currentUser, onSave, onEdit, onDelete }) {
-  const [newName, setNewName] = useState('')
-  const [newQty, setNewQty] = useState(1)
+export default function SparePartsModal({ open, onClose, sparePartsLog = [], isAssignedTech, currentUser, onSave, onEdit, onDelete, draft, onDraftChange }) {
+  const [fields, patchFields, clearFields] = useFormDraft({ newName: '', newQty: 1, editingId: null, editName: '', editQty: 1, editStatus: 'necesario' }, draft, onDraftChange)
+  const { newName, newQty, editingId, editName, editQty, editStatus } = fields
+  const setNewName = (value) => patchFields({ newName: value })
+  const setNewQty = (value) => patchFields({ newQty: value })
+  const setEditingId = (value) => patchFields({ editingId: value })
+  const setEditName = (value) => patchFields({ editName: value })
+  const setEditQty = (value) => patchFields({ editQty: value })
+  const setEditStatus = (value) => patchFields({ editStatus: value })
   const [saving, setSaving] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-  const [editName, setEditName] = useState('')
-  const [editQty, setEditQty] = useState(1)
-  const [editStatus, setEditStatus] = useState('necesario')
   const [confirmDelete, setConfirmDelete] = useState(null)
   const scrollRef = useRef(null)
 
-  useEffect(() => {
-    if (open) { setNewName(''); setNewQty(1); setEditingId(null) }
-  }, [open])
 
   const handleSave = async () => {
     if (!newName.trim() || !onSave) return
     setSaving(true)
-    await onSave(newName.trim(), newQty)
-    setSaving(false)
-    setNewName('')
-    setNewQty(1)
+    try { const result = await onSave(newName.trim(), newQty); if (!result?.error) clearFields() } finally { setSaving(false) }
   }
 
   const startEdit = (entry) => {
@@ -63,13 +60,13 @@ export default function SparePartsModal({ open, onClose, sparePartsLog = [], isA
 
   const saveEdit = async (entryId) => {
     if (!editName.trim() || !onEdit) return
-    await onEdit(entryId, { name: editName.trim(), quantity: editQty, status: editStatus })
-    setEditingId(null)
+    const result = await onEdit(entryId, { name: editName.trim(), quantity: editQty, status: editStatus })
+    if (!result?.error) setEditingId(null)
   }
 
   const handleDelete = async (entryId) => {
-    if (onDelete) await onDelete(entryId)
-    setConfirmDelete(null)
+    const result = onDelete && await onDelete(entryId)
+    if (!result?.error) setConfirmDelete(null)
   }
 
   const canModify = (entry) => currentUser && (entry.by === currentUser.id || currentUser.role === 'admin')

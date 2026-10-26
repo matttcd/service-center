@@ -1,3 +1,5 @@
+import { useWorkspaceState } from '../context/workspace.js'
+import { orderAmounts } from '../../shared/order-workspace.js'
 // ============================================
 // Orders: listado de órdenes de servicio en tabla
 // (estilo planilla, con ordenamiento, filtros y paginación)
@@ -29,29 +31,36 @@ export default function Orders() {
   const [pageData, setPageData] = useState({ orders: [], total: 0 })
 
   // Filtros
-  const [q, setQ] = useState(() => params.get('q') || '')
-  const [qInput, setQInput] = useState(() => params.get('q') || '')
-  const [status, setStatus] = useState('all')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-  const [brand, setBrand] = useState('all')
-  const [deviceType, setDeviceType] = useState('all')
-  const [onlyNotNotified, setOnlyNotNotified] = useState(false)
-  const [onlyNotConfirmed, setOnlyNotConfirmed] = useState(false)
+  const [q, setQ] = useWorkspaceState('orders:q', () => params.get('q') || '')
+  const [qInput, setQInput] = useWorkspaceState('orders:qInput', () => params.get('q') || '')
+  const [status, setStatus] = useWorkspaceState('orders:status', 'all')
+  const [from, setFrom] = useWorkspaceState('orders:from', '')
+  const [to, setTo] = useWorkspaceState('orders:to', '')
+  const [brand, setBrand] = useWorkspaceState('orders:brand', 'all')
+  const [deviceType, setDeviceType] = useWorkspaceState('orders:deviceType', 'all')
+  const [onlyNotNotified, setOnlyNotNotified] = useWorkspaceState('orders:onlyNotNotified', false)
+  const [onlyNotConfirmed, setOnlyNotConfirmed] = useWorkspaceState('orders:onlyNotConfirmed', false)
 
   // Ordenamiento
-  const [sortKey, setSortKey] = useState('createdAt')
-  const [sortDir, setSortDir] = useState('desc')
+  const [sortKey, setSortKey] = useWorkspaceState('orders:sortKey', 'createdAt')
+  const [sortDir, setSortDir] = useWorkspaceState('orders:sortDir', 'desc')
 
   // Paginación
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[1])
+  const [page, setPage] = useWorkspaceState('orders:page', 1)
+  const [pageSize, setPageSize] = useWorkspaceState('orders:pageSize', PAGE_SIZE_OPTIONS[1])
+  const [lastQuery, setLastQuery] = useWorkspaceState('orders:urlQuery', null)
+  useEffect(() => {
+    const query = params.get('q')
+    if (query === lastQuery) return
+    if (query !== null) { setQ(query); setQInput(query); setPage(1) }
+    setLastQuery(query)
+  }, [params, lastQuery, setLastQuery, setQ, setQInput, setPage])
 
   // Búsqueda con debounce para no consultar el servidor en cada tecla.
   useEffect(() => {
     const t = setTimeout(() => setQ(qInput), 300)
     return () => clearTimeout(t)
-  }, [qInput])
+  }, [qInput, setQ])
 
   // Carga paginada desde el servidor (no todo el histórico en memoria).
   useEffect(() => {
@@ -152,7 +161,7 @@ export default function Orders() {
         if (!result.orders.length && all.length < total) throw new Error('El listado cambió durante la exportación. Volvé a intentarlo.')
         all.push(...result.orders)
       } while (all.length < total)
-      const headers = ['Nº Orden', 'Fecha', 'Cliente', 'Tipo', 'Marca', 'Modelo', 'Problema', 'Reparación', 'Precio', 'Adelanto', 'Saldo', 'Estado', 'Técnico']
+      const headers = ['Nº Orden', 'Fecha', 'Cliente', 'Tipo', 'Marca', 'Modelo', 'Problema', 'Reparación', 'Precio', 'Adelanto', 'Saldo', 'Estado', 'Técnico', 'Importe de retiro', 'Saldo a favor']
       const escape = csvCell
       const rows = all.map((o) => [
         escape(o.orderNumber),
@@ -165,9 +174,11 @@ export default function Orders() {
         escape(o.fix),
         o.price || 0,
         o.advance || 0,
-        Math.max(0, Math.round(((o.price || 0) - (o.advance || 0)) * 100) / 100),
+        orderAmounts(o).due,
         escape(ORDER_STATUS_LABEL[o.status] || o.status),
         escape(o.assignedToName || '—'),
+        o.rejectedCharge ?? '',
+        orderAmounts(o).credit,
       ].join(','))
 
       const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n')
@@ -352,7 +363,7 @@ export default function Orders() {
                       </Badge>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold text-slate-900 dark:text-white">
-                      {o.price ? formatMoney(o.price) : '—'}
+                      {o.price ? formatMoney(o.price) : '—'}{o.rejectedCharge != null && <span className="block text-xs font-normal">Retiro {formatMoney(o.rejectedCharge)}</span>}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">
                       <Badge tone={orderStatusTone(o.status)}>{ORDER_STATUS_LABEL[o.status]}</Badge>

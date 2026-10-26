@@ -1,3 +1,4 @@
+import { useWorkspaceState } from '../context/workspace.js'
 // ============================================
 // Clientes: listado en tabla con ordenamiento,
 // búsqueda, filtros y paginación (estilo Órdenes).
@@ -18,25 +19,25 @@ export default function Clients() {
   const { customers, orders, addCustomer } = useData()
   const navigate = useNavigate()
 
-  const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useWorkspaceState('clients:search', '')
+  const [searchInput, setSearchInput] = useWorkspaceState('clients:searchInput', '')
   const [formOpen, setFormOpen] = useState(false)
   const [formError, setFormError] = useState('')
   const setNotice = useNotify('success')
 
   // Ordenamiento
-  const [sortKey, setSortKey] = useState('fullName')
-  const [sortDir, setSortDir] = useState('asc')
+  const [sortKey, setSortKey] = useWorkspaceState('clients:sortKey', 'fullName')
+  const [sortDir, setSortDir] = useWorkspaceState('clients:sortDir', 'asc')
 
   // Paginación
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[1])
+  const [page, setPage] = useWorkspaceState('clients:page', 1)
+  const [pageSize, setPageSize] = useWorkspaceState('clients:pageSize', PAGE_SIZE_OPTIONS[1])
 
   // Búsqueda con debounce
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(t)
-  }, [searchInput])
+  }, [searchInput, setSearch])
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()

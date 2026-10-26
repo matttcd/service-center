@@ -1,8 +1,9 @@
+import { useFormDraft } from '../utils/useFormDraft.js'
 // ============================================
 // NotesModal: modal dedicado para ver, agregar,
 // editar y eliminar notas del técnico.
 // ============================================
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Save, StickyNote, Pencil, Trash2, X, Check } from 'lucide-react'
 import Modal from './Modal.jsx'
 import { formatDate, formatDateTime } from '../utils/helpers.js'
@@ -18,17 +19,16 @@ function groupByDay(log) {
   return groups
 }
 
-export default function NotesModal({ open, onClose, notesLog = [], isAssignedTech, currentUser, onSave, onEdit, onDelete }) {
-  const [noteText, setNoteText] = useState('')
+export default function NotesModal({ open, onClose, notesLog = [], isAssignedTech, currentUser, onSave, onEdit, onDelete, draft, onDraftChange }) {
+  const [fields, patchFields, clearFields] = useFormDraft({ noteText: '', editingId: null, editText: '' }, draft, onDraftChange)
+  const { noteText, editingId, editText } = fields
+  const setNoteText = (value) => patchFields({ noteText: value })
+  const setEditingId = (value) => patchFields({ editingId: value })
+  const setEditText = (value) => patchFields({ editText: value })
   const [saving, setSaving] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-  const [editText, setEditText] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null)
   const scrollRef = useRef(null)
 
-  useEffect(() => {
-    if (open) { setNoteText(''); setEditingId(null) }
-  }, [open])
 
   const grouped = groupByDay([...notesLog].reverse())
   const days = Object.entries(grouped)
@@ -36,9 +36,7 @@ export default function NotesModal({ open, onClose, notesLog = [], isAssignedTec
   const handleSave = async () => {
     if (!noteText.trim() || !onSave) return
     setSaving(true)
-    await onSave(noteText.trim())
-    setSaving(false)
-    setNoteText('')
+    try { const result = await onSave(noteText.trim()); if (!result?.error) clearFields() } finally { setSaving(false) }
   }
 
   const startEdit = (entry) => {
@@ -53,14 +51,13 @@ export default function NotesModal({ open, onClose, notesLog = [], isAssignedTec
 
   const saveEdit = async (entryId) => {
     if (!editText.trim() || !onEdit) return
-    await onEdit(entryId, editText.trim())
-    setEditingId(null)
-    setEditText('')
+    const result = await onEdit(entryId, editText.trim())
+    if (!result?.error) { setEditingId(null); setEditText('') }
   }
 
   const handleDelete = async (entryId) => {
-    if (onDelete) await onDelete(entryId)
-    setConfirmDelete(null)
+    const result = onDelete && await onDelete(entryId)
+    if (!result?.error) setConfirmDelete(null)
   }
 
   const canModify = (entry) => currentUser && (entry.by === currentUser.id || currentUser.role === 'admin')
