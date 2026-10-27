@@ -135,4 +135,4 @@
 @media (max-width:1023px) { .ws-page { height:calc(100dvh - 98px); } .ws-page.ws-reception { height:calc(100dvh - 90px); } }
 @media (max-width:700px) { .sc-main:has(.ws-page) { padding:15px 12px; } .ws-page { height:calc(100dvh - 94px); } .ws-page.ws-reception { height:calc(100dvh - 89px); } .ws-search { margin:15px 13px 14px; } .ws-order-header { gap:8px; } .ws-work { padding:10px 12px; } }
 .sc-main:has(.ws-reception) { padding-bottom:10px; }
-@media (min-width:1200px) { .sc-main:has(.ws-page) { padding-left:clamp(24px,calc(6vw - 48px),72px); } }
+@media (min-width:1200px) { .sc-main:has(.ws-page) { padding-left:clamp(40px,calc(10vw - 80px),128px); } }
