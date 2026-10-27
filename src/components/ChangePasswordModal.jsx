@@ -3,16 +3,13 @@
 // (aparece cuando el login detecta una contraseña por defecto)
 // ============================================
 import { useNotify } from '../context/notifications.js'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { KeyRound } from 'lucide-react'
 import Modal from './Modal.jsx'
 import { api } from '../utils/api.js'
 
-const inputCls =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
-const labelCls = 'mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300'
-
 export default function ChangePasswordModal({ open, onDone, required = true, onClose = () => {} }) {
+  const fieldId = useId()
   const [current, setCurrent] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -39,57 +36,50 @@ export default function ChangePasswordModal({ open, onDone, required = true, onC
 
   return (
     <Modal open={open} onClose={onClose} dismissible={!required && !saving} title="Cambiar contraseña" maxWidth="max-w-md">
-      <div className="space-y-4">
-        <p className="flex items-start gap-2 text-sm text-slate-500 dark:text-slate-400">
-          <KeyRound size={16} className="mt-0.5 shrink-0 text-primary-500" />
-          {required ? 'Estás usando una contraseña por defecto. Cambiala para poder seguir trabajando con el sistema.' : 'Ingresá tu contraseña actual y elegí una nueva. Las sesiones anteriores dejarán de ser válidas.'}
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className={labelCls}>Contraseña actual</label>
+        <form onSubmit={handleSubmit} className="ws-form">
+          <p className="sc-secondary">{required ? 'Cambiá la contraseña inicial para continuar.' : 'Al guardar se cierran las demás sesiones.'}</p>
+          <label htmlFor={`${fieldId}-current`}>Contraseña actual
             <input
+              id={`${fieldId}-current`}
               type="password"
               autoComplete="current-password"
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
               placeholder="••••••"
-              className={inputCls}
             />
-          </div>
-          <div>
-            <label className={labelCls}>Nueva contraseña</label>
+          </label>
+          <label htmlFor={`${fieldId}-new`}>Nueva contraseña
             <input
+              id={`${fieldId}-new`}
               type="password"
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Mínimo 8 caracteres"
-              className={inputCls}
             />
-          </div>
-          <div>
-            <label className={labelCls}>Repetir nueva contraseña</label>
+          </label>
+          <label htmlFor={`${fieldId}-confirm`}>Repetir nueva contraseña
             <input
+              id={`${fieldId}-confirm`}
               type="password"
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               placeholder="••••••"
-              className={inputCls}
             />
-          </div>
-
+          </label>
+          <div className="ws-buttons">
+          {!required && <button type="button" className="ws-button" onClick={onClose} disabled={saving}>Cancelar</button>}
           <button
             type="submit"
             disabled={saving}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
+            className="ws-button primary"
           >
             <KeyRound size={16} />
             {saving ? 'Guardando...' : 'Cambiar contraseña'}
           </button>
+          </div>
         </form>
-      </div>
     </Modal>
   )
 }

@@ -1,22 +1,25 @@
 // ============================================
-// PrintOrderPanel: impresión directa de la orden.
-//   - Opción B: impresión silenciosa en la PC local (elige impresora vía bridge).
-//   - Opción A: impresión desde el navegador (cualquier impresora del dispositivo).
+// Impresión directa y vista previa del mismo PDF generado por el servidor.
 // ============================================
 import { useNotify } from '../context/notifications.js'
-import { useEffect, useRef, useState } from 'react'
-import { Loader2, Printer, Monitor, RotateCw, AlertTriangle } from 'lucide-react'
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
+import { Loader2, Printer, Monitor, RotateCw, AlertTriangle, FileText } from 'lucide-react'
 import Modal from './Modal.jsx'
 import { printOrderServer, listPrinters } from '../utils/print.js'
 import { loadSession } from '../utils/storage.js'
 
+const PdfPreview = lazy(() => import('./PdfPreview.jsx'))
+
 export default function PrintOrderPanel({ open, order, onClose }) {
+  const printerId = useId()
   const [printers, setPrinters] = useState([])
   const [selected, setSelected] = useState('')
   const [loadingPrinters, setLoadingPrinters] = useState(false)
   const [busy, setBusy] = useState(false)
+  const inFlight = useRef(false)
   const setNotice = useNotify('success')
-  const [pdfReady, setPdfReady] = useState(false)
+  const [pdfFile, setPdfFile] = useState(null)
+  const pdfReady = !!pdfFile
   const [pdfError, setPdfError] = useState(null)
   const [printerError, setPrinterError] = useState(null)
   const [retry, setRetry] = useState(0)
@@ -26,7 +29,7 @@ export default function PrintOrderPanel({ open, order, onClose }) {
     if (!open || !order) return
     let active = true
     const controller = new AbortController()
-    setPdfReady(false)
+    setPdfFile(null)
     setPdfError(null)
     setNotice(null)
     setPrinterError(null)
@@ -45,7 +48,7 @@ export default function PrintOrderPanel({ open, order, onClose }) {
         const blob = await res.blob()
         if (!active) return
         pdfBlobUrlRef.current = URL.createObjectURL(blob)
-        setPdfReady(true)
+        setPdfFile(blob)
       })
       .catch((e) => { if (active) setPdfError(e.message || 'No se pudo generar el PDF.') })
 
@@ -53,7 +56,6 @@ export default function PrintOrderPanel({ open, order, onClose }) {
       .then(({ printers: list, error }) => {
         if (!active) return
         setPrinters(list)
-        setSelected('')
         if (error) setPrinterError(error)
       })
       .catch(() => { if (active) setPrinterError('No se encontraron impresoras.') })
@@ -72,11 +74,21 @@ export default function PrintOrderPanel({ open, order, onClose }) {
   }, [open, order, retry, setNotice])
 
   const handleRetry = () => {
-    setPdfReady(false)
+    setPdfFile(null)
     setPdfError(null)
     setNotice(null)
 
     setRetry((value) => value + 1)
+  }
+
+  const retryPrinters = async () => {
+    setPrinterError(null)
+    setLoadingPrinters(true)
+    try {
+      const { printers: list, error } = await listPrinters()
+      setPrinters(list)
+      if (error) setPrinterError(error)
+    } finally { setLoadingPrinters(false) }
   }
 
   const handleClose = () => {
@@ -84,13 +96,15 @@ export default function PrintOrderPanel({ open, order, onClose }) {
       URL.revokeObjectURL(pdfBlobUrlRef.current)
       pdfBlobUrlRef.current = null
     }
-    setPdfReady(false)
+    setPdfFile(null)
     setPdfError(null)
+    setSelected('')
     onClose()
   }
 
   const handleServerPrint = async () => {
-    if (busy || !order) return
+    if (inFlight.current || !order) return
+    inFlight.current = true
     setBusy(true)
     setNotice(null)
     try {
@@ -100,12 +114,14 @@ export default function PrintOrderPanel({ open, order, onClose }) {
     } catch (e) {
       setNotice({ type: 'error', msg: e.message || 'No se pudo imprimir.' })
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
 
   const handleBrowserPrint = async () => {
-    if (busy || !order || !pdfBlobUrlRef.current) return
+    if (inFlight.current || !order || !pdfBlobUrlRef.current) return
+    inFlight.current = true
     setBusy(true)
     setNotice(null)
     try {
@@ -119,103 +135,38 @@ export default function PrintOrderPanel({ open, order, onClose }) {
     } catch (e) {
       setNotice({ type: 'error', msg: e.message || 'No se pudo abrir la impresión.' })
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
 
   return (
-    <Modal open={open} onClose={handleClose} maxWidth="max-w-md" title="Imprimir orden de servicio">
-      <div className="space-y-4">
-        {pdfError ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-12">
-            <p className="text-sm font-medium text-red-600 dark:text-red-400">
-              No se pudo generar el PDF.
-            </p>
-            <button
-              onClick={handleRetry}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
-              <RotateCw size={15} /> Reintentar
-            </button>
+    <Modal open={open} onClose={handleClose} maxWidth="max-w-6xl" title="Imprimir orden de servicio">
+      <div className="sc-print">
+        <section className="sc-print-preview" aria-label="Vista previa del comprobante">
+          <header><h3><FileText size={16} aria-hidden="true" />Vista previa</h3><span>{order?.orderNumber}</span></header>
+          <div className="sc-print-document">
+            {pdfError ? <div className="sc-print-state" role="alert"><AlertTriangle size={28} /><p>No se pudo generar el PDF.</p><p className="sc-secondary">{pdfError}</p><button className="ws-button" onClick={handleRetry}><RotateCw size={16} />Reintentar</button></div>
+              : !pdfReady ? <div className="sc-print-state" role="status"><Loader2 size={28} className="animate-spin" /><p>Generando orden…</p></div>
+                : <Suspense fallback={<div className="sc-print-state" role="status"><Loader2 size={28} className="animate-spin" /><p>Cargando vista previa…</p></div>}><PdfPreview file={pdfFile} onRetry={handleRetry} /></Suspense>}
           </div>
-        ) : !pdfReady ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-12">
-            <Loader2 size={32} className="animate-spin text-primary-500" />
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-              Generando orden…
-            </p>
-          </div>
-        ) : (
-          <>
-        {/* Selector de impresora (Opción B) */}
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Seleccionar impresora
-          </label>
-          {loadingPrinters ? (
-            <p className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-              <Loader2 size={16} className="animate-spin" /> Cargando impresoras…
-            </p>
-          ) : printerError ? (
-            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-500" />
-              <div className="flex-1 text-sm">
-                <p className="font-medium text-amber-800 dark:text-amber-200">No se encontraron impresoras.</p>
-                <p className="mt-1 text-amber-700 dark:text-amber-300">Pedile a un administrador que verifique la conexión.</p>
-              </div>
-              <button
-                onClick={() => { setPrinterError(null); setLoadingPrinters(true); listPrinters().then(({ printers: l, error }) => { setPrinters(l); setSelected(''); if (error) setPrinterError(error) }).catch(() => setPrinterError('No se encontraron impresoras.')).finally(() => setLoadingPrinters(false)) }}
-                className="shrink-0 rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-500/40 dark:text-amber-300 dark:hover:bg-amber-500/20"
-              >
-                Reintentar
-              </button>
-            </div>
-          ) : (
-            <select
-              value={selected}
-              onChange={(e) => setSelected(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-            >
+        </section>
+        <aside className="sc-print-controls">
+          <h3><Printer size={16} aria-hidden="true" />Impresión</h3>
+          <div className="ws-form"><label htmlFor={printerId}>Impresora
+            <select id={printerId} value={selected} onChange={(event) => setSelected(event.target.value)} disabled={busy || loadingPrinters}>
               <option value="">Impresora de órdenes configurada</option>
-              {printers.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
+              {printers.map((printer) => <option key={printer} value={printer}>{printer}</option>)}
             </select>
-          )}
-        </div>
-
-        {/* Opción B: impresión silenciosa */}
-        <button
-          onClick={handleServerPrint}
-          disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-60"
-        >
-          {busy ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
-          Imprimir
-        </button>
-
-        {/* Opción A: impresión desde el navegador */}
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">o</span>
-          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-        </div>
-        <button
-          onClick={handleBrowserPrint}
-          disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-400 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 disabled:opacity-60 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-        >
-          <Monitor size={16} />
-          Abrir PDF para imprimir
-        </button>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Se abre una pestaña con el comprobante. Desde el visor podés imprimirlo o guardarlo.
-        </p>
-
-          </>
-        )}
+          </label></div>
+          {loadingPrinters && <p className="sc-secondary sc-print-loading" role="status"><Loader2 size={16} className="animate-spin" />Cargando impresoras…</p>}
+          {printerError && <div className="sc-print-warning" role="alert"><AlertTriangle size={18} /><div><p>No se pudo cargar la lista de impresoras.</p><button className="ws-button" disabled={busy || loadingPrinters} onClick={retryPrinters}><RotateCw size={15} />Reintentar</button></div></div>}
+          <button className="ws-button" onClick={handleBrowserPrint} disabled={busy || !pdfReady}><Monitor size={16} />Abrir PDF para imprimir</button>
+        </aside>
+        <footer className="sc-print-actions ws-buttons">
+          <button className="ws-button" onClick={handleClose}>Cerrar</button>
+          <button className="ws-button primary" onClick={handleServerPrint} disabled={busy || !pdfReady || loadingPrinters}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}Imprimir</button>
+        </footer>
       </div>
     </Modal>
   )

@@ -74,7 +74,7 @@ try {
             if (route === 'taller') await page.click('#queue-all')
           }
         }
-        if (['recepcion', 'terminados', 'clientes', 'actividad', 'configuracion', 'resumen'].includes(route) && width !== 1024) {
+        if (['recepcion', 'terminados', 'clientes', 'actividad', 'configuracion', 'resumen', 'ajustes'].includes(route) && width !== 1024) {
           await page.screenshot({ path: path.join(output, `app-${route}-${dark ? 'oscuro' : 'claro'}-${width}.png`), fullPage: true })
         }
       }

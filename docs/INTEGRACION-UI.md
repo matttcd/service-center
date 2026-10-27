@@ -6,6 +6,8 @@ Rama: `codex/integracion-ui`. El diseño utiliza las sesiones y operaciones real
 
 La presentación comparte márgenes, tarjetas, campos y controles en todas las pantallas. Recepción, Taller, Resumen, Configuración y Papelera utilizan las mismas pestañas con navegación por teclado y contadores redondeados. El buscador de la cola comparte la fila del encabezado de la ficha; el cambio de tema queda junto a la marca y el perfil al fondo del sidebar.
 
+Ajustes reúne los datos reales de la cuenta y el cambio de contraseña. La ventana de impresión muestra las páginas del PDF generado por el servidor junto al selector de impresora. El visor PDF.js se carga al abrir esta ventana y sus archivos quedan incluidos en la compilación: no requiere Internet ni el lector PDF del navegador. Se conserva la apertura del PDF en otra pestaña, y los reintentos no cambian la impresora elegida ni repiten automáticamente un envío fallido.
+
 | Área | Comprobación |
 |---|---|
 | Órdenes y Terminados | Tablas originales, columnas, búsqueda, filtros, ordenamiento, paginación y acceso a la ficha. |
