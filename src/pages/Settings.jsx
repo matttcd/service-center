@@ -30,6 +30,7 @@ import {
 import PrinterSettings from '../components/PrinterSettings.jsx'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
+import Tabs from '../components/Tabs.jsx'
 import {
   formatMoney,
   calculateTermsTotal,
@@ -899,37 +900,9 @@ export default function Settings() {
       </div>
 
       {/* Contenedor principal idéntico al Dashboard */}
-      <Card className="!p-0 overflow-hidden">
-        {/* Barra de pestañas con borde inferior */}
-        <div className="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto no-scrollbar">
-          {SETTINGS_TABS.map((tab) => {
-            const isActive = activeTab === tab.key
-            const badgeCount = counts[tab.key]
-
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex flex-1 items-center justify-center gap-2 px-4 py-3.5 text-sm font-medium transition whitespace-nowrap
-                  ${
-                    isActive
-                      ? 'border-b-2 border-primary-600 text-primary-600 dark:border-primary-500 dark:text-primary-400'
-                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                  }`}
-              >
-                <tab.Icon size={16} />
-                <span>{tab.label}</span>
-                {badgeCount !== undefined && (
-                  <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
-                    {badgeCount}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-
+      <div className="sc-tabbed-section">
+        <Tabs id="settings" label="Secciones de configuración" panelId="settings-panel" items={SETTINGS_TABS.map((tab) => ({ ...tab, count: counts[tab.key] }))} value={activeTab} onChange={setActiveTab} />
+        <Card className="!p-0 overflow-hidden" role="tabpanel" id="settings-panel" aria-labelledby={`settings-${activeTab}`}>
         {/* Contenido sin cards anidadas */}
         <div className="p-6 sm:p-8 animate-fadeIn">
           {activeTab === 'general' && (
@@ -963,7 +936,8 @@ export default function Settings() {
             />
           )}
         </div>
-      </Card>
+        </Card>
+      </div>
     </div>
   )
 }

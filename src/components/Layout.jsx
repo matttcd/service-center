@@ -50,7 +50,7 @@ export default function Layout() {
           {loading ? (
             <DashboardSkeleton />
           ) : (
-            <div className="animate-fade-in">
+            <div className="sc-content animate-fade-in">
               <Outlet />
             </div>
           )}

@@ -7,6 +7,7 @@ import { Megaphone, FileText, Inbox, PackageX, DollarSign, Truck, Plus } from 'l
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
+import Tabs from '../components/Tabs.jsx'
 import OrderForm from '../components/OrderForm.jsx'
 import PrintOrderPanel from '../components/PrintOrderPanel.jsx'
 import { formatDate, titleCase, normalizeList } from '../utils/helpers.js'
@@ -125,32 +126,15 @@ export default function Dashboard() {
       </div>
 
       {/* Tab bar */}
-      <Card className="!p-0">
-        <div className="flex border-b border-slate-200 dark:border-slate-800">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition
-                ${activeTab === tab.key
-                  ? 'border-b-2 border-primary-600 text-primary-600'
-                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
-            >
-              <tab.Icon size={16} />
-              <span className="hidden sm:inline">{tab.label}</span>
-              <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
-                {counts[tab.key]}
-              </span>
-            </button>
-          ))}
-        </div>
-
+      <div className="sc-tabbed-section">
+        <Tabs id="summary" label="Pendientes del resumen" panelId="summary-panel" items={TABS.map((tab) => ({ ...tab, count: counts[tab.key] }))} value={activeTab} onChange={setActiveTab} />
+        <Card className="!p-0" role="tabpanel" id="summary-panel" aria-labelledby={`summary-${activeTab}`}>
         <QueueRow
           items={activeItems}
           emptyText={activeConfig.emptyText}
         />
-      </Card>
+        </Card>
+      </div>
 
       {canCreate && <OrderForm open={formOpen} onClose={() => setFormOpen(false)} onCreated={onCreated} />}
       <PrintOrderPanel

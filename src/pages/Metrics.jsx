@@ -195,7 +195,7 @@ function DispositivosRecibidos({ devices }) {
       ) : (
         <div className="flex items-end gap-2">
           {items.map((d) => (
-            <div key={d.label} className="group flex flex-1 flex-col items-center gap-1.5" title={d.label}>
+            <div key={d.label} className="group flex min-w-0 flex-1 flex-col items-center gap-1.5" title={d.label}>
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{d.count}</span>
               <div
                 className="w-full rounded-t-md bg-accent-500/80 transition group-hover:bg-accent-500 dark:bg-accent-500/70"

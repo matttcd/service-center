@@ -139,21 +139,21 @@ export default function Sidebar({ open, onClose }) {
         }`}
       >
         {/* Marca */}
-        <div className="flex items-center justify-between px-5 py-5">
-          <div className="flex items-center gap-3">
-            <img src={logoUrl} alt="Logo" className="h-9 w-9 rounded-full object-contain" />
-            <div>
+        <div className="flex items-center justify-between gap-2 px-3 py-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <img src={logoUrl} alt="Logo" className="h-9 w-9 shrink-0 rounded-full object-contain" />
+            <div className="min-w-0">
               <p className="text-sm font-bold text-slate-900 dark:text-white">{BRAND_NAME}</p>
               <p className="text-[11px] font-semibold text-accent-600 dark:text-accent-400">{BRAND_SUBTITLE}</p>
             </div>
           </div>
-          <button
+          <div className="flex shrink-0 items-center gap-1"><ThemeToggle /><button
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden"
             aria-label="Cerrar menú"
           >
             <X size={18} />
-          </button>
+          </button></div>
         </div>
 
         {/* Navegación */}
@@ -161,7 +161,7 @@ export default function Sidebar({ open, onClose }) {
           {groups.map((group) => <div key={group.label}><p className="sc-nav-group">{group.label}</p>{group.items.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} onClick={onClose} className={({ isActive }) => `sc-nav-link ${isActive ? 'active' : ''}`}><Icon size={18} />{label}</NavLink>)}</div>)}
         </nav>
 
-        <div className="border-t border-slate-200 p-3 dark:border-slate-800">
+        <div className="sc-profile-footer border-t border-slate-200 p-3 dark:border-slate-800">
           <div className="sc-profile-row"><div ref={menuRef} className="relative">
             <button className="sc-profile-button" onClick={openMenu} aria-expanded={menuOpen} aria-label="Cambiar de perfil"><span className="ws-avatar">{initials(currentUser?.name)}</span><span><strong>{currentUser?.name}</strong><small>{ROLE_LABEL[role]}</small></span><ChevronDown size={14} /></button>
             {menuOpen && <div className="absolute bottom-full left-0 z-50 mb-2 w-72 max-h-[70dvh] overflow-y-auto max-w-[calc(100vw-24px)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900" role="menu" aria-label="Perfiles">
@@ -169,7 +169,6 @@ export default function Sidebar({ open, onClose }) {
               {loadingProfiles ? <p className="p-2">Cargando perfiles…</p> : loadError ? <div className="p-2"><p>{loadError}</p><button onClick={loadProfiles} className="ws-button"><RefreshCw size={14} />Reintentar</button></div> : profiles.length === 0 ? <p className="p-2">No hay perfiles disponibles.</p> : profiles.map((profile) => <button key={profile.id} role="menuitem" disabled={profile.id === currentUser?.id} onClick={() => pick(profile)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-70"><span className="ws-avatar">{initials(profile.name)}</span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{profile.name}</strong><span className="flex items-center gap-1 text-sm"><RoleIcon role={profile.role} />{ROLE_LABEL[profile.role]}</span></span>{profile.id === currentUser?.id && <Check size={16} />}</button>)}
             </div>}
           </div><button className="ws-icon-button" onClick={() => { if (leave()) logout() }} aria-label="Salir" title="Salir"><LogOut size={18} /></button></div>
-          <div className="mt-2"><ThemeToggle /></div>
         </div>
       </aside>
 
@@ -196,6 +195,7 @@ function ThemeToggle() {
       onClick={toggle}
       className="flex items-center justify-center rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
       title={mode === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+      aria-label={mode === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
     >
       {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
     </button>

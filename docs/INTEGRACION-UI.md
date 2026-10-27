@@ -4,6 +4,8 @@ Rama: `codex/integracion-ui`. El diseño utiliza las sesiones y operaciones real
 
 ## Funciones conservadas
 
+La presentación comparte márgenes, tarjetas, campos y controles en todas las pantallas. Recepción, Taller, Resumen, Configuración y Papelera utilizan las mismas pestañas con navegación por teclado y contadores redondeados. El buscador de la cola comparte la fila del encabezado de la ficha; el cambio de tema queda junto a la marca y el perfil al fondo del sidebar.
+
 | Área | Comprobación |
 |---|---|
 | Órdenes y Terminados | Tablas originales, columnas, búsqueda, filtros, ordenamiento, paginación y acceso a la ficha. |
@@ -40,6 +42,8 @@ node scripts/verify-local.mjs --ui
 ```
 
 El último comando crea PostgreSQL descartable, aplica migraciones y ejecuta negocio, permisos, concurrencia, PDF, respaldo/restauración y navegador. Requiere los binarios de PostgreSQL 16 usados por las verificaciones existentes y Chromium. No utiliza la base instalada.
+
+Incluye la revisión de las 13 pantallas en ambos temas a 1366×768, 1024×768 y 390×844, verificando pestañas, foco, alineación del buscador, perfil y ausencia de desbordamientos horizontales.
 
 Para dejar el entorno de revisión abierto después de superar las pruebas:
 

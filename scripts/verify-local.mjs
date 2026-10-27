@@ -131,6 +131,7 @@ try {
     await startServer({ ...env, DATABASE_URL: env.DATABASE_URL.replace('/service_center_verify', '/service_center_verify_ui') })
     await run(process.execPath, ['tests/integration/browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
     await run(process.execPath, ['tests/integration/workspace-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
+    await run(process.execPath, ['tests/integration/appearance-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
   }
   if (process.argv.includes('--keep-open') && process.argv.includes('--ui')) {
     console.log('Sistema de revisión: http://127.0.0.1:8181 — base de pruebas aislada. Ctrl+C cierra y elimina este entorno.')

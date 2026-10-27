@@ -9,6 +9,7 @@ import { OrderStatus } from './OrderSheet.jsx'
 import OrderDetail from '../pages/OrderDetail.jsx'
 import OrderForm from './OrderForm.jsx'
 import PrintOrderPanel from './PrintOrderPanel.jsx'
+import Tabs from './Tabs.jsx'
 
 const receptionTabs = [['presupuestar', 'Presupuestar', FileText], ['avisar', 'Avisar', Bell], ['respuesta', 'Respuesta', MessageCircle], ['repuestos', 'Repuestos', Package], ['retiros', 'Retiros', PackageCheck], ['externos', 'Externos', Truck], ['simples', 'Simples', Wrench]]
 const workshopTabs = [['mine', 'Mis trabajos', Wrench], ['available', 'Sin asignar', Inbox], ['all', 'Todo el taller', Users]]
@@ -37,14 +38,8 @@ export default function OrderQueue({ reception = false }) {
   }
   return <div className={`ws-page ${reception ? 'ws-reception' : ''}`}>
     <div className="ws-heading"><h1>{reception ? 'Recepción' : 'Taller'}</h1>{reception && <button className="ws-button primary" onClick={() => setFormOpen(true)}><Plus size={16} />Nueva orden</button>}</div>
+    <Tabs id="queue" label={reception ? 'Pendientes de recepción' : 'Trabajos del taller'} panelId="queue-panel" value={view.tab} onChange={chooseTab} items={tabs.map(([key, label, Icon]) => ({ key, label, Icon, count: orders.filter((order) => matching(order, key)).length }))} />
     <div className="ws-panel">
-      <div className="ws-tabs" role="tablist" aria-label={reception ? 'Pendientes de recepción' : 'Trabajos del taller'} onKeyDown={(event) => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-        event.preventDefault()
-        const index = tabs.findIndex(([id]) => id === view.tab)
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
-        chooseTab(tabs[next][0]); event.currentTarget.querySelectorAll('[role=tab]')[next].focus()
-      }}>{tabs.map(([id, label, Icon]) => <button key={id} id={`queue-${id}`} role="tab" aria-selected={view.tab === id} tabIndex={view.tab === id ? 0 : -1} aria-controls="queue-panel" onClick={() => chooseTab(id)}><Icon size={16} />{label}<span>{orders.filter((order) => matching(order, id)).length}</span></button>)}</div>
       <div id="queue-panel" role="tabpanel" aria-labelledby={`queue-${view.tab}`} className={`ws-layout ${view.detail ? 'ws-detail-open' : ''}`}>
         <aside className="ws-queue" aria-label="Cola de equipos"><label className="ws-search"><Search size={17} /><span className="sr-only">Buscar equipo</span><input value={view.search} onChange={(event) => patch({ search: event.target.value })} placeholder="Buscar equipo, cliente u orden" /></label><div className="ws-queue-list" ref={listRef} onScroll={(event) => patch({ scroll: event.currentTarget.scrollTop })}>
           {rows.map((order, index) => { const at = acceptanceDate(order); return <button key={order.id} data-order-id={order.id} className={`ws-queue-row ${selected === order.id ? 'selected' : ''}`} aria-pressed={selected === order.id} onClick={() => patch({ selected: order.id, detail: true })} onKeyDown={(event) => { if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return; event.preventDefault(); const next = Math.min(rows.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1))); patch({ selected: rows[next].id }); event.currentTarget.parentElement.children[next].focus() }}><div className="ws-row-top"><div className="ws-row-name"><span>{order.brand} {order.model}</span>{!reception && view.tab === 'mine' && <span className="ws-age">· {at ? timeAgo(at) : 'Sin fecha'}</span>}</div><OrderStatus order={order} /></div><div className="ws-row-bottom"><span>{order.issue || order.fix || 'Sin notas generales'}</span><ArrowRight size={16} /></div></button> })}
