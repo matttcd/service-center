@@ -35,7 +35,7 @@ export default function OrderQueue({ reception = false }) {
     patch({ tab, selected: first?.id || null, scroll: 0 })
     if (listRef.current) listRef.current.scrollTop = 0
   }
-  return <div className="ws-page">
+  return <div className={`ws-page ${reception ? 'ws-reception' : ''}`}>
     <div className="ws-heading"><h1>{reception ? 'Recepción' : 'Taller'}</h1>{reception && <button className="ws-button primary" onClick={() => setFormOpen(true)}><Plus size={16} />Nueva orden</button>}</div>
     <div className="ws-panel">
       <div className="ws-tabs" role="tablist" aria-label={reception ? 'Pendientes de recepción' : 'Trabajos del taller'} onKeyDown={(event) => {
