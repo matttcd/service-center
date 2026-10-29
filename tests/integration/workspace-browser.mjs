@@ -44,7 +44,9 @@ const clickText = async (label, exact = true) => {
 const waitOrder = async (id, predicate) => { for (let i = 0; i < 100; i++) { const order = (await api(`/orders/${id}`)).order; if (predicate(order)) return order; await new Promise((resolve) => setTimeout(resolve, 100)) } throw new Error('La orden no alcanzó el resultado esperado') }
 const openRow = async (id) => { await page.waitForSelector(`[data-order-id="${id}"]`); await page.click(`[data-order-id="${id}"]`); await page.waitForSelector('.ws-sheet') }
 const switchProfile = async (name) => {
+  await page.waitForSelector('[role=dialog]', { hidden: true })
   await page.click('[aria-label="Cambiar de perfil"]')
+  await page.waitForSelector('[role=menu][aria-label=Perfiles]')
   await clickText(name, false)
   await page.waitForSelector('[role=dialog] input[type=password]')
   await page.type('[role=dialog] input[type=password]', password)
@@ -141,7 +143,10 @@ try {
   await switchProfile('Técnico UI'); await page.waitForSelector('#queue-mine'); await openRow(review.id)
   await clickText('Retomar reparación'); await waitOrder(review.id, (order) => order.status === 'en_reparacion')
   await clickText('Finalizar reparación'); await waitOrder(review.id, (order) => order.status === 'terminado')
-  await page.waitForSelector('[role=dialog]'); await page.click('[role=dialog] [aria-label="Cerrar"]')
+  await page.waitForFunction(() => [...document.querySelectorAll('[role=dialog]')].some((node) => node.textContent.includes('Imprimir orden de servicio')))
+  // La notificación de finalización puede cubrir la X superior.
+  await clickText('Cerrar')
+  await page.waitForSelector('[role=dialog]', { hidden: true })
   await switchProfile('Recepción UI'); await page.waitForSelector('#queue-avisar'); await page.click('#queue-avisar'); await openRow(review.id)
   await clickText('Avisar al cliente'); await clickText('Registrar aviso'); await page.waitForSelector('[role=dialog]', { hidden: true }); await waitOrder(review.id, (order) => order.notified)
   await clickText('Registrar retiro'); await clickText('Otra persona')

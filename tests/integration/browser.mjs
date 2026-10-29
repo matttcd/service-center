@@ -112,14 +112,17 @@ try {
   assert.equal(result.order.advance, 5000)
   orderId = result.order.id
   await text('Imprimir orden de servicio')
-  const popupPromise = new Promise((resolve) => page.once('popup', resolve))
   // Chromium frío puede tardar más en el disco de la estación de build.
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some((node) => node.textContent.trim() === 'Abrir PDF para imprimir' && !node.disabled), { timeout: 60000 })
+  const popupPromise = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('El navegador cliente no abrió la pestaña PDF.')), 30000)
+    page.once('popup', (popup) => { clearTimeout(timer); resolve(popup) })
+  })
   await button('Abrir PDF para imprimir')
   const popup = await popupPromise
   await popup.waitForFunction(() => location.href.startsWith('blob:'))
   await popup.close()
-  await page.click('[role="dialog"] button[aria-label="Cerrar"]')
+  await button('Cerrar')
   console.log('✓ Navegador: alta de cliente y orden con seña y patrón táctil.')
   await page.goto(`${base}/ordenes/${orderId}`, { waitUntil: 'domcontentloaded' })
   await text('Cliente Navegador')

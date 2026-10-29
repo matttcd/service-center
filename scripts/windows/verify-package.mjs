@@ -22,6 +22,13 @@ for (const entry of manifest.files) {
   assert.equal(/(^|\/)\.env$|\.dump$|^(server\/)?data\//.test(entry.path), false, `Dato privado en el paquete: ${entry.path}`)
 }
 console.log('✓ Integridad del paquete y exclusión de secretos verificadas.')
+assert.equal(manifest.version, build.version)
+assert.equal(JSON.parse(fs.readFileSync(path.join(payload, 'package.json'), 'utf8')).version, build.version)
+assert.ok(manifest.files.some(({ path: name }) => /^dist\/assets\/pdf\.worker\.min-.*\.mjs$/.test(name)), 'Falta el worker local del visor PDF.')
+assert.ok(manifest.files.some(({ path: name }) => /^dist\/assets\/PdfPreview-.*\.js$/.test(name)), 'Falta el visor PDF.')
+assert.ok(manifest.files.some(({ path: name }) => name === 'docs/licenses/pdfjs-dist-LICENSE.txt'), 'Falta la licencia del visor PDF.')
+assert.ok(manifest.files.some(({ path: name }) => name === 'server/prisma/migrations/20261026000000_workspace_ui/migration.sql'), 'Falta la migración de la interfaz integrada.')
+assert.equal(manifest.files.some(({ path: name }) => /^(?:dist\/flow-preview\.html$|dist\/assets\/FlowPreview-|src\/preview\/|test-results\/|tests\/)/.test(name)), false, 'Demo o pruebas del proyecto en el paquete.')
 if (process.argv.includes('--integrity-only')) process.exit(0)
 const temporary = fs.mkdtempSync(path.join(root, 'tools/windows-verify-'))
 const bundledNode = path.join(payload, 'runtime/node/node.exe')
@@ -102,7 +109,7 @@ try {
   postgres.stderr.on('data', (chunk) => { pgLog += chunk })
   for (let n = 0; n < 90 && !pgLog.includes('ready to accept connections'); n++) await delay(500)
   assert.ok(pgLog.includes('ready to accept connections'), pgLog)
-  execFileSync(path.join(pgBin, 'psql.exe'), ['-v', 'ON_ERROR_STOP=1'], { env: pgEnv, input: `CREATE ROLE service_center LOGIN PASSWORD '${password}'; CREATE DATABASE service_center_verify OWNER service_center; CREATE DATABASE service_center_verify_ui OWNER service_center; CREATE DATABASE service_center_verify_restore OWNER service_center;`, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+  execFileSync(path.join(pgBin, 'psql.exe'), ['-v', 'ON_ERROR_STOP=1'], { env: pgEnv, input: `CREATE ROLE service_center LOGIN PASSWORD '${password}'; CREATE DATABASE service_center_verify OWNER service_center; CREATE DATABASE service_center_verify_ui OWNER service_center; CREATE DATABASE service_center_verify_restore OWNER service_center; CREATE DATABASE service_center_verify_upgrade OWNER service_center;`, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
   await startServer()
   console.log('✓ Node y PostgreSQL empaquetados, usuario de base sin superusuario y PATH sin Python/Node globales.')
   control('maintenance')
@@ -153,8 +160,35 @@ try {
   console.log('✓ Recuperación de una copia con clave de otra instalación y conservación de la clave del destino.')
   await verifyAdminRecovery({ payload, env: hostEnv, settings, envFile, restartServer: async () => { await stopServer(); await startServer('service_center_verify_restore') } })
   await stopServer()
+  // La 1.1.4 contiene solo la migración inicial; migrar esa base sin inventar fechas ni cargos.
+  const legacySchema = path.join(temporary, 'legacy/schema.prisma')
+  fs.mkdirSync(path.dirname(legacySchema), { recursive: true })
+  fs.copyFileSync(path.join(payload, 'server/prisma/baseline.prisma'), legacySchema)
+  fs.cpSync(path.join(payload, 'server/prisma/migrations/20261019000000_initial'), path.join(temporary, 'legacy/migrations/20261019000000_initial'), { recursive: true })
+  fs.copyFileSync(path.join(payload, 'server/prisma/migrations/migration_lock.toml'), path.join(temporary, 'legacy/migrations/migration_lock.toml'))
+  const upgradeEnv = { ...hostEnv, DATABASE_URL: settings.DATABASE_URL.replace('/service_center_verify_restore', '/service_center_verify_upgrade') }
+  await run(bundledNode, [path.join(payload, 'server/node_modules/prisma/build/index.js'), 'migrate', 'deploy', '--schema', legacySchema], upgradeEnv)
+  const upgradePg = { ...pgEnv, PGDATABASE: 'service_center_verify_upgrade' }
+  const sql = (input) => execFileSync(path.join(pgBin, 'psql.exe'), ['-X', '-t', '-A', '-v', 'ON_ERROR_STOP=1'], { env: upgradePg, input, windowsHide: true, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim()
+  sql(`INSERT INTO "Customer" (id, "fullName") VALUES ('upgrade-customer', 'Cliente 1.1.4');
+    INSERT INTO "Order" (id, "orderNumber", "customerId", brand, model, pin, pattern, price, advance)
+    VALUES ('upgrade-order', 'OS0001', 'upgrade-customer', 'Samsung', 'A15', '1234', ARRAY[0,1,2], 15000, 5000);`)
+  const originalConfig = fs.readFileSync(envFile)
+  await startServer('service_center_verify_upgrade')
+  const upgraded = JSON.parse(sql(`SELECT row_to_json(o) FROM (SELECT pin, pattern, price, advance, "acceptedAt", "rejectedCharge", "rejectedAt", "rejectedBy" FROM "Order" WHERE id='upgrade-order') o;`))
+  assert.deepEqual(upgraded, { pin: '1234', pattern: [0, 1, 2], price: 15000, advance: 5000, acceptedAt: null, rejectedCharge: null, rejectedAt: null, rejectedBy: null })
+  assert.equal(sql('SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;'), '2')
+  const originalSettings = JSON.parse(originalConfig)
+  const upgradedSettings = JSON.parse(fs.readFileSync(envFile))
+  delete originalSettings.DATABASE_URL; delete upgradedSettings.DATABASE_URL
+  assert.deepEqual(upgradedSettings, originalSettings, 'La migración no debe modificar claves ni configuración.')
+  console.log('✓ Actualización de esquema 1.1.4: PIN, patrón, presupuesto y seña conservados; fechas y cargos nuevos vacíos.')
+  await stopServer()
   await startServer('service_center_verify_ui')
-  await run(bundledNode, ['tests/integration/browser.mjs'], { ...hostEnv, VERIFY_URL: 'http://127.0.0.1:8181', PUPPETEER_EXECUTABLE_PATH: process.env.SC_BROWSER || 'C:/Program Files/Google/Chrome/Application/chrome.exe' })
+  // Headless shell genera los PDF del servidor; el cliente necesita un navegador con visor PDF.
+  for (const test of ['browser', 'workspace-browser', 'appearance-browser', 'account-print-browser']) {
+    await run(bundledNode, [`tests/integration/${test}.mjs`], { ...hostEnv, VERIFY_URL: 'http://127.0.0.1:8181', PUPPETEER_EXECUTABLE_PATH: process.env.SC_BROWSER || 'C:/Program Files/Google/Chrome/Application/chrome.exe' })
+  }
   const caddyConfig = path.join(temporary, 'Caddyfile')
   const tlsData = path.join(temporary, 'tls').replaceAll('\\', '/')
   fs.writeFileSync(caddyConfig, `{\n admin off\n auto_https disable_redirects\n skip_install_trust\n storage file_system "${tlsData}"\n}\nhttps://localhost:${tlsPort} {\n bind 127.0.0.1\n tls internal\n reverse_proxy 127.0.0.1:8181\n}\n`)

@@ -41,6 +41,7 @@ const visuals = async (name) => {
 }
 let pdfAttempts = 0, printerAttempts = 0, failPrint = true, multiPage = null
 const jobs = []
+const externalRequests = []
 try {
   await page.setViewport({ width: 1366, height: 768 })
   await page.goto(`${base}/login`, { waitUntil: 'domcontentloaded' })
@@ -66,7 +67,12 @@ try {
   // Las impresoras y los envíos se simulan; el comprobante inicial usa el PDF real.
   await page.setRequestInterception(true)
   page.on('request', async (request) => {
-    const route = new URL(request.url()).pathname
+    const url = new URL(request.url())
+    if (/^https?:$/.test(url.protocol) && url.origin !== new URL(base).origin) {
+      externalRequests.push(request.url())
+      return request.abort()
+    }
+    const route = url.pathname
     if (request.url().startsWith(base) && route === '/api/printers') {
       printerAttempts++
       return request.respond({ status: printerAttempts === 1 ? 503 : 200, contentType: 'application/json', body: JSON.stringify(printerAttempts === 1 ? { error: 'Impresora de prueba desconectada' } : { printers: ['A4 de prueba', 'Segunda cola de prueba'] }) })
@@ -122,7 +128,10 @@ try {
   await page.$eval('.sc-print-actions .primary', (node) => { node.click(); node.click() })
   await page.waitForSelector('[aria-label=Notificaciones] [role=status]')
   assert.equal(jobs.length, 2, 'Un doble clic no debe duplicar el trabajo')
-  const popupPromise = new Promise((resolve) => page.once('popup', resolve))
+  const popupPromise = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('El navegador cliente no abrió la pestaña PDF.')), 30000)
+    page.once('popup', (popup) => { clearTimeout(timer); resolve(popup) })
+  })
   await click('Abrir PDF para imprimir')
   const popup = await popupPromise
   await popup.waitForFunction(() => location.href.startsWith('blob:'))
@@ -142,6 +151,7 @@ try {
   await page.keyboard.press('Escape')
   await page.waitForSelector('[role=dialog]', { hidden: true })
   assert.deepEqual(errors, [])
+  assert.deepEqual(externalRequests, [], 'El visor PDF debe funcionar usando solo los recursos locales.')
   console.log('✓ Ajustes y cambio de contraseña: diseño, etiquetas, validación, teclado y foco.')
   console.log('✓ Impresión: PDF real, varias páginas, errores y reintentos, selección conservada, envío simulado y doble clic sin duplicados. Ambos temas y tres tamaños; ninguna impresión física.')
 } catch (error) {

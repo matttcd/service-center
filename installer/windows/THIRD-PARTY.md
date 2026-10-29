@@ -9,6 +9,7 @@ Este paquete conserva los avisos de licencia de Node.js, PostgreSQL, Chromium y 
 - WinSW: https://github.com/winsw/winsw · MIT; fuente de la versión usada: https://github.com/winsw/winsw/tree/v2.12.0.
 - SumatraPDF: https://www.sumatrapdfreader.org/ · fuente correspondiente: https://github.com/sumatrapdfreader/sumatrapdf/tree/3.6.1rel. Conservar sus términos de redistribución junto al instalador.
 - Python: https://www.python.org/ · PSF License; pywin32: https://github.com/mhammond/pywin32.
+- Visor PDF.js (`pdfjs-dist` 6.4.299): https://mozilla.github.io/pdf.js/ · Apache-2.0; licencia incluida en docs/licenses/pdfjs-dist-LICENSE.txt. El visor y su worker se distribuyen en dist/assets/.
 - Microsoft Visual C++ Redistributable x64: paquete original firmado por Microsoft, incluido para PostgreSQL; https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist/.
 
 Las versiones y SHA-256 exactos están en runtime-lock.json y en el manifiesto de cada entrega. NSIS (https://nsis.sourceforge.io/License) y PyInstaller se usan para construir el paquete; no se instalan como herramientas de desarrollo en los locales.

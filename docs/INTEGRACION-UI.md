@@ -59,6 +59,6 @@ Los perfiles «Técnico UI» y «Recepción UI» usan `Workspace-test-2026` excl
 
 ## Entrega e instalación
 
-No se cambian servicios, carpetas, certificados, impresoras ni datos de la instalación Windows. No se publica un instalador desde esta entrega. Una futura actualización debe realizar el respaldo previo y aplicar las migraciones antes de abrir la nueva interfaz. No volver a un ejecutable anterior mientras existan órdenes con el nuevo estado.
+No se cambian servicios, carpetas, certificados, impresoras ni datos de la instalación Windows durante la integración y el empaquetado. El instalador offline 1.2.0 incorpora estos cambios; sus instrucciones están en [RELEASE-1.2.0.md](RELEASE-1.2.0.md). Ejecutarlo será una operación separada que exige respaldo previo y aplica las migraciones antes de abrir la nueva interfaz. No volver a un ejecutable anterior mientras existan órdenes con el nuevo estado.
 
 La impresión física requiere la comprobación habitual con las impresoras del local; estas pruebas generan PDF sin enviar trabajos a las colas reales.
