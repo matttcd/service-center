@@ -3,7 +3,7 @@
 // cambiar de perfil desde el sidebar
 // ============================================
 import { useNotify } from '../context/notifications.js'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2, LogIn, ShieldCheck, Shield, Wrench } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -22,6 +22,7 @@ export default function ProfileSwitchModal({ profile, onClose }) {
   const [password, setPassword] = useState('')
   const setError = useNotify('error')
   const [busy, setBusy] = useState(false)
+  const passwordId = useId()
 
   useEffect(() => {
     setPassword('')
@@ -52,7 +53,7 @@ export default function ProfileSwitchModal({ profile, onClose }) {
       .join('')
 
   return (
-    <Modal open={!!profile} onClose={onClose} title="Cambiar de perfil">
+    <Modal open={!!profile} onClose={onClose} title="Cambiar de perfil" maxWidth="max-w-md">
       {profile && (
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60">
@@ -77,10 +78,11 @@ export default function ProfileSwitchModal({ profile, onClose }) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Contraseña de {profile.name}
+            <label htmlFor={passwordId} className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Contraseña
             </label>
             <input
+              id={passwordId}
               type="password"
               autoComplete="current-password"
               autoFocus

@@ -19,7 +19,7 @@ function Get-ItemProperty { return $script:scRegistry }
 function Get-CimInstance { param($ClassName,$Filter) $scId=$Filter.Split("'")[1]; return $script:scServices[$scId] }
 function Get-SCAccountSid([string]$Account) { if ($Account -eq 'LocalSystem') { return 'S-1-5-18' }; if ($Account) { return 'S-1-5-21-100-200-300-1001' }; return $null }
 function Save-State { $scState | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $scData 'installation.json') -Encoding UTF8 }
-Assert ((Get-SCDeployment $scApp $scData '1.2.0').operation -eq 'install') 'No se detectó una instalación nueva.'
+Assert ((Get-SCDeployment $scApp $scData '1.2.1').operation -eq 'install') 'No se detectó una instalación nueva.'
 New-Item -ItemType Directory -Path $scRelease,(Join-Path $scData 'config') -Force | Out-Null
 $script:scRegistry=[pscustomobject]@{AppDir=$scApp;DataDir=$scData}
 $scState=@{appDir=$scApp;dataDir=$scData;releaseDir=$scRelease;version='1.1.4';status='ready';hostName='TALLER';httpsPort='444';serviceAccount=$scAccount;serviceSid=$scSid}
@@ -27,28 +27,36 @@ Save-State
 @{version='1.1.4';releaseId='1.1.4-fixture';platform='win32-x64'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $scRelease 'manifest.json') -Encoding UTF8
 '{}' | Set-Content -LiteralPath (Join-Path $scData 'config/service.json')
 foreach ($scId in @('ServiceCenterApp','ServiceCenterHttps','ServiceCenterPostgres')) { $script:scServices[$scId]=[pscustomobject]@{StartName=$scAccount;PathName=('"'+(Join-Path $scApp "services/$scId.exe")+'"')} }
-$scDetected=Get-SCDeployment $scApp $scData '1.2.0'
+$scDetected=Get-SCDeployment $scApp $scData '1.2.1'
 Assert ($scDetected.currentVersion -eq '1.1.4') 'La actualización no identifica la versión instalada.'
 Assert ($scDetected.operation -eq 'update' -and $scDetected.preserveServiceCredentials -and -not $scDetected.credentialRequired -and -not $scDetected.needsInitialPassword) 'La actualización automática pide credenciales o cambia de modo.'
 Assert ($scDetected.hostName -eq 'TALLER' -and $scDetected.httpsPort -eq '444') 'Se perdieron opciones de red.'
+$scState.version='1.2.0'; Save-State
+@{version='1.2.0';releaseId='1.1.4-fixture';platform='win32-x64'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $scRelease 'manifest.json') -Encoding UTF8
+$scDetected=Get-SCDeployment $scApp $scData '1.2.1'
+Assert ($scDetected.operation -eq 'update' -and $scDetected.preserveServiceCredentials -and -not $scDetected.credentialRequired) 'La actualización desde 1.2.0 no conserva las credenciales.'
+Assert ((Get-SCDeployment $scApp $scData '1.2.0').operation -eq 'repair') 'Misma versión debe reparar.'
+Must-Fail { Get-SCDeployment $scApp $scData '1.1.4' }
+$scState.version='1.1.4'; Save-State
+@{version='1.1.4';releaseId='1.1.4-fixture';platform='win32-x64'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $scRelease 'manifest.json') -Encoding UTF8
 Assert ((Get-SCDeployment $scApp $scData '1.1.4').operation -eq 'repair') 'Misma versión debe reparar.'
 Must-Fail { Get-SCDeployment $scApp $scData '1.1.3' }
 $scState.serviceAccount='DOMINIO\impresion'; Save-State
 $script:scServices.ServiceCenterApp.StartName='DOMINIO\impresion'
 $script:scServices.ServiceCenterHttps.StartName='DOMINIO\impresion'
-$scDetected=Get-SCDeployment $scApp $scData '1.2.0'
+$scDetected=Get-SCDeployment $scApp $scData '1.2.1'
 Assert ($scDetected.preserveServiceCredentials -and -not $scDetected.credentialRequired -and $scDetected.serviceAccount -eq 'DOMINIO\impresion') 'La actualización personalizada exige contraseña.'
 $script:scServices.ServiceCenterApp.StartName='LocalSystem'
-Assert ((Get-SCDeployment $scApp $scData '1.2.0').credentialRequired) 'La reparación de una cuenta personalizada requiere autenticación.'
+Assert ((Get-SCDeployment $scApp $scData '1.2.1').credentialRequired) 'La reparación de una cuenta personalizada requiere autenticación.'
 $scState.serviceAccount=$scAccount; $scState.status='installing'; Save-State
-$scDetected=Get-SCDeployment $scApp $scData '1.2.0'
+$scDetected=Get-SCDeployment $scApp $scData '1.2.1'
 Assert ($scDetected.operation -eq 'repair' -and -not $scDetected.preserveServiceCredentials -and -not $scDetected.credentialRequired) 'La instalación interrumpida no se repara automáticamente.'
 $script:scServices.ServiceCenterApp.PathName='"C:\ajeno\otro.exe"'
-Must-Fail { Get-SCDeployment $scApp $scData '1.2.0' }
+Must-Fail { Get-SCDeployment $scApp $scData '1.2.1' }
 $script:scServices=@{}
 $scState.status='uninstalled'; Save-State
 Remove-Item -LiteralPath (Join-Path $scRelease 'manifest.json')
-Assert ((Get-SCDeployment $scApp $scData '1.2.0').operation -eq 'reinstall') 'No se detectaron los datos conservados después de desinstalar.'
+Assert ((Get-SCDeployment $scApp $scData '1.2.1').operation -eq 'reinstall') 'No se detectaron los datos conservados después de desinstalar.'
 $scState.dataDir=Join-Path $WorkDir 'foreign'; Save-State
-Must-Fail { Get-SCDeployment $scApp $scData '1.2.0' }
+Must-Fail { Get-SCDeployment $scApp $scData '1.2.1' }
 Write-Host 'OK: nueva instalación, actualización sin credenciales, reparación, interrupción, reinstalación y rechazo de versiones/rutas ajenas.'

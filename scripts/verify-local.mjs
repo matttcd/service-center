@@ -107,21 +107,29 @@ try {
     await legacy.query('INSERT INTO "Customer" (id, "fullName") VALUES ($1, $2)', ['legacy-customer', 'Cliente anterior'])
     await legacy.query('INSERT INTO "Order" (id, "orderNumber", "customerId", brand, model, pin, pattern, price, advance) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', ['legacy-order', 'OS0001', 'legacy-customer', 'Samsung', 'A15', '1234', [0, 1, 2], 15000, 5000])
     await legacy.query('INSERT INTO "User" (id, name, email, password, role, active) VALUES ($1,$2,$3,$4,$5,$6)', ['legacy-admin', 'Admin anterior', 'admin@local.com', bcrypt.hashSync('Legacy-verification-2026', 4), 'admin', true])
+    await legacy.query(`INSERT INTO "CatalogModel" (id, brand, name, "deviceType", usage) VALUES
+      ('legacy-tablet', 'Samsung', 'Galaxy Tab S9', 'Celular', 7),
+      ('existing-tablet', 'Samsung', 'Galaxy Tab S9', 'Tablet', 3),
+      ('legacy-notebook', 'Samsung', 'Galaxy Book4', 'Celular', 2)`)
     const oldDump = execFileSync(dump, ['--format=custom'], { env: { ...process.env, ...postgresConnection(legacyEnv.DATABASE_URL) }, windowsHide: true, maxBuffer: 256 * 1024 * 1024 })
     const oldBackupName = `db-${Date.now()}.dump`
     fs.writeFileSync(path.join(env.DATA_DIR, 'backups', oldBackupName), encryptBackup(oldDump, env.BACKUP_ENCRYPTION_KEY))
     await startServer(legacyEnv)
     const migration = await legacy.query('SELECT COUNT(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL')
     const customer = await legacy.query('SELECT "fullName" FROM "Customer" WHERE id = $1', ['legacy-customer'])
-    if (Number(migration.rows[0].count) !== 2 || customer.rows[0]?.fullName !== 'Cliente anterior') throw new Error('La adopción de la base anterior no conservó los datos.')
-    const preserved = (await legacy.query('SELECT pin, pattern, price, advance, "acceptedAt", "rejectedCharge" FROM "Order" WHERE id = $1', ['legacy-order'])).rows[0]
-    if (preserved.pin !== '1234' || preserved.price !== 15000 || preserved.advance !== 5000 || JSON.stringify(preserved.pattern) !== '[0,1,2]' || preserved.acceptedAt !== null || preserved.rejectedCharge !== null) throw new Error('La migración alteró una orden anterior.')
+    if (Number(migration.rows[0].count) !== 3 || customer.rows[0]?.fullName !== 'Cliente anterior') throw new Error('La adopción de la base anterior no conservó los datos.')
+    const preserved = (await legacy.query('SELECT pin, pattern, price, advance, "acceptedAt", "rejectedCharge", "noContact" FROM "Order" WHERE id = $1', ['legacy-order'])).rows[0]
+    if (preserved.pin !== '1234' || preserved.price !== 15000 || preserved.advance !== 5000 || JSON.stringify(preserved.pattern) !== '[0,1,2]' || preserved.acceptedAt !== null || preserved.rejectedCharge !== null || preserved.noContact !== false) throw new Error('La migración alteró una orden anterior.')
     console.log('✓ Adopción de base anterior creada con db push: migración registrada y cliente conservado.')
     const login = await fetch('http://127.0.0.1:8181/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@local.com', password: 'Legacy-verification-2026' }) }).then((response) => response.json())
     const restored = await fetch(`http://127.0.0.1:8181/api/backups/${oldBackupName}/restore`, { method: 'POST', headers: { Authorization: `Bearer ${login.token}` } })
     if (!restored.ok) throw new Error(`Falló restauración de copia anterior: ${JSON.stringify(await restored.json())}`)
-    const afterRestore = (await legacy.query('SELECT pin, price, "acceptedAt", "rejectedCharge" FROM "Order" WHERE id = $1', ['legacy-order'])).rows[0]
-    if (afterRestore.pin !== '1234' || afterRestore.price !== 15000 || afterRestore.acceptedAt !== null || afterRestore.rejectedCharge !== null) throw new Error('La recuperación de una copia anterior perdió datos.')
+    const afterRestore = (await legacy.query('SELECT pin, price, "acceptedAt", "rejectedCharge", "noContact" FROM "Order" WHERE id = $1', ['legacy-order'])).rows[0]
+    if (afterRestore.pin !== '1234' || afterRestore.price !== 15000 || afterRestore.acceptedAt !== null || afterRestore.rejectedCharge !== null || afterRestore.noContact !== false) throw new Error('La recuperación de una copia anterior perdió datos.')
+    const tablet = (await legacy.query(`SELECT id, "deviceType", usage FROM "CatalogModel" WHERE brand = 'Samsung' AND name = 'Galaxy Tab S9'`)).rows
+    const notebook = (await legacy.query(`SELECT "deviceType", usage FROM "CatalogModel" WHERE id = 'legacy-notebook'`)).rows[0]
+    if (tablet.length !== 1 || tablet[0].id !== 'existing-tablet' || tablet[0].deviceType !== 'Tablet' || tablet[0].usage !== 10 || notebook.deviceType !== 'Notebook / PC' || notebook.usage !== 2) throw new Error('La corrección del catálogo no conservó los usos.')
+    console.log('✓ Categorías del catálogo corregidas sin perder usos ni modificar órdenes.')
     console.log('✓ Restauración cifrada de un esquema anterior: migraciones aplicadas y datos conservados.')
 
   } finally { await legacy.end() }
@@ -131,6 +139,12 @@ try {
     await startServer({ ...env, DATABASE_URL: env.DATABASE_URL.replace('/service_center_verify', '/service_center_verify_ui') })
     await run(process.execPath, ['tests/integration/browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
     await run(process.execPath, ['tests/integration/workspace-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
+    await run(process.execPath, ['tests/integration/polish-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
+    await run(process.execPath, ['tests/integration/technician-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
+    await run(process.execPath, ['tests/integration/response-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
+    await run(process.execPath, ['tests/integration/mobile-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
+    await run(process.execPath, ['tests/integration/workspace-ux-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
+    await run(process.execPath, ['tests/integration/intake-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
     await run(process.execPath, ['tests/integration/appearance-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
     await run(process.execPath, ['tests/integration/account-print-browser.mjs'], { ...env, VERIFY_URL: 'http://127.0.0.1:8181' })
   }
@@ -143,6 +157,10 @@ try {
   console.error(err.message)
   if (serverLog && !err.message.includes(serverLog)) console.error(serverLog.slice(-12000))
   process.exitCode = 1
+  if (process.argv.includes('--keep-open') && server?.exitCode === null) {
+    console.error('La prueba falló; se conserva únicamente el entorno aislado en http://127.0.0.1:8181 para revisar. Ctrl+C lo cierra.')
+    await new Promise((resolve) => { process.once('SIGINT', resolve); process.once('SIGTERM', resolve) })
+  }
 } finally {
   await stopServer()
   await database.stop()

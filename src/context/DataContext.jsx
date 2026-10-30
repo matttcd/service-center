@@ -34,15 +34,21 @@ export function DataProvider({ children }) {
   const [ordersRevision, setOrdersRevision] = useState(0)
   const [ordersPage, setOrdersPage] = useState({ orders: [], total: 0 })
   const [ordersLoading, setOrdersLoading] = useState(false)
+  const pageCache = useRef(new Map())
+  const pageRequests = useRef(0)
+  const cacheSession = useRef(null)
+  const cacheRevision = useRef(0)
+  const hasLoaded = useRef(false)
   const today = todayISO()
 
   const refreshSequence = useRef(0)
   const invalidateRefresh = useCallback(() => { refreshSequence.current++ }, [])
 
-  const doRefresh = useCallback(async ({ silent = false } = {}) => {
+  const doRefresh = useCallback(async ({ silent = false, saved = false } = {}) => {
+    let syncError = ''
     const requestToken = loadSession()?.token
     const sequence = ++refreshSequence.current
-    if (!silent) setLoading(true)
+    if (!silent && !hasLoaded.current) setLoading(true)
     try {
       const [res, act] = await Promise.all([
         api('/bootstrap'),
@@ -50,6 +56,8 @@ export function DataProvider({ children }) {
       ])
       if (requestToken !== loadSession()?.token || sequence !== refreshSequence.current) return
       setDataError('')
+      hasLoaded.current = true
+      cacheRevision.current++
       setData({
         customers: res.customers || [],
         orders: res.orders || [],
@@ -64,19 +72,21 @@ export function DataProvider({ children }) {
         setActividadHasMore((act.page || 1) < (act.pages || 1))
         setActividadError('')
       } else {
-        setActividad([])
-        setActividadHasMore(false)
         setActividadError('No se pudieron cargar los movimientos.')
       }
     } catch (err) {
       if (requestToken !== loadSession()?.token || sequence !== refreshSequence.current) return
       if (err.status === 401) logout()
-      else if (err.code !== 'PASSWORD_CHANGE_REQUIRED') setDataError(err.message)
+      else if (err.code !== 'PASSWORD_CHANGE_REQUIRED') {
+        syncError = err.message
+        setDataError(saved ? '' : err.message)
+      }
     } finally {
       if (requestToken === loadSession()?.token && sequence === refreshSequence.current) setLoading(false)
     }
     // Avisa a la vista de órdenes para que reconsulte su página paginada.
     setOrdersRevision((v) => v + 1)
+    return { syncError }
   }, [logout])
 
   // Debounce: una mutación y el evento SSE disparan refresh casi al mismo
@@ -96,6 +106,12 @@ export function DataProvider({ children }) {
   }, [])
 
   useEffect(() => {
+    hasLoaded.current = false
+    pageCache.current.clear()
+    cacheRevision.current++
+    cacheSession.current = loadSession()?.token || null
+    pageRequests.current++
+    setOrdersPage({ orders: [], total: 0 })
     if (currentUser?.mustChangePassword) {
       setLoading(false)
       return
@@ -119,10 +135,8 @@ export function DataProvider({ children }) {
     const es = new EventSource(`/api/events?token=${encodeURIComponent(token)}`)
     let connected = false
     es.addEventListener('connected', () => {
-      if (connected) {
-        refresh({ silent: true })
-        if (currentUser.role === 'admin') loadAdminMetrics()
-      }
+      refresh({ silent: true })
+      if (connected && currentUser.role === 'admin') loadAdminMetrics()
       connected = true
     })
     es.addEventListener('data-changed', () => {
@@ -151,45 +165,53 @@ export function DataProvider({ children }) {
 
   // Ejecuta una mutación y refresca en silencio. Si el refresh falla no se
   // reporta como error: la mutación ya se aplicó (el SSE la sincroniza).
-  const run = async (promise) => {
-    let error = null
-    try {
-      await promise
-    } catch (err) {
-      error = err.message
-    }
-    if (!error) await refresh({ silent: true })
-    return { error }
+  const run = async (promise, { background = false } = {}) => {
+    const session = loadSession()?.token
+    let result
+    try { result = await promise } catch (err) { return { error: err.message } }
+    if (session !== loadSession()?.token) return { error: 'La sesión cambió.' }
+    invalidateRefresh()
+    if (result?.order) setData((previous) => ({ ...previous, orders: [...previous.orders.filter((order) => order.id !== result.order.id), result.order] }))
+    if (result?.customer) setData((previous) => ({ ...previous, customers: [...previous.customers.filter((customer) => customer.id !== result.customer.id), result.customer] }))
+    if (result?.user) setData((previous) => ({ ...previous,
+      users: [...previous.users.filter((user) => user.id !== result.user.id), result.user],
+      technicians: [...previous.technicians.filter((user) => user.id !== result.user.id), ...(result.user.active && result.user.role === 'tecnico' ? [result.user] : [])],
+    }))
+    cacheRevision.current++
+    // Un fallo de sincronización no convierte un guardado confirmado en fallido.
+    const synchronizationRequest = refresh({ silent: true, saved: true }).catch((error) => ({ syncError: error.message }))
+    // La orden devuelta ya confirma el guardado; no bloquear la ficha por la recarga global.
+    const synchronization = background || result?.order ? undefined : await synchronizationRequest
+    return { ...result, error: null, syncError: synchronization?.syncError }
   }
 
   // Carga la vista paginada de órdenes (histórico) desde el servidor,
   // en lugar de traer todo el dataset en cada bootstrap.
   const loadOrders = useCallback(async (filters = {}) => {
     const params = orderQuery(filters)
+    const session = loadSession()?.token
+    const request = ++pageRequests.current
+    const revision = cacheRevision.current
     setOrdersLoading(true)
     try {
       const res = await api(`/orders?${params.toString()}`)
       const page = { orders: res.orders || [], total: res.total || 0 }
-      setOrdersPage(page)
+      if (session !== loadSession()?.token) throw new Error('La sesión cambió.')
+      if (revision === cacheRevision.current) pageCache.current.set(params.toString(), page)
+      if (pageCache.current.size > 20) pageCache.current.delete(pageCache.current.keys().next().value)
+      if (request === pageRequests.current) setOrdersPage(page)
       return page
     } catch (err) {
-      if (err.status === 401) logout()
-      return { orders: [], total: 0 }
+      if (err.status === 401 && session === loadSession()?.token) logout()
+      throw err
     } finally {
-      setOrdersLoading(false)
+      if (request === pageRequests.current) setOrdersLoading(false)
     }
   }, [logout])
+  const getCachedOrders = useCallback((filters) => cacheSession.current === loadSession()?.token ? pageCache.current.get(orderQuery(filters).toString()) || null : null, [])
 
   // ---------- Clientes ----------
-  const addCustomer = async (fields) => {
-    try {
-      const res = await api('/customers', { method: 'POST', body: fields })
-      await refresh({ silent: true })
-      return { error: null, id: res.id }
-    } catch (err) {
-      return { error: err.message }
-    }
-  }
+  const addCustomer = (fields) => run(api('/customers', { method: 'POST', body: fields }), { background: true })
   const updateCustomer = (id, fields) =>
     run(api(`/customers/${id}`, { method: 'PUT', body: fields }))
   const deleteCustomer = (id) => run(api(`/customers/${id}`, { method: 'DELETE' }))
@@ -215,28 +237,12 @@ export function DataProvider({ children }) {
   }
 
   // ---------- Órdenes ----------
-  const addOrder = async (fields) => {
-    try {
-      const res = await api('/orders', { method: 'POST', body: fields })
-      await refresh({ silent: true })
-      return { error: null, order: res.order }
-    } catch (err) {
-      return { error: err.message }
-    }
-  }
+  const addOrder = (fields) => run(api('/orders', { method: 'POST', body: fields }), { background: true })
 
   const deleteOrder = (id) => run(api(`/orders/${id}`, { method: 'DELETE' }))
 
   // Cambia el estado de una orden.
-  const setOrderStatus = async (orderId, status, extras = {}) => {
-    try {
-      const res = await api(`/orders/${orderId}/status`, { method: 'POST', body: { status, ...extras } })
-      await refresh({ silent: true })
-      return { error: null, order: res.order }
-    } catch (err) {
-      return { error: err.message }
-    }
-  }
+  const setOrderStatus = (orderId, status, extras = {}) => run(api(`/orders/${orderId}/status`, { method: 'POST', body: { status, ...extras } }))
 
   // Actualiza notas / presupuesto del técnico.
   const updateOrder = (orderId, fields) =>
@@ -263,37 +269,13 @@ export function DataProvider({ children }) {
     updateOrder(orderId, { deleteSparePart: { id: partId } })
 
   // Marca / desmarca "cliente avisado".
-  const toggleNotified = async (orderId, notified) => {
-    try {
-      const res = await api(`/orders/${orderId}/notified`, { method: 'POST', body: { notified } })
-      await refresh({ silent: true })
-      return { error: null, order: res.order }
-    } catch (err) {
-      return { error: err.message }
-    }
-  }
+  const toggleNotified = (orderId, notified) => run(api(`/orders/${orderId}/notified`, { method: 'POST', body: { notified } }))
 
   // Marca / desmarca confirmación del cliente sobre el arreglo.
-  const confirmOrder = async (orderId, confirmed) => {
-    try {
-      const res = await api(`/orders/${orderId}/confirm`, { method: 'POST', body: { confirmed } })
-      await refresh({ silent: true })
-      return { error: null, order: res.order }
-    } catch (err) {
-      return { error: err.message }
-    }
-  }
+  const confirmOrder = (orderId, confirmed) => run(api(`/orders/${orderId}/confirm`, { method: 'POST', body: { confirmed } }))
 
   // Asigna el técnico encargado de una orden.
-  const assignTechnician = async (orderId, userId) => {
-    try {
-      const res = await api(`/orders/${orderId}/assign`, { method: 'POST', body: { userId } })
-      await refresh({ silent: true })
-      return { error: null, order: res.order }
-    } catch (err) {
-      return { error: err.message }
-    }
-  }
+  const assignTechnician = (orderId, userId) => run(api(`/orders/${orderId}/assign`, { method: 'POST', body: { userId } }))
 
   // Imprime la etiqueta ZPL del equipo.
   const printLabel = async (orderId) => {
@@ -318,7 +300,7 @@ export function DataProvider({ children }) {
   }
 
   // ---------- Usuarios ----------
-  const addUser = (fields) => run(api('/users', { method: 'POST', body: fields }))
+  const addUser = (fields) => run(api('/users', { method: 'POST', body: fields }), { background: true })
   const toggleUserActive = (id) => run(api(`/users/${id}/toggle`, { method: 'POST' }))
 
   // ---------- Configuración ----------
@@ -372,6 +354,7 @@ export function DataProvider({ children }) {
     ordersTotal: ordersPage.total,
     ordersLoading,
     loadOrders,
+    getCachedOrders,
     ordersRevision,
     users: data.users,
     technicians: data.technicians,

@@ -1,3 +1,5 @@
+import { intakeError } from '../shared/intake.js'
+import { normalizeDni } from '../shared/identifiers.js'
 // ============================================
 // Servidor Express · El Gringo Celulares API
 // Servidor de la API REST del servicio técnico
@@ -304,6 +306,11 @@ function adminOnly(req, res, next) {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Acceso restringido al administrador.' })
   }
+  next()
+}
+
+function receptionOnly(req, res, next) {
+  if (!['recepcion', 'admin'].includes(req.user.role)) return res.status(403).json({ error: 'Solo recepción o administración pueden imprimir comprobantes y etiquetas.' })
   next()
 }
 
@@ -630,23 +637,25 @@ async function bumpFixUsage(db, fixString) {
 // ---------- Clientes ----------
 app.post('/api/customers', auth, async (req, res) => {
   const { fullName, dni, phone, phone2, phone3, email, address } = req.body || {}
-  if (!fullName || !fullName.trim()) {
+  if (typeof fullName !== 'string' || !fullName.trim()) {
     return res.status(400).json({ error: 'El nombre completo es obligatorio.' })
   }
-  const dniNorm = String(dni || '').trim()
+  const dniNorm = normalizeDni(dni)
   if (dniNorm && !/^\d{6,8}$/.test(dniNorm)) {
     return res.status(400).json({ error: 'El DNI debe tener entre 6 y 8 dígitos.' })
   }
-  if (dniNorm) {
-    const dup = await prisma.customer.findFirst({ where: { deletedAt: null, dni: dniNorm } })
-    if (dup) {
-      return res.status(400).json({ error: `Ya existe un cliente con el DNI ${dniNorm}.` })
-    }
-  }
-  const id = uid()
   try {
-    await commit(async () => {
-      await prisma.customer.create({
+    const result = await commit(async (db) => {
+      if (dniNorm) {
+        await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'customer-dni:' + dniNorm}))::text`
+        const existing = await db.customer.findFirst({ where: { deletedAt: null, dni: dniNorm } })
+        if (existing) {
+          if (req.body.reuseExisting === true && ['admin', 'recepcion'].includes(req.user.role)) return { id: existing.id, customer: existing, reused: true }
+          throw Object.assign(new Error(`Ya existe un cliente con el DNI ${dniNorm}.`), { status: 400 })
+        }
+      }
+      const id = uid()
+      const customer = await db.customer.create({
         data: {
           id,
           fullName: titleCase(fullName),
@@ -659,11 +668,12 @@ app.post('/api/customers', auth, async (req, res) => {
           createdAt: new Date(),
         },
       })
-      await audit('create', 'customers', id, req.user.id, `Alta de cliente ${titleCase(fullName)}${dniNorm ? ` (DNI ${dniNorm})` : ''}`)
-    })
-    res.json({ ok: true, id })
-  } catch {
-    res.status(500).json({ error: 'Error al crear el cliente.' })
+      await audit('create', 'customers', id, req.user.id, `Alta de cliente ${titleCase(fullName)}${dniNorm ? ` (DNI ${dniNorm})` : ''}`, db)
+      return { id, customer, reused: false }
+    }, { useTransaction: true })
+    res.json({ ok: true, ...result })
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Error al crear el cliente.' })
   }
 })
 
@@ -671,10 +681,10 @@ app.put('/api/customers/:id', auth, async (req, res) => {
   const target = await prisma.customer.findUnique({ where: { id: req.params.id } })
   if (!target) return res.status(404).json({ error: 'Cliente no encontrado.' })
   const { fullName, dni, phone, phone2, phone3, email, address } = req.body || {}
-  if (!fullName || !fullName.trim()) {
+  if (typeof fullName !== 'string' || !fullName.trim()) {
     return res.status(400).json({ error: 'El nombre completo es obligatorio.' })
   }
-  const dniNorm = String(dni || '').trim()
+  const dniNorm = normalizeDni(dni)
   if (dniNorm && !/^\d{6,8}$/.test(dniNorm)) {
     return res.status(400).json({ error: 'El DNI debe tener entre 6 y 8 dígitos.' })
   }
@@ -746,6 +756,10 @@ app.post('/api/orders', auth, async (req, res) => {
   const price = money(body.price, 'El presupuesto')
   const advance = money(body.advance, 'La seña')
   const storedPattern = body.noPin ? [] : unlockPattern(body.pattern)
+  if (body.noContact !== undefined && typeof body.noContact !== 'boolean') return res.status(400).json({ error: 'Opción de comunicación inválida.' })
+  const error = intakeError({ ...body, deviceType: String(body.deviceType || '').trim(), brand, model, pattern: storedPattern }, customer)
+  if (error) return res.status(400).json({ error })
+
 
   try {
     const order = await commit(async (db) => {
@@ -768,6 +782,7 @@ app.post('/api/orders', auth, async (req, res) => {
           conditions: normalizeList(String(body.conditions || '')),
           pin: body.noPin ? '' : String(body.pin || ''),
           noPin: !!body.noPin,
+          noContact: body.noContact === true,
           pattern: storedPattern,
           diagnosisType,
           isSimpleService,
@@ -841,6 +856,7 @@ app.get('/api/orders', auth, async (req, res) => {
       { brand: { contains: query, mode: 'insensitive' } },
       { model: { contains: query, mode: 'insensitive' } },
       { customer: { fullName: { contains: query, mode: 'insensitive' } } },
+      ...(/^\d+$/.test(normalizeDni(query)) ? [{ customer: { dni: { contains: normalizeDni(query) } } }] : []),
     ]
   }
 
@@ -882,12 +898,14 @@ async function enrichOrderHtml(orderId) {
   return { order: enriched, customer, terms: config?.terms }
 }
 
-app.get('/api/orders/:id/pdf', auth, async (req, res) => {
+app.get('/api/orders/:id/pdf', auth, receptionOnly, async (req, res) => {
   try {
     const data = await enrichOrderHtml(req.params.id)
     if (!data) return res.status(404).json({ error: 'Orden no encontrada.' })
     const html = buildOrderHtml(data.order, data.customer, data.terms)
+    const pdfStart = performance.now()
     const pdfBuffer = await htmlToPdf(html)
+    res.set('Server-Timing', `pdf;dur=${(performance.now() - pdfStart).toFixed(1)}`)
     res.type('application/pdf')
     res.set('Content-Disposition', `inline; filename="orden-${data.order.orderNumber}.pdf"`)
     res.send(pdfBuffer)
@@ -897,7 +915,7 @@ app.get('/api/orders/:id/pdf', auth, async (req, res) => {
   }
 })
 
-app.get('/api/printers', auth, async (req, res) => {
+app.get('/api/printers', auth, receptionOnly, async (req, res) => {
   try {
     const result = await listPrinters()
     if (!result.ok) return res.status(502).json({ printers: [], error: result.error })
@@ -908,7 +926,7 @@ app.get('/api/printers', auth, async (req, res) => {
   }
 })
 
-app.post('/api/orders/:id/print', auth, async (req, res) => {
+app.post('/api/orders/:id/print', auth, receptionOnly, async (req, res) => {
   try {
     const data = await enrichOrderHtml(req.params.id)
     if (!data) return res.status(404).json({ error: 'Orden no encontrada.' })
@@ -955,7 +973,7 @@ app.post('/api/orders/:id/pickup', auth, async (req, res) => {
   }
 })
 
-app.get('/api/orders/:id/pickup-pdf', auth, async (req, res) => {
+app.get('/api/orders/:id/pickup-pdf', auth, receptionOnly, async (req, res) => {
   try {
     const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: orderInclude })
     if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
@@ -1000,6 +1018,7 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
     return res.status(400).json({ error: 'Estado inválido.' })
   }
 
+  if (pickup && typeof pickup === 'object') pickup.pickupDni = normalizeDni(pickup.pickupDni)
   const from = order.status
   const previousAssignedTo = order.assignedTo
   const role = req.user.role
@@ -1008,7 +1027,7 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   let rejectionAmount
   if (status === 'presupuesto_rechazado') {
     if (!isCounter) return res.status(403).json({ error: 'Solo recepción o administración puede registrar un rechazo.' })
-    if (from !== 'presupuesto' || !order.price || !order.notified || order.confirmed) return res.status(400).json({ error: 'El presupuesto debe estar avisado y pendiente de respuesta.' })
+    if (from !== 'presupuesto' || !order.price || (!order.notified && !order.noContact) || order.confirmed) return res.status(400).json({ error: 'El presupuesto debe estar avisado y pendiente de respuesta.' })
     if (!['number', 'string'].includes(typeof rejectedCharge) || String(rejectedCharge).trim() === '') return res.status(400).json({ error: 'Ingresá el importe de retiro, incluso si es cero.' })
     rejectionAmount = money(rejectedCharge, 'El importe de retiro')
   } else if (rejectedCharge !== undefined) return res.status(400).json({ error: 'El importe de retiro solo corresponde al rechazo.' })
@@ -1051,7 +1070,7 @@ app.post('/api/orders/:id/status', auth, async (req, res) => {
   if (from === 'en_revision' && status === 'presupuesto' && !(order.fix || '').trim()) {
     return res.status(400).json({ error: 'Registrá al menos una reparación antes de pasar a presupuesto.' })
   }
-  if (status === 'entregado' && !order.notified && !retiro) {
+  if (status === 'entregado' && !order.notified && !(order.noContact && ['terminado', 'presupuesto_rechazado'].includes(from)) && !retiro) {
     return res.status(400).json({ error: 'Marcá primero al cliente como avisado antes de entregar el equipo.' })
   }
   if (status === 'en_tercero' && !isCounter) {
@@ -1152,7 +1171,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
   if (!order) return res.status(404).json({ error: 'Orden no encontrada.' })
   if (order.deletedAt) return res.status(400).json({ error: 'La orden está eliminada.' })
   const {
-    deviceType, brand, model, pin, noPin, pattern, accessories, conditions,
+    deviceType, brand, model, pin, noPin, noContact, pattern, accessories, conditions,
     technicianNotes, fix, price, issue, note, editNote, deleteNote, isSimpleService,
     addSparePart, editSparePart, deleteSparePart, sendToBudget,
   } = req.body || {}
@@ -1161,7 +1180,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
   const isEmpOrAdmin = ['recepcion', 'admin'].includes(role)
   if (order.rejectedAt && (fix !== undefined || price !== undefined)) return res.status(400).json({ error: 'El presupuesto rechazado se conserva como referencia y no se puede modificar.' })
   const expected = req.body?.expected || {}
-  const comparableFields = ['deviceType', 'brand', 'model', 'pin', 'noPin', 'pattern', 'accessories', 'conditions', 'issue', 'fix', 'price']
+  const comparableFields = ['deviceType', 'brand', 'model', 'pin', 'noPin', 'noContact', 'pattern', 'accessories', 'conditions', 'issue', 'fix', 'price']
   if (typeof expected !== 'object' || Array.isArray(expected) || Object.keys(expected).some((key) => !comparableFields.includes(key))) return res.status(400).json({ error: 'Versión de edición inválida.' })
   if (Object.entries(expected).some(([key, value]) => JSON.stringify(order[key]) !== JSON.stringify(value))) return res.status(409).json({ error: 'La orden cambió en otro equipo. Conservamos tu borrador; revisá los cambios antes de guardar.' })
   if (sendToBudget && (!isAssignedTech || fix === undefined || order.status !== 'en_reparacion')) return res.status(400).json({ error: 'Solo el técnico encargado puede enviar un cambio de trabajo a presupuesto.' })
@@ -1215,7 +1234,8 @@ app.put('/api/orders/:id', auth, async (req, res) => {
       return res.status(403).json({ error: 'Solo podés eliminar tus propios repuestos.' })
     }
   }
-  const equipFields = [deviceType, brand, model, pin, noPin, pattern, accessories, conditions, issue, isSimpleService]
+  if (noContact !== undefined && typeof noContact !== 'boolean') return res.status(400).json({ error: 'Opción de comunicación inválida.' })
+  const equipFields = [deviceType, brand, model, pin, noPin, noContact, pattern, accessories, conditions, issue, isSimpleService]
   const touchesEquip = equipFields.some((v) => v !== undefined)
   if (touchesEquip && !isEmpOrAdmin) {
     return res.status(403).json({ error: 'Solo recepción o administradores pueden editar los detalles del equipo.' })
@@ -1246,6 +1266,7 @@ app.put('/api/orders/:id', auth, async (req, res) => {
       if (model !== undefined) updateData.model = String(model)
       if (pin !== undefined) updateData.pin = String(pin)
       if (noPin !== undefined) updateData.noPin = !!noPin
+      if (noContact !== undefined) updateData.noContact = noContact
       if (pattern !== undefined) updateData.pattern = unlockPattern(pattern)
       if (noPin === true) { updateData.pin = ''; updateData.pattern = [] }
       if (accessories !== undefined) updateData.accessories = normalizeList(String(accessories))
@@ -1429,31 +1450,33 @@ app.post('/api/orders/:id/confirm', auth, async (req, res) => {
     return res.status(403).json({ error: 'Solo recepción puede confirmar el arreglo.' })
   }
   const confirmed = !!req.body?.confirmed
-  if (confirmed && (!order.notified || Number(order.price) <= 0)) {
+  if (confirmed && (order.status !== 'presupuesto' || (!order.notified && !order.noContact) || Number(order.price) <= 0)) {
     return res.status(400).json({ error: 'Cargá el presupuesto y avisá al cliente antes de confirmar el arreglo.' })
   }
   try {
-    const updated = await commit(async () => {
-      await prisma.order.update({
+    const updated = await commit(async (db) => {
+      const locked = await db.order.updateMany({ where: { id: order.id, deletedAt: null, status: order.status, price: order.price, notified: order.notified, noContact: order.noContact, confirmed: order.confirmed }, data: { confirmed: order.confirmed } })
+      if (!locked.count) throw Object.assign(new Error('La orden cambió en otro equipo. Revisá la respuesta antes de confirmar.'), { status: 409 })
+      await db.order.update({
         where: { id: order.id },
         data: {
           confirmed,
           confirmedAt: confirmed ? new Date() : null,
           confirmedBy: confirmed ? req.user.id : null,
-          history: { create: { status: order.status, at: new Date(), by: req.user.id, note: confirmed ? 'Confirmado por el cliente' : 'Desconfirmado' } },
+          history: { create: { status: order.status, at: new Date(), by: req.user.id, note: confirmed ? order.noContact ? 'Confirmado por el cliente en el local' : 'Confirmado por el cliente' : 'Desconfirmado' } },
         },
       })
-      await audit('update', 'orders', order.id, req.user.id, `${order.orderNumber} · arreglo ${confirmed ? 'confirmado por el cliente' : 'desmarcado como confirmado'}`)
-      return prisma.order.findUnique({ where: { id: order.id }, include: orderInclude })
-    })
+      await audit('update', 'orders', order.id, req.user.id, `${order.orderNumber} · arreglo ${confirmed ? 'confirmado por el cliente' : 'desmarcado como confirmado'}`, db)
+      return db.order.findUnique({ where: { id: order.id }, include: orderInclude })
+    }, { useTransaction: true })
     res.json({ ok: true, order: await decorateOrder(updated) })
-  } catch {
-    res.status(500).json({ error: 'Error al confirmar el arreglo.' })
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Error al confirmar el arreglo.' })
   }
 })
 
 // ---------- Etiqueta ZPL ----------
-app.post('/api/orders/:id/label', auth, async (req, res) => {
+app.post('/api/orders/:id/label', auth, receptionOnly, async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: req.params.id } })
   if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
   const customer = await prisma.customer.findUnique({ where: { id: order.customerId } })
@@ -1492,20 +1515,22 @@ app.post('/api/users', auth, adminOnly, async (req, res) => {
   }
   const id = uid()
   try {
-    await commit(async () => {
-      await prisma.user.create({
+    const hash = await bcrypt.hash(password, 10)
+    const user = await commit(async () => {
+      const created = await prisma.user.create({
         data: {
           id,
           name: titleCase(name),
           email: String(email || '').trim().toLowerCase() || null,
-          password: bcrypt.hashSync(password, 10),
+          password: hash,
           role,
           active: true,
         },
       })
       await audit('create', 'users', id, req.user.id, `Alta de usuario ${titleCase(name)} (${role})`)
+      return created
     })
-    res.json({ ok: true, id })
+    res.json({ ok: true, id, user: publicUser(user) })
   } catch {
     res.status(500).json({ error: 'Error al crear el usuario.' })
   }
@@ -1679,7 +1704,7 @@ app.post('/api/backups/:name/restore', auth, adminOnly, async (req, res) => {
 })
 
 registerTrashRoutes(app, { prisma, auth, adminOnly, commit, audit })
-registerPrintRoutes(app, { auth, adminOnly, commit })
+registerPrintRoutes(app, { auth, adminOnly, receptionOnly, commit })
 
 // ---------- 404 para la API ----------
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }))

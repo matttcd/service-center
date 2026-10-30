@@ -628,7 +628,7 @@ export default function OrderModal({ order, onClose }) {
           </button>
           {effectiveNext && !isReadOnly && (
             <button
-              onClick={finish}
+              onClick={() => setConfirm({ title: effectiveLabel, message: '¿Confirmar este cambio de estado?', onConfirm: finish })}
               disabled={busy || lockedBudget || missingRepair || missingTech}
               className={`ml-auto ${lockedBudget || missingRepair || missingTech ? '!cursor-not-allowed !bg-slate-300 !text-slate-500' : ''} ${btnPrimary} !px-5 !py-2.5 !text-sm`}
               title={lockedBudget ? 'El cliente debe confirmar el arreglo antes de reparar' : missingTech ? 'Asigná un técnico antes de iniciar la reparación' : missingRepair ? 'Registrá al menos una reparación antes de pasar a presupuesto' : ''}

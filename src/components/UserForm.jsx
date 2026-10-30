@@ -2,7 +2,7 @@
 // UserForm: crear un nuevo usuario (solo admin)
 // ============================================
 import { useNotify } from '../context/notifications.js'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Modal from './Modal.jsx'
 import ConfirmDiscard from './ConfirmDiscard.jsx'
 import { titleCase } from '../utils/helpers.js'
@@ -13,6 +13,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
   const [confirming, setConfirming] = useState(false)
   const setError = useNotify('error')
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     if (!open) return
@@ -26,6 +27,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
   const dirty = JSON.stringify(form) !== snapshot
 
   const requestClose = () => {
+    if (savingRef.current) return
     if (dirty && !confirming) {
       setConfirming(true)
       return
@@ -40,14 +42,16 @@ export default function UserForm({ open, onClose, onSubmit }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (saving) return
+    if (savingRef.current) return
     if (!form.name.trim()) return setError('El nombre es obligatorio.')
     if (form.password.length < 8) return setError('La contraseña debe tener al menos 8 caracteres.')
-    setSaving(true)
-    const res = await onSubmit({ ...form, name: titleCase(form.name) })
-    setSaving(false)
-    if (res && res.error) return setError(res.error)
-    onClose()
+    savingRef.current = true; setSaving(true)
+    try {
+      const res = await onSubmit({ ...form, name: titleCase(form.name) })
+      if (res?.error) return setError(res.error)
+      onClose()
+    } catch (error) { setError(error.message) }
+    finally { savingRef.current = false; setSaving(false) }
   }
 
   const inputCls =
@@ -62,13 +66,14 @@ export default function UserForm({ open, onClose, onSubmit }) {
           message="El usuario todavía no se creó. Si salís, los datos que escribiste se perderán."
         />
       ) : (
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" aria-busy={saving}>
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
             Nombre completo
           </label>
           <input
             type="text"
+            disabled={saving}
             value={form.name}
             onChange={set('name')}
             placeholder="Ej: Laura Medina"
@@ -81,6 +86,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
           </label>
           <input
             type="password"
+            disabled={saving}
             value={form.password}
             onChange={set('password')}
             placeholder="••••••"
@@ -91,7 +97,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
           <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
             Rol
           </label>
-          <select value={form.role} onChange={set('role')} className={inputCls}>
+          <select disabled={saving} value={form.role} onChange={set('role')} className={inputCls}>
             <option value="recepcion">Recepción</option>
             <option value="tecnico">Técnico (reparación)</option>
             <option value="admin">Administrador</option>
@@ -102,6 +108,7 @@ export default function UserForm({ open, onClose, onSubmit }) {
           <button
             type="button"
             onClick={requestClose}
+            disabled={saving}
             className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Cancelar

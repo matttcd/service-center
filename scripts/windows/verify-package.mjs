@@ -177,7 +177,7 @@ try {
   await startServer('service_center_verify_upgrade')
   const upgraded = JSON.parse(sql(`SELECT row_to_json(o) FROM (SELECT pin, pattern, price, advance, "acceptedAt", "rejectedCharge", "rejectedAt", "rejectedBy" FROM "Order" WHERE id='upgrade-order') o;`))
   assert.deepEqual(upgraded, { pin: '1234', pattern: [0, 1, 2], price: 15000, advance: 5000, acceptedAt: null, rejectedCharge: null, rejectedAt: null, rejectedBy: null })
-  assert.equal(sql('SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;'), '2')
+  assert.equal(sql('SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;'), '3')
   const originalSettings = JSON.parse(originalConfig)
   const upgradedSettings = JSON.parse(fs.readFileSync(envFile))
   delete originalSettings.DATABASE_URL; delete upgradedSettings.DATABASE_URL
@@ -186,7 +186,7 @@ try {
   await stopServer()
   await startServer('service_center_verify_ui')
   // Headless shell genera los PDF del servidor; el cliente necesita un navegador con visor PDF.
-  for (const test of ['browser', 'workspace-browser', 'appearance-browser', 'account-print-browser']) {
+  for (const test of ['browser', 'workspace-browser', 'polish-browser', 'technician-browser', 'response-browser', 'mobile-browser', 'workspace-ux-browser', 'intake-browser', 'appearance-browser', 'account-print-browser']) {
     await run(bundledNode, [`tests/integration/${test}.mjs`], { ...hostEnv, VERIFY_URL: 'http://127.0.0.1:8181', PUPPETEER_EXECUTABLE_PATH: process.env.SC_BROWSER || 'C:/Program Files/Google/Chrome/Application/chrome.exe' })
   }
   const caddyConfig = path.join(temporary, 'Caddyfile')

@@ -10,7 +10,7 @@ export const RECEPTION_VIEWS = [
   ['presupuestar', 'Presupuestar'], ['avisar', 'Avisar'], ['respuesta', 'Respuesta'],
   ['repuestos', 'Repuestos'], ['retiros', 'Retiros'], ['externos', 'Externos'], ['simples', 'Servicios simples'],
 ]
-export const TECH_VIEWS = [['mine', 'Mis trabajos'], ['available', 'Sin asignar'], ['all', 'Todo el taller']]
+export const TECH_VIEWS = [['mine', 'Mis trabajos'], ['available', 'Sin asignar'], ['all', 'Todos']]
 
 export function workAge(order, now = Date.now()) {
   if (!order.assignedTo || order.acceptedAt == null) return ''

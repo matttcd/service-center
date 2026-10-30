@@ -4,7 +4,6 @@
 import { NavLink } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import {
-  LayoutDashboard,
   Users,
   ClipboardList,
   Settings,
@@ -26,8 +25,10 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useData } from '../context/DataContext.jsx'
 import { api } from '../utils/api.js'
 import ProfileSwitchModal from './ProfileSwitchModal.jsx'
+import ConfirmModal from './ConfirmModal.jsx'
 import { usePendingDrafts } from '../context/workspace.js'
 import { BRAND_NAME, BRAND_SUBTITLE } from '../utils/brand.js'
 import logoUrl from '../assets/gringologo-modified.png'
@@ -41,6 +42,7 @@ function RoleIcon({ role }) {
 
 export default function Sidebar({ open, onClose }) {
   const { currentUser, logout } = useAuth()
+  const { users } = useData()
   const role = currentUser?.role
   const isAdmin = role === 'admin'
   const isTech = role === 'tecnico' || isAdmin
@@ -49,30 +51,35 @@ export default function Sidebar({ open, onClose }) {
   const [loadError, setLoadError] = useState('')
   const [loadingProfiles, setLoadingProfiles] = useState(false)
   const [switchTarget, setSwitchTarget] = useState(null)
+  const [pendingNavigation, setPendingNavigation] = useState(null)
   const menuRef = useRef(null)
+  const profilesRequest = useRef(0)
 
   const loadProfiles = async () => {
+    const request = ++profilesRequest.current
     setLoadError('')
     setLoadingProfiles(true)
     try {
       const res = await api('/auth/profiles')
-      setProfiles(res.profiles || [])
+      if (request === profilesRequest.current) setProfiles(res.profiles || [])
     } catch {
-      setLoadError('No se pudieron cargar los perfiles.')
+      if (request === profilesRequest.current) setLoadError('No se pudieron cargar los perfiles.')
     } finally {
-      setLoadingProfiles(false)
+      if (request === profilesRequest.current) setLoadingProfiles(false)
     }
   }
 
   const openMenu = () => {
     setMenuOpen((v) => !v)
-    if (profiles.length === 0) loadProfiles()
+    if (!menuOpen) loadProfiles()
   }
+
+  const visibleProfiles = isAdmin ? users.filter((user) => user.active).sort((a, b) => a.name.localeCompare(b.name)) : profiles
 
   const pick = (p) => {
     if (p.id === currentUser?.id) return setMenuOpen(false)
     setMenuOpen(false)
-    if (leave()) setSwitchTarget(p)
+    leave(() => setSwitchTarget(p))
   }
 
   // Cierra el menú con click afuera o Escape.
@@ -98,7 +105,7 @@ export default function Sidebar({ open, onClose }) {
       .join('')
 
   const pendingDrafts = usePendingDrafts()
-  const leave = () => !pendingDrafts || window.confirm('Hay borradores sin guardar. ¿Descartarlos y salir?')
+  const leave = (action) => { if (pendingDrafts) setPendingNavigation(() => action); else action() }
   const groups = [
     { label: 'Trabajo', items: [
       ...(!isTech || isAdmin ? [{ to: '/recepcion', label: 'Recepción', icon: ClipboardList }] : []),
@@ -106,7 +113,6 @@ export default function Sidebar({ open, onClose }) {
       { to: '/terminados', label: 'Terminados', icon: PackageCheck },
     ] },
     { label: 'Consultas', items: [
-      ...(!isTech || isAdmin ? [{ to: '/resumen', label: 'Resumen', icon: LayoutDashboard }] : []),
       { to: '/ordenes', label: 'Órdenes', icon: ClipboardList },
       ...(!isTech || isAdmin ? [{ to: '/clientes', label: 'Clientes', icon: Users }] : []),
       { to: '/actividad', label: 'Actividad', icon: History },
@@ -117,7 +123,6 @@ export default function Sidebar({ open, onClose }) {
         { to: '/usuarios', label: 'Usuarios', icon: UserCog },
         { to: '/backups', label: 'Copias de seguridad', icon: Database },
         { to: '/papelera', label: 'Papelera', icon: Trash2 },
-        { to: '/configuracion', label: 'Configuración', icon: Settings },
       ] : []),
       { to: '/ajustes', label: 'Ajustes', icon: Settings },
     ] },
@@ -166,13 +171,14 @@ export default function Sidebar({ open, onClose }) {
             <button className="sc-profile-button" onClick={openMenu} aria-expanded={menuOpen} aria-label="Cambiar de perfil"><span className="ws-avatar">{initials(currentUser?.name)}</span><span><strong>{currentUser?.name}</strong><small>{ROLE_LABEL[role]}</small></span><ChevronDown size={14} /></button>
             {menuOpen && <div className="absolute bottom-full left-0 z-50 mb-2 w-72 max-h-[70dvh] overflow-y-auto max-w-[calc(100vw-24px)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900" role="menu" aria-label="Perfiles">
               <p className="px-2 py-1 text-sm">Cambiar de perfil</p>
-              {loadingProfiles ? <p className="p-2">Cargando perfiles…</p> : loadError ? <div className="p-2"><p>{loadError}</p><button onClick={loadProfiles} className="ws-button"><RefreshCw size={14} />Reintentar</button></div> : profiles.length === 0 ? <p className="p-2">No hay perfiles disponibles.</p> : profiles.map((profile) => <button key={profile.id} role="menuitem" disabled={profile.id === currentUser?.id} onClick={() => pick(profile)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-70"><span className="ws-avatar">{initials(profile.name)}</span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{profile.name}</strong><span className="flex items-center gap-1 text-sm"><RoleIcon role={profile.role} />{ROLE_LABEL[profile.role]}</span></span>{profile.id === currentUser?.id && <Check size={16} />}</button>)}
+              {loadingProfiles && visibleProfiles.length === 0 ? <p className="p-2">Cargando perfiles…</p> : loadError ? <div className="p-2"><p>{loadError}</p><button onClick={loadProfiles} className="ws-button"><RefreshCw size={14} />Reintentar</button></div> : visibleProfiles.length === 0 ? <p className="p-2">No hay perfiles disponibles.</p> : visibleProfiles.map((profile) => <button key={profile.id} role="menuitem" disabled={profile.id === currentUser?.id} onClick={() => pick(profile)} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-70"><span className="ws-avatar">{initials(profile.name)}</span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{profile.name}</strong><span className="flex items-center gap-1 text-sm"><RoleIcon role={profile.role} />{ROLE_LABEL[profile.role]}</span></span>{profile.id === currentUser?.id && <Check size={16} />}</button>)}
             </div>}
-          </div><button className="ws-icon-button" onClick={() => { if (leave()) logout() }} aria-label="Salir" title="Salir"><LogOut size={18} /></button></div>
+          </div><button className="ws-icon-button" onClick={() => leave(logout)} aria-label="Salir" title="Salir"><LogOut size={18} /></button></div>
         </div>
       </aside>
 
       <ProfileSwitchModal profile={switchTarget} onClose={() => setSwitchTarget(null)} />
+      <ConfirmModal open={!!pendingNavigation} onClose={() => setPendingNavigation(null)} onConfirm={pendingNavigation} title="Borradores sin guardar" message="¿Descartar los borradores y salir?" confirmLabel="Descartar y salir" cancelLabel="Volver" />
     </>
   )
 }

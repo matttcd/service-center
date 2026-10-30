@@ -2,12 +2,13 @@
 // Backups: copias de seguridad y rollback (admin)
 // ============================================
 import { useNotify } from '../context/notifications.js'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Database, Plus, RotateCcw, AlertTriangle, Download } from 'lucide-react'
 import { api } from '../utils/api.js'
 import { loadSession } from '../utils/storage.js'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 import Modal from '../components/Modal.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 
@@ -20,6 +21,8 @@ export default function Backups() {
   const { refresh } = useData()
   const [backups, setBackups] = useState([])
   const [loading, setLoading] = useState(true)
+  const loaded = useRef(false)
+  const [loadError, setLoadError] = useState('')
   const [creating, setCreating] = useState(false)
   const [toRestore, setToRestore] = useState(null)
   const [restoring, setRestoring] = useState(false)
@@ -27,17 +30,19 @@ export default function Backups() {
   const [health, setHealth] = useState(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
+    if (!loaded.current) setLoading(true)
+    setLoadError('')
     try {
       const res = await api('/backups')
       setBackups(res.backups || [])
       setHealth(res.status || null)
+      loaded.current = true
     } catch (err) {
-      setNotice({ type: 'error', text: err.message })
+      setLoadError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [setNotice])
+  }, [])
 
   useEffect(() => {
     load()
@@ -102,19 +107,12 @@ export default function Backups() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Copias de seguridad</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Se hace una copia automática todos los días y una al iniciar el servidor. Acá podés
-            restaurar una anterior (rollback).
-          </p>
-        </div>
+      <PageHeading title="Copias de seguridad" description="Copias automáticas diarias y al iniciar el servidor. Restaurá una copia anterior.">
         <button type="button" onClick={createNow} disabled={creating} className={btnPrimary}>
           <Plus size={16} />
           {creating ? 'Creando…' : 'Crear copia ahora'}
         </button>
-      </div>
+      </PageHeading>
 
       {health && <Card className="p-4 text-sm text-slate-600 dark:text-slate-300">
         <p className="font-semibold text-slate-900 dark:text-white">Última copia: {health.lastSuccessAt ? fmtDate(health.lastSuccessAt) : 'todavía no hay una copia verificada'}</p>
@@ -123,9 +121,10 @@ export default function Backups() {
         {health.lastSuccessAt && Date.now() - new Date(health.lastSuccessAt).getTime() > 36 * 3600000 && <p role="alert" className="mt-2 font-semibold text-amber-700 dark:text-amber-300">La última copia tiene más de 36 horas. Creá una copia ahora y revisá las copias automáticas.</p>}
       </Card>}
 
+      {loadError && <div role="alert" className="ws-conflict"><p>{loadError}</p><button className="ws-button" onClick={load}>Reintentar</button></div>}
       {loading ? (
         <Card className="p-6 text-center text-sm text-slate-400">Cargando copias…</Card>
-      ) : backups.length === 0 ? (
+      ) : loadError && !backups.length ? null : backups.length === 0 ? (
         <Card>
           <EmptyState
             message="Todavía no hay copias de seguridad"

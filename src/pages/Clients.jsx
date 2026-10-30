@@ -1,3 +1,4 @@
+import { formatDni, normalizeDni } from '../utils/helpers.js'
 import { useWorkspaceState } from '../context/workspace.js'
 // ============================================
 // Clientes: listado en tabla con ordenamiento,
@@ -9,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, Search, ArrowUp, ArrowDown, ChevronsUpDown, ChevronUp, ChevronDown, X, FileSpreadsheet } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 import Badge from '../components/Badge.jsx'
 import CustomerForm from '../components/CustomerForm.jsx'
 import { formatDate, titleCase } from '../utils/helpers.js'
@@ -50,7 +52,7 @@ export default function Clients() {
         if (!q) return true
         return (
           c.fullName.toLowerCase().includes(q) ||
-          (c.dni || '').includes(q) ||
+          (c.dni || '').includes(normalizeDni(q)) ||
           (c.phone || '').includes(q) ||
           (c.phone2 || '').toLowerCase().includes(q) ||
           (c.phone3 || '').toLowerCase().includes(q) ||
@@ -152,11 +154,7 @@ export default function Clients() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Clientes</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{rows.length} de {customers.length} clientes</p>
-        </div>
+      <PageHeading title="Clientes" description={`${rows.length} de ${customers.length} clientes`}>
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={exportCsv}
@@ -175,7 +173,7 @@ export default function Clients() {
             Nuevo cliente
           </button>
         </div>
-      </div>
+      </PageHeading>
 
       {/* Filtros */}
       <Card className="p-4">
@@ -238,7 +236,7 @@ export default function Clients() {
                         <span className="font-semibold text-slate-900 dark:text-white">{titleCase(c.fullName)}</span>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-slate-700 dark:text-slate-200">{c.dni || '—'}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-slate-700 dark:text-slate-200">{formatDni(c.dni) || '—'}</td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-slate-700 dark:text-slate-200">
                       {[c.phone, c.phone2, c.phone3].filter(Boolean).join(' · ') || '—'}
                     </td>

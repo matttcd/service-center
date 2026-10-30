@@ -1,3 +1,4 @@
+export { formatDni, normalizeDni } from '../../shared/identifiers.js'
 // ============================================
 // Funciones auxiliares: fechas, moneda, estados
 // ============================================
@@ -73,6 +74,16 @@ export function formatDateTime(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
   return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+export function groupNotes(notes) {
+  const groups = []
+  for (const entry of notes) {
+    const previous = groups.at(-1)
+    if (entry.by && entry.at && previous?.by === entry.by && formatDateTime(previous.at) === formatDateTime(entry.at)) previous.entries.push(entry)
+    else groups.push({ by: entry.by, byName: entry.byName, at: entry.at, entries: [entry] })
+  }
+  return groups
 }
 
 // Tiempo relativo ("hace 2h", "ayer", "hace 3 días").

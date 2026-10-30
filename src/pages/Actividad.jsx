@@ -4,6 +4,7 @@
 import { History } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import { ORDER_STATUS_LABEL } from '../utils/helpers.js'
 
@@ -115,12 +116,7 @@ export default function Actividad() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Actividad</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Línea de tiempo de las acciones registradas en el sistema.
-        </p>
-      </div>
+      <PageHeading title="Actividad" description="Línea de tiempo de las acciones registradas en el sistema." />
 
       {actividad.length === 0 ? (
         <Card>

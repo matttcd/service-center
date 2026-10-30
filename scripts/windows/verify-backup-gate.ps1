@@ -4,7 +4,7 @@ $scRepo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $scApp=Join-Path $WorkDir 'program'
 $scData=Join-Path $WorkDir 'data'
 $scOld=Join-Path $scApp 'versions/1.1.4-old'
-$scNew=Join-Path $scApp 'versions/1.2.0-new'
+$scNew=Join-Path $scApp 'versions/1.2.1-new'
 New-Item -ItemType Directory -Path (Join-Path $scOld 'runtime/node'),(Join-Path $scOld 'scripts/windows'),(Join-Path $scNew 'runtime/node'),(Join-Path $scNew 'server'),(Join-Path $scData 'config'),(Join-Path $scData 'postgres') -Force | Out-Null
 Copy-Item -LiteralPath $NodeExe -Destination (Join-Path $scOld 'runtime/node/node.exe')
 Copy-Item -LiteralPath $NodeExe -Destination (Join-Path $scNew 'runtime/node/node.exe')
@@ -19,7 +19,7 @@ $scSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $scBefore=[IO.File]::ReadAllText((Join-Path $scData 'installation.json'))
 $scConfigBefore=[IO.File]::ReadAllText((Join-Path $scData 'config/service.json'))
 $scOptions=Join-Path $WorkDir 'options.json'
-@{version='1.2.0';appDir=$scApp;dataDir=$scData;releaseDir=$scNew;hostName='TALLER';httpsPort='443';serviceAccount=$scAccount;servicePassword='';operation='update';preserveServiceCredentials='True'} | ConvertTo-Json | Set-Content -LiteralPath $scOptions -Encoding UTF8
+@{version='1.2.1';appDir=$scApp;dataDir=$scData;releaseDir=$scNew;hostName='TALLER';httpsPort='443';serviceAccount=$scAccount;servicePassword='';operation='update';preserveServiceCredentials='True'} | ConvertTo-Json | Set-Content -LiteralPath $scOptions -Encoding UTF8
 $script:scMutation=$false
 function Get-ItemProperty { [pscustomobject]@{AppDir=$scApp;DataDir=$scData} }
 function Get-CimInstance { param($ClassName,$Filter) [pscustomobject]@{StartName=$scAccount;State='Running';PathName=('"'+(Join-Path $scApp 'services/owned.exe')+'"')} }

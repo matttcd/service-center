@@ -1,164 +1,66 @@
+import { useLayoutEffect, useRef, useState } from 'react'
+import { Save, Pencil, Trash2, UserRound } from 'lucide-react'
 import { useFormDraft } from '../utils/useFormDraft.js'
-// ============================================
-// NotesModal: modal dedicado para ver, agregar,
-// editar y eliminar notas del técnico.
-// ============================================
-import { useState, useRef } from 'react'
-import { Save, StickyNote, Pencil, Trash2, X, Check } from 'lucide-react'
+import { useNotify } from '../context/notifications.js'
+import { formatDateTime, groupNotes } from '../utils/helpers.js'
 import Modal from './Modal.jsx'
-import { formatDate, formatDateTime } from '../utils/helpers.js'
 import ConfirmModal from './ConfirmModal.jsx'
 
-function groupByDay(log) {
-  const groups = {}
-  for (const entry of log) {
-    const day = entry.at?.slice(0, 10) || '—'
-    if (!groups[day]) groups[day] = []
-    groups[day].push(entry)
-  }
-  return groups
-}
-
 export default function NotesModal({ open, onClose, notesLog = [], isAssignedTech, currentUser, onSave, onEdit, onDelete, draft, onDraftChange }) {
-  const [fields, patchFields, clearFields] = useFormDraft({ noteText: '', editingId: null, editText: '' }, draft, onDraftChange)
+  const [fields, patchFields] = useFormDraft({ noteText: '', editingId: null, editText: '' }, draft, onDraftChange)
   const { noteText, editingId, editText } = fields
-  const setNoteText = (value) => patchFields({ noteText: value })
-  const setEditingId = (value) => patchFields({ editingId: value })
-  const setEditText = (value) => patchFields({ editText: value })
   const [saving, setSaving] = useState(false)
+  const busy = useRef(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const scrollRef = useRef(null)
-
-
-  const grouped = groupByDay([...notesLog].reverse())
-  const days = Object.entries(grouped)
-
-  const handleSave = async () => {
-    if (!noteText.trim() || !onSave) return
-    setSaving(true)
-    try { const result = await onSave(noteText.trim()); if (!result?.error) clearFields() } finally { setSaving(false) }
+  const notifyError = useNotify('error')
+  const history = useRef(null)
+  const following = useRef(true)
+  const wasOpen = useRef(false)
+  const lastNote = notesLog.at(-1)?.id
+  useLayoutEffect(() => {
+    if (open && history.current && (!wasOpen.current || following.current)) history.current.scrollTop = history.current.scrollHeight
+    wasOpen.current = open
+  }, [open, lastNote])
+  const close = () => { if (!busy.current) onClose() }
+  const perform = async (operation, done) => {
+    if (busy.current) return
+    busy.current = true; setSaving(true)
+    try { const result = await operation(); if (!result?.error) done() }
+    catch (error) { notifyError(error.message) }
+    finally { busy.current = false; setSaving(false) }
   }
-
-  const startEdit = (entry) => {
-    setEditingId(entry.id)
-    setEditText(entry.text)
+  const save = (event) => {
+    event.preventDefault()
+    if (noteText.trim() && onSave) perform(() => onSave(noteText.trim()), () => {
+      patchFields({ noteText: '' }); following.current = true
+      requestAnimationFrame(() => { if (history.current) history.current.scrollTop = history.current.scrollHeight })
+    })
   }
-
-  const cancelEdit = () => {
-    setEditingId(null)
-    setEditText('')
+  const saveEdit = (event, entryId) => {
+    event.preventDefault()
+    if (editText.trim() && onEdit) perform(() => onEdit(entryId, editText.trim()), () => patchFields({ editingId: null, editText: '' }))
   }
-
-  const saveEdit = async (entryId) => {
-    if (!editText.trim() || !onEdit) return
-    const result = await onEdit(entryId, editText.trim())
-    if (!result?.error) { setEditingId(null); setEditText('') }
-  }
-
-  const handleDelete = async (entryId) => {
-    const result = onDelete && await onDelete(entryId)
-    if (!result?.error) setConfirmDelete(null)
-  }
-
   const canModify = (entry) => currentUser && (entry.by === currentUser.id || currentUser.role === 'admin')
-
-  return (
-    <Modal open={open} onClose={onClose} title="Notas del técnico" maxWidth="max-w-lg" zIndex="z-[60]">
-      <div className="flex flex-col" style={{ minHeight: '300px', maxHeight: '60vh' }}>
-        {/* Lista de notas */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 pr-1">
-          {days.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
-              <StickyNote size={28} className="opacity-40" />
-              <p className="text-sm">Sin notas registradas.</p>
-            </div>
-          ) : (
-            days.map(([day, entries]) => (
-              <div key={day}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                  {formatDate(day)}
-                </p>
-                <div className="space-y-2">
-                  {entries.map((entry) => (
-                    <div key={entry.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
-                      {editingId === entry.id ? (
-                        <div>
-                          <textarea
-                            value={editText}
-                            onChange={(e) => setEditText(e.target.value)}
-                            rows={2}
-                            className="w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                          />
-                          <div className="mt-1.5 flex items-center gap-2">
-                            <button onClick={() => saveEdit(entry.id)} className="inline-flex items-center gap-1 rounded-lg bg-primary-600 px-2 py-1 text-xs font-semibold text-white transition hover:bg-primary-700">
-                              <Check size={12} /> Guardar
-                            </button>
-                            <button onClick={cancelEdit} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
-                              <X size={12} /> Cancelar
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-sm text-slate-700 dark:text-slate-200">{entry.text}</p>
-                          <div className="mt-2 flex items-center justify-between gap-2">
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                              {entry.byName} · {formatDateTime(entry.at)}
-                              {entry.editedAt && ' (editada)'}
-                            </p>
-                            {canModify(entry) && (
-                              <div className="flex items-center gap-1">
-                                <button onClick={() => startEdit(entry)} className="rounded p-0.5 text-slate-400 transition hover:text-primary-600 dark:hover:text-primary-400">
-                                  <Pencil size={12} />
-                                </button>
-                                <button onClick={() => setConfirmDelete(entry.id)} className="rounded p-0.5 text-slate-400 transition hover:text-red-500 dark:hover:text-red-400">
-                                  <Trash2 size={12} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Agregar nota */}
-        {isAssignedTech && (
-          <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
-            <textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              rows={3}
-              placeholder="Escribí una nota nueva..."
-              className="w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-            />
-            <div className="mt-2 flex justify-end">
-              <button
-                onClick={handleSave}
-                disabled={saving || !noteText.trim()}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700 disabled:opacity-50"
-              >
-                <Save size={14} />
-                {saving ? 'Guardando...' : 'Guardar nota'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <ConfirmModal
-        open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
-        onConfirm={() => handleDelete(confirmDelete)}
-        title="Eliminar nota"
-        message="¿Eliminar esta nota? Esta acción no se puede deshacer."
-        danger
-      />
-    </Modal>
-  )
+  return <Modal open={open} onClose={close} title="Notas del técnico" maxWidth="max-w-2xl" className="sc-notes-modal" zIndex="z-[60]">
+    <div className="sc-notes" aria-busy={saving}>
+      <section aria-label="Notas registradas" className="sc-note-history" ref={history} onScroll={(event) => { const node = event.currentTarget; following.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40 }}>
+        {notesLog.length === 0 ? <p className="sc-secondary sc-notes-empty">Sin notas registradas.</p> : <ol>
+          {groupNotes(notesLog).map((group) => <li key={group.entries[0].id} className="sc-note-group">
+            <header className="sc-note-author"><UserRound size={16} aria-hidden="true" /><strong>{group.byName || 'Sin autor registrado'}</strong><time dateTime={group.at}>{formatDateTime(group.at)}</time></header>
+            <ul>{group.entries.map((entry) => <li key={entry.id} className="sc-note-message" data-note-id={entry.id}>
+            {editingId === entry.id ? <form className="ws-form" onSubmit={(event) => saveEdit(event, entry.id)}>
+              <label>Editar nota<textarea autoFocus rows={4} value={editText} disabled={saving} onChange={(event) => patchFields({ editText: event.target.value })} /></label>
+              <div className="ws-buttons"><button type="button" className="ws-button" disabled={saving} onClick={() => patchFields({ editingId: null, editText: '' })}>Cancelar</button><button className="ws-button primary" disabled={saving || !editText.trim()}><Save size={16} />{saving ? 'Guardando…' : 'Guardar'}</button></div>
+            </form> : <><p className="sc-note-text">{entry.text}{entry.editedAt && <span className="sc-secondary"> · Editada</span>}</p>{canModify(entry) && <div className="ws-buttons"><button className="ws-icon-button" aria-label="Editar nota" title="Editar nota" disabled={saving} onClick={() => patchFields({ editingId: entry.id, editText: entry.text })}><Pencil size={16} /></button><button className="ws-icon-button" aria-label="Eliminar nota" title="Eliminar nota" disabled={saving} onClick={() => setConfirmDelete(entry.id)}><Trash2 size={16} /></button></div>}</>}
+            </li>)}</ul>
+          </li>)}
+        </ol>}
+      </section>
+      {isAssignedTech && !editingId && <form className="ws-form sc-note-compose" onSubmit={save}>
+        <label>Nueva nota<textarea rows={2} value={noteText} disabled={saving} onChange={(event) => patchFields({ noteText: event.target.value })} placeholder="Escribí una nota nueva..." /></label>
+        <div className="ws-buttons"><button type="submit" className="ws-button primary" disabled={saving || !noteText.trim()}><Save size={16} />{saving ? 'Guardando…' : 'Guardar nota'}</button></div>
+      </form>}
+    </div>
+    <ConfirmModal open={!!confirmDelete} onClose={() => setConfirmDelete(null)} onConfirm={() => perform(() => onDelete(confirmDelete), () => setConfirmDelete(null))} title="Eliminar nota" message="¿Eliminar esta nota?" confirmLabel="Eliminar" danger />
+  </Modal>
 }

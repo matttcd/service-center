@@ -1,3 +1,4 @@
+import { useOrdersPage } from '../utils/useOrdersPage.js'
 import { useWorkspaceState } from '../context/workspace.js'
 import { orderAmounts } from '../../shared/order-workspace.js'
 // ============================================
@@ -11,6 +12,7 @@ import { Plus, Search, ArrowUp, ArrowDown, ChevronUp, ChevronDown, ChevronsUpDow
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import Card from '../components/Card.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 import Badge from '../components/Badge.jsx'
 import OrderForm from '../components/OrderForm.jsx'
 import PrintOrderPanel from '../components/PrintOrderPanel.jsx'
@@ -23,12 +25,11 @@ import { orderQuery } from '../utils/orderQuery.js'
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
 export default function Orders() {
-  const { loadOrders, customers, catalog, printLabel, ordersRevision } = useData()
+  const { customers, catalog, printLabel } = useData()
   const { currentUser } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
 
-  const [pageData, setPageData] = useState({ orders: [], total: 0 })
 
   // Filtros
   const [q, setQ] = useWorkspaceState('orders:q', () => params.get('q') || '')
@@ -62,15 +63,8 @@ export default function Orders() {
     return () => clearTimeout(t)
   }, [qInput, setQ])
 
-  // Carga paginada desde el servidor (no todo el histórico en memoria).
-  useEffect(() => {
-    let active = true
-    const offset = (page - 1) * pageSize
-    loadOrders({ status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotConfirmed, limit: pageSize, offset })
-      .then((result) => { if (active) setPageData(result) })
-    return () => { active = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadOrders, status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotConfirmed, page, pageSize, ordersRevision])
+  const pageResult = useOrdersPage({ status, q, from, to, brand, deviceType, onlyNotNotified, onlyNotConfirmed, limit: pageSize, offset: (page - 1) * pageSize })
+  const pageData = pageResult.data || { orders: [], total: 0 }
 
   const [formOpen, setFormOpen] = useState(false)
   const [printing, setPrinting] = useState(null)
@@ -220,11 +214,7 @@ export default function Orders() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Órdenes de servicio</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{pageData.total} orden(es)</p>
-        </div>
+      <PageHeading title="Órdenes de servicio" description={pageResult.data ? `${pageData.total} orden(es)` : pageResult.loading ? 'Cargando órdenes…' : 'Listado no disponible'}>
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={exportCsv}
@@ -245,7 +235,7 @@ export default function Orders() {
             </button>
           )}
         </div>
-      </div>
+      </PageHeading>
 
       {/* Filtros */}
       <Card className="p-4">
@@ -322,9 +312,10 @@ export default function Orders() {
         </div>
       </Card>
 
+      {pageResult.error && <div role="alert" className="ws-conflict"><p>{pageResult.error}</p><button className="ws-button" onClick={pageResult.retry}>Reintentar</button></div>}
       {/* Tabla */}
-      <Card className="overflow-hidden">
-        {paged.length === 0 ? (
+      <Card className="overflow-hidden" aria-busy={pageResult.loading}>
+        {!pageResult.data ? <p className="px-5 py-10 text-sm text-slate-400" role="status">{pageResult.loading ? 'Cargando…' : 'No se pudieron cargar los equipos.'}</p> : paged.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-slate-400">
             No hay órdenes que coincidan con la búsqueda.
           </p>
@@ -370,7 +361,7 @@ export default function Orders() {
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">
                       {['presupuesto', 'terminado'].includes(o.status) && (
-                        o.notified ? (
+                        o.noContact ? <Badge tone="slate">Sin comunicación</Badge> : o.notified ? (
                           <Badge tone="green">Avisado</Badge>
                         ) : (
                           <Badge tone="yellow">Sin avisar</Badge>

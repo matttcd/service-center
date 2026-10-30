@@ -64,6 +64,7 @@ model Order {
   conditions      String   @default("")
   pin             String   @default("")
   noPin           Boolean  @default(false)
+  noContact       Boolean  @default(false)
   pattern         Int[]
   diagnosisType   String   @default("visible")
   isSimpleService Boolean  @default(false)

@@ -49,11 +49,13 @@ export async function htmlToPdf(html, { width, height } = {}) {
       if (request.url().startsWith('data:') || request.url() === 'about:blank') request.continue()
       else request.abort()
     })
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 15000 })
+    // Todo está embebido: esperar inactividad de red agrega una pausa a cada PDF.
+    await page.setContent(html, { waitUntil: 'load', timeout: 15000 })
     const raw = await page.pdf({
       ...(width && height ? { width: `${width}mm`, height: `${height}mm` } : { format: 'A4' }),
       preferCSSPageSize: !!(width && height),
       printBackground: true,
+      waitForFonts: true,
       margin: { top: '0mm', bottom: '0mm', left: '0mm', right: '0mm' },
     })
     return Buffer.from(raw)

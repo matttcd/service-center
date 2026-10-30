@@ -1,3 +1,6 @@
+import { intakeError, customerMatchesQuery, deviceModels } from '../../shared/intake.js'
+import WorkPicker from './WorkPicker.jsx'
+import { formatDni, normalizeDni } from '../utils/helpers.js'
 import { useFormDraft } from '../utils/useFormDraft.js'
 import { useOrderDraft } from '../context/workspace.js'
 // ============================================
@@ -5,10 +8,9 @@ import { useOrderDraft } from '../context/workspace.js'
 // Marcas/modelos con badges del catálogo + "otro" (búsqueda y alta en BD).
 // ============================================
 import { useNotify } from '../context/notifications.js'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Search, ListPlus, X, Smartphone, Tablet, Laptop, Monitor, Gamepad2, Printer, HelpCircle } from 'lucide-react'
 import Modal from './Modal.jsx'
-import ConfirmDiscard from './ConfirmDiscard.jsx'
 import PatternPad from './PatternPad.jsx'
 import { useData } from '../context/DataContext.jsx'
 import { titleCase, sentenceCase, uid } from '../utils/helpers.js'
@@ -41,11 +43,11 @@ const CONDITION_FALLBACK = ['Apagado', 'Mojado', 'Golpeado', 'Display Roto', 'No
 const FIX_FALLBACK = ['Cambio de pantalla', 'Cambio de módulo', 'Cambio de batería', 'Pin de carga', 'Micrófono', 'Parlante', 'Botón de encendido', 'Flex', 'Software', 'Limpieza']
 
 export default function OrderForm({ open, onClose, onCreated }) {
-  const { customers, catalog, addCustomer, addOrder, addCatalogBrand, addCatalogModel, catalogLists } = useData()
+  const { customers, catalog, addCustomer, updateCustomer, addOrder, addCatalogBrand, addCatalogModel, catalogLists } = useData()
   const [orderDraft, patchOrderDraft] = useOrderDraft('new-order')
   const [requestId, setRequestId] = useState(() => orderDraft.requestId || uid())
-  const [fields, patchFields, clearFields] = useFormDraft({ custQuery: '', selectedCustomerId: '', newCustomer: { fullName: '', dni: '', phone: '', address: '' }, brand: '', model: '', deviceType: '', customDeviceType: '', accessories: [], customAccessory: '', conditions: [], pin: '', noPin: false, pattern: [], diagnosisType: 'visible', isSimpleService: false, isExternal: false, issue: '', fixes: [], customFix: '', price: '', advance: '' }, orderDraft.values, (values) => patchOrderDraft({ values, requestId: values ? requestId : undefined }))
-  const { custQuery, selectedCustomerId, newCustomer, brand, model, deviceType, customDeviceType, accessories, customAccessory, conditions, pin, noPin, pattern, diagnosisType, isSimpleService, isExternal, issue, fixes, customFix, price, advance } = fields
+  const [fields, patchFields, clearFields] = useFormDraft({ custQuery: '', selectedCustomerId: '', newCustomer: { fullName: '', dni: '', phone: '', phone2: '', phone3: '', address: '' }, brand: '', model: '', deviceType: '', customDeviceType: '', accessories: [], customAccessory: '', conditions: [], noContact: false, pin: '', noPin: false, pattern: [], diagnosisType: 'visible', isSimpleService: false, isExternal: false, issue: '', fixes: [], customFix: '', price: '', advance: '0' }, orderDraft.values, (values) => patchOrderDraft({ values, requestId: values ? requestId : undefined }))
+  const { custQuery, selectedCustomerId, newCustomer, brand, model, deviceType, customDeviceType, accessories, customAccessory, conditions, noContact, pin, noPin, pattern, diagnosisType, isSimpleService, isExternal, issue, fixes, customFix, price, advance } = fields
   const setCustQuery = (value) => patchFields({ custQuery: typeof value === 'function' ? value(fields.custQuery) : value })
   const setSelectedCustomerId = (value) => patchFields({ selectedCustomerId: typeof value === 'function' ? value(fields.selectedCustomerId) : value })
   const setNewCustomer = (value) => patchFields({ newCustomer: typeof value === 'function' ? value(fields.newCustomer) : value })
@@ -67,12 +69,15 @@ export default function OrderForm({ open, onClose, onCreated }) {
   const setCustomFix = (value) => patchFields({ customFix: typeof value === 'function' ? value(fields.customFix) : value })
   const setPrice = (value) => patchFields({ price: typeof value === 'function' ? value(fields.price) : value })
   const setAdvance = (value) => patchFields({ advance: typeof value === 'function' ? value(fields.advance) : value })
+  const savingRef = useRef(false)
+  const [customerSearch, setCustomerSearch] = useState(false)
+  const [phoneCount, setPhoneCount] = useState(1)
+  const inform = useNotify('info')
   const [picker, setPicker] = useState(null) // null | 'brand' | 'model'
   const [pickerQuery, setPickerQuery] = useState('')
   const [pickerNew, setPickerNew] = useState('')
   const setError = useNotify('error')
   const [saving, setSaving] = useState(false)
-  const [confirming, setConfirming] = useState(false)
   const [filteredCatalog, setFilteredCatalog] = useState(null)
 
   const accessoryOptions = catalogLists?.accessories?.length ? catalogLists.accessories : ACCESSORY_FALLBACK
@@ -82,7 +87,6 @@ export default function OrderForm({ open, onClose, onCreated }) {
   useEffect(() => {
     if (!open) return
     setError('')
-    setConfirming(false)
   }, [open, setError])
 
   // Fetch de marcas y modelos cuando cambia el tipo de dispositivo.
@@ -94,30 +98,30 @@ export default function OrderForm({ open, onClose, onCreated }) {
     let cancelled = false
     api(`/catalog?deviceType=${encodeURIComponent(deviceType)}`).then((res) => {
       if (cancelled) return
-      if (res && res.brands) setFilteredCatalog({ brands: res.brands, models: res.models || [] })
+      if (res && res.brands) setFilteredCatalog({ deviceType, brands: res.brands, models: res.models || [] })
     }).catch(() => {})
     return () => { cancelled = true }
   }, [open, deviceType])
 
   // Badges de marcas y modelos según el catálogo (ordenado por uso).
   const filteredBrands = useMemo(() => {
-    if (filteredCatalog) return filteredCatalog.brands
+    if (filteredCatalog?.deviceType === deviceType) return filteredCatalog.brands
     return catalog.brands || []
-  }, [catalog.brands, filteredCatalog])
+  }, [catalog.brands, filteredCatalog, deviceType])
   const topBrands = useMemo(() => filteredBrands.slice(0, BRAND_BADGE_COUNT), [filteredBrands])
   const brandModels = useMemo(
     () => {
-      const models = filteredCatalog ? filteredCatalog.models : (catalog.models || [])
-      return models.filter((m) => m.brand === brand).slice(0, MODEL_BADGE_COUNT)
+      const models = filteredCatalog?.deviceType === deviceType ? filteredCatalog.models : (catalog.models || [])
+      return deviceModels(models, brand, deviceType).slice(0, MODEL_BADGE_COUNT)
     },
-    [catalog.models, brand, filteredCatalog],
+    [catalog.models, brand, filteredCatalog, deviceType],
   )
   const allBrandModels = useMemo(
     () => {
-      const models = filteredCatalog ? filteredCatalog.models : (catalog.models || [])
-      return models.filter((m) => m.brand === brand)
+      const models = filteredCatalog?.deviceType === deviceType ? filteredCatalog.models : (catalog.models || [])
+      return deviceModels(models, brand, deviceType)
     },
-    [catalog.models, brand, filteredCatalog],
+    [catalog.models, brand, filteredCatalog, deviceType],
   )
 
   const pickerList = picker === 'brand' ? filteredBrands : allBrandModels
@@ -125,74 +129,33 @@ export default function OrderForm({ open, onClose, onCreated }) {
     x.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
   )
 
-  // Coincidencias de clientes por nombre o DNI (busca al existente).
-  const customerMatches = useMemo(() => {
-    const q = custQuery.trim().toLowerCase()
-    if (!q) return []
-    return customers
-      .filter((c) => {
-        if (selectedCustomerId && c.id === selectedCustomerId) return false
-        return (
-          c.fullName.toLowerCase().includes(q) ||
-          (c.dni || '').toLowerCase().includes(q) ||
-          (c.phone || '').toLowerCase().includes(q)
-        )
-      })
-      .slice(0, 8)
-  }, [customers, custQuery, selectedCustomerId])
-
+  const customerMatches = useMemo(() => customers.filter((c) => customerMatchesQuery(c, custQuery)).slice(0, 30), [customers, custQuery])
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null
-
-  const dirty =
-    !!selectedCustomerId ||
-    !!custQuery ||
-    !!newCustomer.fullName ||
-    !!newCustomer.dni ||
-    !!newCustomer.phone ||
-    !!newCustomer.address ||
-    !!brand ||
-    !!model ||
-    !!deviceType ||
-    !!customDeviceType ||
-    !!issue ||
-    !!price ||
-    !!advance ||
-    accessories.length > 0 ||
-    !!customAccessory ||
-    conditions.length > 0 ||
-    !!pin ||
-    !!noPin ||
-    pattern.length > 0 ||
-    fixes.length > 0 ||
-    !!customFix
+  const chooseCustomer = (customer) => {
+    patchFields({ selectedCustomerId: customer.id, custQuery: '', newCustomer: { fullName: customer.fullName, dni: customer.dni || '', address: customer.address || '', phone: customer.phone || '', phone2: customer.phone2 || '', phone3: customer.phone3 || '' } })
+    setPhoneCount(customer.phone3 ? 3 : customer.phone2 ? 2 : 1)
+    setCustomerSearch(false)
+  }
+  const loadDniCustomer = () => {
+    const dni = normalizeDni(newCustomer.dni)
+    const existing = customers.find((c) => dni && normalizeDni(c.dni) === dni && c.id !== selectedCustomerId)
+    if (existing) { chooseCustomer(existing); inform('Cliente cargado por DNI.') }
+  }
 
   const requestClose = () => { if (!saving) onClose() }
 
   const toggleAccessory = (name) =>
     setAccessories((list) => {
       if (list.includes(name)) return list.filter((a) => a !== name)
+      if (name === 'Sin accesorios') return [name]
       if (list.length >= 10) return list
-      return [...list, name]
+      return [...list.filter((a) => a !== 'Sin accesorios'), name]
     })
-
-  const toggleFix = (name) =>
-    setFixes((list) => {
-      if (list.includes(name)) return list.filter((f) => f !== name)
-      if (list.length >= 8) return list
-      return [...list, name]
-    })
-
-  const onAddCustomFix = () => {
-    const v = customFix.trim()
-    if (!v) return
-    setFixes((list) => (list.includes(v) || list.length >= 8 ? list : [...list, v]))
-    setCustomFix('')
-  }
 
   const addCustomAccessory = () => {
     const v = customAccessory.trim()
     if (!v) return
-    setAccessories((list) => (list.includes(v) || list.length >= 10 ? list : [...list, v]))
+    setAccessories((list) => (list.includes(v) || list.length >= 10 ? list : [...list.filter((a) => a !== 'Sin accesorios'), v]))
     setCustomAccessory('')
   }
 
@@ -225,52 +188,44 @@ export default function OrderForm({ open, onClose, onCreated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (saving) return
-    if (!brand) return setError('Elegí la marca del dispositivo.')
-    if (!model) return setError('Elegí el modelo del dispositivo.')
-    if (diagnosisType === 'visible' && Number(price) <= 0) {
-      return setError('Para un problema visible ingresá el presupuesto del arreglo.')
+    if (savingRef.current) return
+    const accList = [...accessories, customAccessory.trim()].filter(Boolean)
+    const data = {
+      deviceType: deviceType === 'Otro' ? titleCase(customDeviceType.trim()) : deviceType,
+      brand, model,
+      accessories: accList.map(titleCase).join(', '),
+      conditions: conditions.map(titleCase).join(', '),
+      pin: noPin ? '' : pin.trim(), noPin, noContact,
+      pattern: noPin ? null : pattern.length >= 3 ? pattern : null,
+      diagnosisType, isSimpleService, isExternal,
+      issue: sentenceCase(issue.trim()),
+      fix: (diagnosisType === 'visible' ? [...fixes, customFix.trim()].filter(Boolean) : []).map(titleCase).join(', '),
+      price: Number(price) || 0, advance: Number(advance) || 0,
     }
-    if (!selectedCustomerId && !newCustomer.fullName.trim()) {
-      return setError('Ingresá el nombre del cliente.')
-    }
+    const existing = customers.find((c) => normalizeDni(c.dni) && normalizeDni(c.dni) === normalizeDni(newCustomer.dni) && c.id !== selectedCustomerId)
+    if (existing) { chooseCustomer(existing); return inform('Cliente cargado por DNI. Revisá sus datos antes de guardar.') }
+    const error = intakeError(data, newCustomer)
+    if (error) return setError(error)
+    savingRef.current = true
     setSaving(true)
     setError('')
     try {
       let cid = selectedCustomerId
+      const customerFields = { ...newCustomer, fullName: titleCase(newCustomer.fullName), address: titleCase(newCustomer.address), dni: normalizeDni(newCustomer.dni), email: selectedCustomer?.email || '' }
       if (!cid) {
-        const res = await addCustomer({
-          ...newCustomer,
-          fullName: titleCase(newCustomer.fullName),
-          address: titleCase(newCustomer.address),
-          phone2: '',
-          phone3: '',
-          email: '',
-        })
-        if (res.error) throw new Error(res.error)
-        cid = res.id
+        const result = await addCustomer({ ...customerFields, reuseExisting: true })
+        if (result.error) throw new Error(result.error)
+        cid = result.id
+        if (result.reused && result.customer) {
+          chooseCustomer(result.customer)
+          return inform('Cliente cargado por DNI. Revisá sus datos antes de guardar.')
+        }
         setSelectedCustomerId(cid)
+      } else if (Object.entries(customerFields).some(([key, value]) => (selectedCustomer?.[key] || '') !== value)) {
+        const result = await updateCustomer(cid, customerFields)
+        if (result.error) throw new Error(result.error)
       }
-      const accList = [...accessories, customAccessory.trim()].filter(Boolean)
-      const res = await addOrder({
-        requestId,
-        customerId: cid,
-        deviceType: deviceType === 'Otro' ? titleCase(customDeviceType.trim()) || 'Otro' : deviceType,
-        brand,
-        model,
-        accessories: accList.map((a) => titleCase(a)).join(', '),
-        conditions: conditions.map((c) => titleCase(c)).join(', '),
-        pin: noPin ? '' : pin.trim(),
-        noPin,
-        pattern: pattern.length >= 3 ? pattern : null,
-        diagnosisType,
-        isSimpleService,
-        isExternal,
-        issue: sentenceCase(issue.trim()),
-        fix: (diagnosisType === 'visible' ? [...fixes, customFix.trim()].filter(Boolean) : []).map((f) => titleCase(f)).join(', '),
-        price: Number(price) || 0,
-        advance: Number(advance) || 0,
-      })
+      const res = await addOrder({ requestId, customerId: cid, ...data })
       if (res.error) throw new Error(res.error)
       clearFields()
       setRequestId(uid())
@@ -279,6 +234,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
     } catch (err) {
       setError(err.message)
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
@@ -289,81 +245,33 @@ export default function OrderForm({ open, onClose, onCreated }) {
 
   return (
     <Modal open={open} onClose={requestClose} title="Nueva orden de servicio" maxWidth="max-w-3xl">
-      {confirming ? (
-        <ConfirmDiscard
-          onStay={() => setConfirming(false)}
-          onDiscard={() => { clearFields(); setRequestId(uid()); onClose() }}
-          message="La orden todavía no se guardó. Si salís, los datos que escribiste se perderán."
-        />
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {dirty && <div className="flex justify-end"><button type="button" onClick={() => setConfirming(true)} className="text-sm text-slate-500">Descartar borrador</button></div>}
+        <form noValidate onSubmit={handleSubmit} className="space-y-5">
+
           {/* Cliente */}
           <div>
             <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
               Cliente
             </div>
 
-            {selectedCustomer ? (
-              <div className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 dark:border-primary-500/30 dark:bg-primary-500/10">
-                <p className="truncate text-sm font-semibold text-primary-700 dark:text-primary-300">
-                  {selectedCustomer.fullName}
-                  {selectedCustomer.dni ? <span className="ml-1 font-normal text-slate-500 dark:text-slate-400">· DNI {selectedCustomer.dni}</span> : null}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setSelectedCustomerId('')}
-                  className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-lg border border-primary-200 px-2.5 py-1 text-xs font-semibold text-primary-600 transition hover:bg-primary-100 dark:border-primary-500/30 dark:text-primary-400 dark:hover:bg-primary-500/10"
-                >
-                  <X size={13} />
-                  Quitar
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="relative mb-3">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={custQuery}
-                    onChange={(e) => setCustQuery(e.target.value)}
-                    placeholder="Buscar cliente existente por nombre, DNI o teléfono..."
-                    className={`${inputCls} pl-9`}
-                  />
-                  {customerMatches.length > 0 && (
-                    <div className="absolute inset-x-0 top-full z-20 mt-1.5 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                      {customerMatches.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCustomerId(c.id)
-                            setCustQuery('')
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-primary-50 dark:text-slate-200 dark:hover:bg-primary-500/10"
-                        >
-                          <span className="font-semibold">{c.fullName}</span>
-                          {c.dni && <span className="ml-1 text-xs text-slate-400">DNI {c.dni}</span>}
-                          {c.phone && <span className="ml-2 text-xs text-slate-400">{c.phone}</span>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <input type="text" value={newCustomer.fullName} onChange={(e) => setNewCustomer((f) => ({ ...f, fullName: e.target.value }))} placeholder="Nombre completo *" className={inputCls} />
-                  <input type="text" inputMode="numeric" value={newCustomer.dni} onChange={(e) => setNewCustomer((f) => ({ ...f, dni: e.target.value }))} placeholder="DNI" className={inputCls} />
-                  <input type="tel" value={newCustomer.phone} onChange={(e) => setNewCustomer((f) => ({ ...f, phone: e.target.value }))} placeholder="Teléfono" className={inputCls} />
-                  <input type="text" value={newCustomer.address} onChange={(e) => setNewCustomer((f) => ({ ...f, address: e.target.value }))} placeholder="Domicilio" className={inputCls} />
-                </div>
-              </>
-            )}
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-slate-500">{selectedCustomer ? `Cliente: ${selectedCustomer.fullName}` : 'Nuevo cliente'}</p>
+              <button type="button" className="ws-button" onClick={() => setCustomerSearch(true)}><Search size={16} />Buscar cliente</button>
+              {selectedCustomer && <button type="button" className="ws-button" onClick={() => { patchFields({ selectedCustomerId: '', newCustomer: { fullName: '', dni: '', phone: '', phone2: '', phone3: '', address: '' } }); setPhoneCount(1) }}>Nuevo cliente</button>}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className={labelCls}>Nombre completo *<input required type="text" value={newCustomer.fullName} onChange={(e) => setNewCustomer((f) => ({ ...f, fullName: e.target.value }))} placeholder="Nombre completo *" className={inputCls} /></label>
+              <label className={labelCls}>DNI *<input required type="text" inputMode="numeric" value={formatDni(newCustomer.dni)} onBlur={loadDniCustomer} onChange={(e) => { const dni = normalizeDni(e.target.value); patchFields({ newCustomer: { ...newCustomer, dni }, ...(selectedCustomer && dni !== normalizeDni(selectedCustomer.dni) ? { selectedCustomerId: '' } : {}) }) }} placeholder="DNI" className={inputCls} /></label>
+              <label className={labelCls}>Domicilio *<input required type="text" value={newCustomer.address} onChange={(e) => setNewCustomer((f) => ({ ...f, address: e.target.value }))} placeholder="Domicilio" className={inputCls} /></label>
+              {['phone', 'phone2', 'phone3'].slice(0, Math.max(phoneCount, newCustomer.phone3 ? 3 : newCustomer.phone2 ? 2 : 1)).map((key, index) => <label key={key} className={labelCls}>{index ? `Teléfono ${index + 1}` : 'Teléfono (opcional)'}<input type="tel" value={newCustomer[key] || ''} onChange={(e) => setNewCustomer((f) => ({ ...f, [key]: e.target.value }))} placeholder={index ? `Teléfono ${index + 1}` : 'Teléfono'} className={inputCls} /></label>)}
+            </div>
+            {Math.max(phoneCount, newCustomer.phone3 ? 3 : newCustomer.phone2 ? 2 : 1) < 3 && <button type="button" className="ws-button mt-2" onClick={() => setPhoneCount(Math.max(phoneCount, newCustomer.phone2 ? 2 : 1) + 1)}><Plus size={15} />Agregar teléfono</button>}
+            <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={noContact} onChange={(e) => patchFields({ noContact: e.target.checked })} />Sin medio de comunicación · confirma en el local</label>
           </div>
 
           {/* Dispositivo */}
           <div className="space-y-4">
             <div>
-              <label className={labelCls}>Tipo de dispositivo</label>
+              <label className={labelCls}>Tipo de dispositivo *</label>
               <div className="flex items-center gap-2 pt-1">
                 {DEVICE_TYPES.map((t) => {
                   const Icon = DEVICE_TYPE_ICONS[t]
@@ -403,7 +311,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
             {/* Marca */}
             {deviceType !== 'Otro' && (
             <div>
-              <label className={labelCls}>Marca</label>
+              <label className={labelCls}>Marca *</label>
               {deviceType ? (
               <div className="flex flex-wrap items-center gap-2">
                 {topBrands.map((b) => (
@@ -434,12 +342,12 @@ export default function OrderForm({ open, onClose, onCreated }) {
 
             {/* Modelo */}
             {deviceType === 'Otro' && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div><label className={labelCls}>Marca</label><input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Marca (o Sin marca)" className={inputCls} /></div>
-              <div><label className={labelCls}>Modelo</label><input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Modelo o identificación del equipo" className={inputCls} /></div>
+              <div><label className={labelCls}>Marca *</label><input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Marca (o Sin marca)" className={inputCls} /></div>
+              <div><label className={labelCls}>Modelo *</label><input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Modelo o identificación del equipo" className={inputCls} /></div>
             </div>}
             {deviceType !== 'Otro' && (
             <div>
-              <label className={labelCls}>Modelo</label>
+              <label className={labelCls}>Modelo *</label>
               {deviceType ? (
               <div className="flex flex-wrap items-center gap-2">
                 {brand ? (
@@ -479,11 +387,11 @@ export default function OrderForm({ open, onClose, onCreated }) {
             )}
 
             <div>
-              <label className={labelCls}>Estado en que entra el equipo</label>
+              <label className={labelCls}>Estado en que entra el equipo *</label>
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                {conditionOptions.map((c) => (
+                {[...new Set([...conditionOptions, 'Sin observaciones'])].map((c) => (
                   <button key={c} type="button"
-                    onClick={() => setConditions((list) => (list.includes(c) ? list.filter((x) => x !== c) : list.length >= 8 ? list : [...list, c]))}
+                    onClick={() => setConditions((list) => (list.includes(c) ? list.filter((x) => x !== c) : c === 'Sin observaciones' ? [c] : list.length >= 8 ? list : [...list.filter((x) => x !== 'Sin observaciones'), c]))}
                     className={conditions.includes(c) ? chipSelected : chipIdle}>
                     {c}
                   </button>
@@ -494,23 +402,23 @@ export default function OrderForm({ open, onClose, onCreated }) {
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div className="flex flex-col justify-around gap-4">
                 <div>
-                  <label className={labelCls}>PIN / contraseña del equipo</label>
+                  <label className={labelCls}>PIN / contraseña del equipo *</label>
                   <input type="text" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="PIN o contraseña" disabled={noPin} className={`${inputCls} ${noPin ? 'opacity-50 cursor-not-allowed' : ''}`} />
                   <label className="flex items-center gap-2 mt-1 text-sm text-slate-500 dark:text-slate-400 select-none cursor-pointer">
-                    <input type="checkbox" checked={noPin} onChange={(e) => { setNoPin(e.target.checked); if (e.target.checked) setPin('') }} className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
+                    <input type="checkbox" checked={noPin} onChange={(e) => { setNoPin(e.target.checked); if (e.target.checked) { setPin(''); setPattern([]) } }} className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
                     El cliente no dejó contraseña
                   </label>
                 </div>
                 <div>
-                  <label className={labelCls}>Con accesorios</label>
+                  <label className={labelCls}>Con accesorios *</label>
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {accessoryOptions.map((a) => (
+                    {[...new Set([...accessoryOptions, 'Sin accesorios'])].map((a) => (
                       <button key={a} type="button" onClick={() => toggleAccessory(a)}
                         className={accessories.includes(a) ? chipSelected : chipIdle}>
                         {a}
                       </button>
                     ))}
-                    {accessories.filter((a) => !accessoryOptions.includes(a)).map((a) => (
+                    {accessories.filter((a) => !accessoryOptions.includes(a) && a !== 'Sin accesorios').map((a) => (
                       <span key={a} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
                         {a}
                         <button type="button" onClick={() => toggleAccessory(a)} aria-label={`Quitar ${a}`} className="transition hover:text-red-500">
@@ -540,7 +448,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
 
           {/* Ingreso */}
           <div>
-            <label className={labelCls}>Tipo de ingreso</label>
+            <label className={labelCls}>Tipo de ingreso *</label>
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" onClick={() => setDiagnosisType('visible')}
                 className={diagnosisType === 'visible' ? chipSelected : chipIdle}>
@@ -564,7 +472,7 @@ export default function OrderForm({ open, onClose, onCreated }) {
           </div>
 
             <div>
-            <label className={labelCls}>Chequeos / notas generales</label>
+            <label className={labelCls}>Chequeos / notas generales *</label>
             <textarea value={issue} onChange={(e) => setIssue(e.target.value)} maxLength={200} placeholder="Chequeos y notas generales..." className={inputCls} rows={3} />
             <p className="mt-1 text-right text-xs text-slate-400">{issue.length} / 200</p>
           </div>
@@ -572,40 +480,17 @@ export default function OrderForm({ open, onClose, onCreated }) {
           {diagnosisType === 'visible' && (
             <div className="space-y-4">
               <div>
-                <label className={labelCls}>Arreglo a realizar</label>
-                <div className="flex flex-wrap items-center gap-2">
-                  {fixOptions.map((f) => (
-                    <button key={f} type="button" onClick={() => toggleFix(f)}
-                      className={fixes.includes(f) ? chipSelected : chipIdle}>
-                      {f}
-                    </button>
-                  ))}
-                  {fixes.filter((f) => !fixOptions.includes(f)).map((f) => (
-                    <span key={f} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300">
-                      {f}
-                      <button type="button" onClick={() => toggleFix(f)} aria-label={`Quitar ${f}`} className="transition hover:text-red-500">
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                  <span className="flex items-center gap-1">
-                    <input type="text" value={customFix} onChange={(e) => setCustomFix(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAddCustomFix() } }}
-                      placeholder="Otro arreglo..." className={`${inputCls} !w-40`} />
-                    <button type="button" onClick={onAddCustomFix} className={chipIdle}>
-                      <Plus size={13} />
-                    </button>
-                  </span>
-                </div>
+                <label className={labelCls}>Arreglo a realizar *</label>
+                <WorkPicker options={fixOptions} selected={fixes} onChange={setFixes} custom={customFix} onCustomChange={setCustomFix} />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={labelCls}>Presupuesto ($)</label>
+                  <label className={labelCls}>Presupuesto ($) *</label>
                   <input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Costo del arreglo" className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Seña ($)</label>
-                  <input type="number" min="0" step="0.01" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="Opcional" className={inputCls} />
+                  <label className={labelCls}>Seña ($) *</label>
+                  <input type="number" min="0" step="0.01" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="0" className={inputCls} />
                 </div>
               </div>
             </div>
@@ -621,6 +506,16 @@ export default function OrderForm({ open, onClose, onCreated }) {
               {saving ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
+
+          <Modal open={customerSearch} onClose={() => setCustomerSearch(false)} title="Buscar cliente">
+            <div className="space-y-3">
+              <label className={labelCls}>Nombre, DNI o teléfono<input autoFocus value={custQuery} onChange={(e) => setCustQuery(e.target.value)} placeholder="Buscar cliente" className={inputCls} /></label>
+              <div className="max-h-64 space-y-1 overflow-y-auto pr-2">
+                {customerMatches.map((customer) => <button type="button" key={customer.id} className="block w-full rounded-lg p-3 text-left text-sm hover:bg-primary-50 dark:hover:bg-slate-700" onClick={() => chooseCustomer(customer)}><strong>{customer.fullName}</strong><p>DNI {formatDni(customer.dni) || '—'} · {[customer.phone, customer.phone2, customer.phone3].filter(Boolean).join(' · ') || 'Sin teléfono'}</p></button>)}
+                {custQuery.trim() && !customerMatches.length && <p className="text-sm text-slate-500">Sin resultados</p>}
+              </div>
+            </div>
+          </Modal>
 
           {/* Picker "otro" de marca/modelo */}
           <Modal
@@ -671,7 +566,6 @@ export default function OrderForm({ open, onClose, onCreated }) {
             </div>
           </Modal>
         </form>
-      )}
     </Modal>
   )
 }

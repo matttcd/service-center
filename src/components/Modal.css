@@ -1,0 +1,14 @@
+.sc-modal { --sc-modal-top:max(16px,env(safe-area-inset-top)); --sc-modal-bottom:max(16px,env(safe-area-inset-bottom)); padding:var(--sc-modal-top) max(16px,env(safe-area-inset-right)) var(--sc-modal-bottom) max(16px,env(safe-area-inset-left)); }
+.sc-modal-panel { min-height:0; max-height:min(90dvh,calc(var(--sc-modal-height,100dvh) - var(--sc-modal-top) - var(--sc-modal-bottom))); padding:24px; border-radius:16px; }
+.sc-modal-heading { display:flex; flex-shrink:0; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:16px; }
+.sc-modal-heading h2 { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; overflow-wrap:anywhere; padding-block:10px; font-size:18px; line-height:24px; }
+.sc-modal-close { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; width:44px; height:44px; }
+.sc-modal-body { min-height:0; overflow-y:auto; overflow-x:hidden; padding:2px 8px 4px 2px; scrollbar-gutter:stable; scroll-padding-block:12px; overscroll-behavior:contain; overflow-wrap:anywhere; }
+.sc-modal-body > * { min-width:0; }
+
+@media (max-width:700px) {
+  .sc-modal { --sc-modal-top:max(12px,env(safe-area-inset-top)); --sc-modal-bottom:max(12px,env(safe-area-inset-bottom)); padding-inline:max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-left)); }
+  .sc-modal-panel { max-height:calc(var(--sc-modal-height,100dvh) - var(--sc-modal-top) - var(--sc-modal-bottom)); padding:16px; border-radius:12px; }
+  .sc-modal-heading { gap:8px; margin-bottom:12px; }
+  .sc-modal-body { padding-right:6px; }
+}

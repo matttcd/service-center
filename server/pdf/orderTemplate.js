@@ -1,3 +1,4 @@
+import { formatDni } from '../../shared/identifiers.js'
 import { orderAmounts } from '../../shared/order-workspace.js'
 import { LOGO_DATA_URL } from './logo.js'
 
@@ -65,7 +66,7 @@ function field(label, value, opts = {}) {
 
 export function buildOrderHtml(order, customer, contractBulletsOverride) {
   const custName = customer?.fullName || order?.customerName || ''
-  const dni = customer?.dni || ''
+  const dni = formatDni(customer?.dni)
   const phones = [customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' / ') || '—'
   const address = customer?.address || ''
   const receivedByName = order?.receivedByName || ''
@@ -169,7 +170,7 @@ export function buildOrderHtml(order, customer, contractBulletsOverride) {
   <div class="grid2">
     ${field('Nombre', esc(custName))}
     ${field('DNI', esc(dni))}
-    ${field('Telefono', esc(phones))}
+    ${field('Telefono', `${esc(phones)}${order?.noContact ? '<br>Sin medio de comunicación · confirma en el local' : ''}`)}
     ${field('Domicilio', esc(address))}
   </div>
 

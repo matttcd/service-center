@@ -13,7 +13,7 @@ export async function sendLabel(order, customer, config) {
   return printRawLabel({ orderNumber: order.orderNumber, model: `${order.brand} ${order.model}`.trim(), customerName: customer?.fullName || '', date: businessDate(order.createdAt) }, config.labelPrinter)
 }
 
-export function registerPrintRoutes(app, { auth, adminOnly, commit }) {
+export function registerPrintRoutes(app, { auth, adminOnly, receptionOnly, commit }) {
   app.get('/api/printing/config', auth, adminOnly, async (_req, res) => {
     const result = await listPrinters()
     res.json({ config: await getPrintConfig(), transport: printTransport(), printers: result.printers || [], account: result.account || null, error: result.ok ? null : result.error })
@@ -40,7 +40,7 @@ export function registerPrintRoutes(app, { auth, adminOnly, commit }) {
       : await printPdf(await htmlToPdf('<!doctype html><meta charset="utf-8"><style>body{font:16pt Arial;padding:20mm}</style><h1>Prueba de impresión</h1><p>Servicio técnico · Orden A4</p><p>Verificá que el texto se vea completo y legible.</p>'), config.orderPrinter)
     res.status(result.ok ? 200 : 502).json(result.ok ? { ok: true, status: 'submitted' } : { error: result.error })
   })
-  app.get('/api/orders/:id/label-pdf', auth, async (req, res) => {
+  app.get('/api/orders/:id/label-pdf', auth, receptionOnly, async (req, res) => {
     const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { customer: true } })
     if (!order || order.deletedAt) return res.status(404).json({ error: 'Orden no encontrada.' })
     const buffer = await labelPdf(order, order.customer, await getPrintConfig())

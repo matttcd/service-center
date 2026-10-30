@@ -10,12 +10,12 @@ export function receptionQueue(order) {
   if (order.isSimpleService && order.status === 'recibido') return 'simples'
   if (order.status === 'presupuesto') {
     if (!order.price) return 'presupuestar'
-    if (!order.notified) return 'avisar'
+    if (!order.notified && !order.noContact) return 'avisar'
     if (!order.confirmed) return 'respuesta'
   }
   if (order.status === 'falta_repuestos') return 'repuestos'
-  if (order.status === 'terminado' && !order.notified) return 'avisar'
-  if (order.status === 'presupuesto_rechazado' || (order.status === 'terminado' && order.notified)) return 'retiros'
+  if (order.status === 'terminado' && !order.notified && !order.noContact) return 'avisar'
+  if (order.status === 'presupuesto_rechazado' || (order.status === 'terminado' && (order.notified || order.noContact))) return 'retiros'
   return null
 }
 

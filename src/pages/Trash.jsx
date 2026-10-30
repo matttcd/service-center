@@ -1,10 +1,12 @@
+import { formatDni } from '../utils/helpers.js'
 import { useNotify } from '../context/notifications.js'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { RotateCcw, Trash2, Loader2, ClipboardList, Users } from 'lucide-react'
 import { api } from '../utils/api.js'
 import { useData } from '../context/DataContext.jsx'
 import { formatDateTime } from '../utils/helpers.js'
 import Card from '../components/Card.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 import Tabs from '../components/Tabs.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 
@@ -14,17 +16,26 @@ export default function Trash() {
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ orders: [], customers: [], orderCount: 0, customerCount: 0, limit: 50 })
   const [loading, setLoading] = useState(true)
+  const loaded = useRef(false)
+  const requests = useRef(0)
   const setError = useNotify('error')
   const setNotice = useNotify('success')
   const [target, setTarget] = useState(null)
   const [busy, setBusy] = useState(false)
   const load = useCallback(async () => {
-    setLoading(true)
-    try { setData(await api(`/trash?page=${page}`)); setError('') }
-    catch (err) { setError(err.message) }
-    finally { setLoading(false) }
+    const request = ++requests.current
+    if (!loaded.current) setLoading(true)
+    try {
+      const result = await api(`/trash?page=${page}`)
+      if (request !== requests.current) return
+      loaded.current = true; setData(result); setError('')
+    }
+    catch (err) { if (request === requests.current) setError(err.message) }
+    finally { if (request === requests.current) setLoading(false) }
   }, [page, setError])
-  useEffect(() => { load() }, [load, ordersRevision])
+  // El cleanup invalida un contador de solicitudes, no una referencia al DOM.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); return () => { requests.current++ } }, [load, ordersRevision])
   const total = tab === 'orders' ? data.orderCount : data.customerCount
   const pages = Math.max(1, Math.ceil(total / data.limit))
   useEffect(() => { if (page > pages) setPage(pages) }, [page, pages])
@@ -41,16 +52,13 @@ export default function Trash() {
     finally { setBusy(false); setTarget(null) }
   }
   return <div className="space-y-5">
-    <div>
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Papelera</h1>
-      <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">Recuperá clientes u órdenes eliminados por error. Se conservan durante 30 días y vuelven con su historial.</p>
-    </div>
+    <PageHeading title="Papelera" description="Recuperá clientes u órdenes eliminados por error. Se conservan durante 30 días y vuelven con su historial." />
     <div className="sc-tabbed-section">
     <Tabs id="trash" label="Tipo de elemento" panelId="trash-panel" value={tab} onChange={(key) => { setTab(key); setPage(1); setNotice('') }} items={[{ key: 'orders', label: 'Órdenes', Icon: ClipboardList, count: data.orderCount }, { key: 'customers', label: 'Clientes', Icon: Users, count: data.customerCount }]} />
     <Card role="tabpanel" id="trash-panel" aria-labelledby={`trash-${tab}`}>
       {loading ? <p className="flex items-center gap-2 p-6 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" />Cargando papelera…</p> : data[tab].length === 0 ? <div className="flex flex-col items-center gap-2 p-10 text-center text-slate-500"><Trash2 size={24} /><p>No hay {tab === 'orders' ? 'órdenes' : 'clientes'} en la papelera.</p></div> : <ul className="divide-y divide-slate-200 dark:divide-slate-800">
         {data[tab].map((entry) => <li key={entry.id} className="flex flex-col justify-between gap-3 px-5 py-4 sm:flex-row sm:items-center">
-          <div className="min-w-0"><p className="font-semibold text-slate-900 dark:text-white">{tab === 'orders' ? `${entry.orderNumber} · ${entry.brand} ${entry.model}` : entry.fullName}</p><p className="text-sm text-slate-500 dark:text-slate-400">{tab === 'orders' ? entry.customer.fullName : `DNI ${entry.dni || 'sin registrar'}`}</p><p className="mt-1 text-xs text-slate-500">Eliminado {formatDateTime(entry.deletedAt)}</p></div>
+          <div className="min-w-0"><p className="font-semibold text-slate-900 dark:text-white">{tab === 'orders' ? `${entry.orderNumber} · ${entry.brand} ${entry.model}` : entry.fullName}</p><p className="text-sm text-slate-500 dark:text-slate-400">{tab === 'orders' ? entry.customer.fullName : `DNI ${formatDni(entry.dni) || 'sin registrar'}`}</p><p className="mt-1 text-xs text-slate-500">Eliminado {formatDateTime(entry.deletedAt)}</p></div>
           <button disabled={busy} onClick={() => setTarget(entry)} className="inline-flex w-fit shrink-0 items-center gap-2 rounded-lg border border-primary-300 px-3 py-2 text-sm font-semibold text-primary-700 disabled:opacity-50 dark:border-primary-700 dark:text-primary-300"><RotateCcw size={15} />Restaurar</button>
         </li>)}
       </ul>}

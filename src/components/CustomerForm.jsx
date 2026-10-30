@@ -1,3 +1,4 @@
+import { formatDni, normalizeDni } from '../utils/helpers.js'
 // ============================================
 // CustomerForm: alta o edición de cliente
 // ============================================
@@ -58,7 +59,7 @@ export default function CustomerForm({ open, onClose, onSubmit, initial, serverE
   }
 
   const set = (key) => (e) => {
-    setForm((f) => ({ ...f, [key]: e.target.value }))
+    setForm((f) => ({ ...f, [key]: key === 'dni' ? normalizeDni(e.target.value) : e.target.value }))
     setError('')
   }
 
@@ -119,7 +120,7 @@ export default function CustomerForm({ open, onClose, onSubmit, initial, serverE
             <input
               type="text"
               inputMode="numeric"
-              value={form.dni}
+              value={formatDni(form.dni)}
               onChange={set('dni')}
               placeholder="12345678"
               className={inputCls}

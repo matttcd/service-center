@@ -14,9 +14,9 @@ El instalador se construye con NSIS, que permite distribuir instaladores comerci
 
 1. Ejecutar el instalador como administrador. En esta estación se proponen `E:\ServiceCenter` para el programa y `E:\ServiceCenterData` para los datos; en otras PC se pueden elegir sus rutas. Una carpeta de datos existente debe corresponder a esta instalación; no se adoptan carpetas ajenas con archivos.
 2. Elegir el nombre del equipo o su IP fija y el puerto HTTPS (443 por defecto). Los puertos internos 4011 y 5436 son exclusivos de loopback y deben estar libres. El instalador no detiene otras aplicaciones para liberarlos.
-3. Mantener desactivada «Usar otra cuenta de Windows» para crear `ServiceCenterSvc` automáticamente. Solo para colas compartidas que requieren autenticación, activar la opción e indicar una cuenta existente `EQUIPO\usuario` o `DOMINIO\usuario`, sin permisos de administrador, y su contraseña de Windows. Esta cuenta es distinta del Administrador de la aplicación. La contraseña de Windows se entrega al administrador de servicios y se retira del XML; en una actualización de cuenta personalizada debe ingresarse nuevamente.
+3. Mantener desactivada «Usar otra cuenta de Windows» para crear `ServiceCenterSvc` automáticamente. Solo para colas compartidas que requieren autenticación, activar la opción e indicar una cuenta existente `EQUIPO\usuario` o `DOMINIO\usuario`, sin permisos de administrador, y su contraseña de Windows. Esta cuenta es distinta del Administrador de la aplicación. La contraseña de Windows se entrega al administrador de servicios y se retira del XML; una actualización normal conserva las credenciales sin pedirlas otra vez.
 4. Elegir la contraseña inicial del administrador de la aplicación. Abrir el acceso creado en Inicio → Service Center.
-5. Entrar a Configuración → Impresoras. Seleccionar las colas A4 y etiquetas, configurar el papel, guardar y usar los botones de prueba. Las colas se enumeran con la identidad real del servicio. Las impresoras con IP deben tener su driver y cola instalados por equipo; una cola compartida también requiere acceso de la cuenta elegida.
+5. Entrar a Ajustes → Impresoras. Seleccionar las colas A4 y etiquetas, configurar el papel, guardar y usar los botones de prueba. Las colas se enumeran con la identidad real del servicio. Las impresoras con IP deben tener su driver y cola instalados por equipo; una cola compartida también requiere acceso de la cuenta elegida.
 
 Las etiquetas PDF se imprimen al 100% y usan milímetros configurables. Las preferencias del driver deben coincidir con el rollo. ZPL es una opción explícita para impresoras compatibles y conserva el diseño anterior. Un trabajo aceptado se muestra como «enviado a la cola», sin asegurar que la impresora haya terminado. Ante un timeout, revisar la cola antes de reimprimir.
 
@@ -64,6 +64,10 @@ Las versiones 1.1.1–1.1.3 podían registrar una identidad incorrecta por usar 
 
 El instalador coloca cada entrega en una carpeta versionada e inmutable. Al actualizar una instalación operativa activa mantenimiento y exige un respaldo previo; después detiene la aplicación, conserva claves y configuración, aplica migraciones y comprueba su identidad y salud. Si falla, no marca la instalación lista y conserva el respaldo para recuperar. No promete revertir automáticamente una migración de esquema.
 
+Desde **1.2.1**, no vuelve a extraer todo el programa. Antes de extraer, compara tamaño y SHA-256 de los archivos instalados con el manifiesto incluido en el paquete. Reutiliza los idénticos mediante enlaces físicos dentro del mismo disco NTFS; si no están disponibles, los copia. NSIS utiliza bloques comprimidos independientes y omite esos archivos. Solo extrae los nuevos o modificados, y verifica la integridad de toda la entrega antes de ejecutar sus componentes. Los servicios y el respaldo siguen el procedimiento anterior.
+
+El mismo `.exe` incluye todos los componentes para una PC nueva sin Internet; no es una descarga diferencial más pequeña. La comprobación lee los archivos y puede demorar según el disco o antivirus. No editar archivos dentro de `versions\`: las versiones comparten archivos de programa idénticos y sus permisos restringen la escritura. La desinstalación retira sus nombres sin borrar los datos. Una extracción interrumpida se puede reintentar; si detecta corrupción en la versión activa del mismo paquete, se detiene y requiere una entrega nueva para recuperar sin sobrescribir archivos en uso.
+
 Los registros están en `logs\`, y el progreso de instalación en `installation.json`. Las reparaciones deben usar las mismas rutas y la misma cuenta Windows. PostgreSQL permanece en la misma versión mayor 16; una actualización mayor requerirá un procedimiento separado.
 
 Si una migración impide arrancar la aplicación, la herramienta de recuperación también admite el servicio detenido, con PostgreSQL en ejecución. Restaurar la copia previa con su clave y volver a ejecutar el instalador de la versión conocida. Se mantiene detenido el servidor hasta reparar y comprobar su salud; no se reintenta automáticamente una migración fallida.
@@ -93,6 +97,8 @@ npm run test:windows
 # Construir el instalador completo:
 npm run build:windows
 ```
+
+Para compilar exactamente el contenido ya comprobado, sin reconstruirlo: `node scripts/windows/package.mjs RUTA-AL-PAYLOAD 1.2.1`. Verificar que su `releaseId` y manifiesto no cambien. `test:windows` incluye una extracción NSIS real descartable, comprobación de archivos reutilizados, instalación nueva, reparación interrumpida, copia alternativa y rechazo de rutas inseguras. No ejecuta el instalador principal sobre esta PC.
 
 El resultado, manifiesto y SHA-256 quedan en `release/`, fuera de Git. `test:windows` usa bases descartables dentro de `tools/`, no registra servicios, no modifica certificados del host y no envía trabajos físicos. El paquete contiene el ejecutable auxiliar y sus DLL; no copiar únicamente `ServiceCenterPrint.exe` sin su carpeta `_internal`.
 

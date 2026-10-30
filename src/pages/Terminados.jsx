@@ -1,12 +1,13 @@
+import { useOrdersPage } from '../utils/useOrdersPage.js'
 import { useWorkspaceState } from '../context/workspace.js'
 // ============================================
 // Terminados: tabla de equipos terminados listos para entregar.
 // ============================================
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, ArrowUp, ArrowDown, ChevronsUpDown, ChevronUp, ChevronDown, X } from 'lucide-react'
-import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 import Badge from '../components/Badge.jsx'
 import { timeSinceStatus, formatMoney, titleCase } from '../utils/helpers.js'
 
@@ -21,10 +22,8 @@ function timeSinceColor(order) {
 }
 
 export default function Terminados() {
-  const { loadOrders, ordersRevision } = useData()
   const navigate = useNavigate()
 
-  const [pageData, setPageData] = useState({ orders: [], total: 0 })
   const [q, setQ] = useWorkspaceState('finished:q', '')
   const [qInput, setQInput] = useWorkspaceState('finished:qInput', '')
   const [notifiedFilter, setNotifiedFilter] = useWorkspaceState('finished:notifiedFilter', 'all')
@@ -38,15 +37,8 @@ export default function Terminados() {
     return () => clearTimeout(t)
   }, [qInput, setQ])
 
-  useEffect(() => {
-    let active = true
-    const offset = (page - 1) * pageSize
-    const filters = { status: 'terminado', q, limit: pageSize, offset }
-    if (notifiedFilter === 'not_notified') filters.onlyNotNotified = '1'
-    if (notifiedFilter === 'notified') filters.onlyNotified = '1'
-    loadOrders(filters).then((result) => { if (active) setPageData(result) })
-    return () => { active = false }
-  }, [loadOrders, q, notifiedFilter, page, pageSize, ordersRevision])
+  const pageResult = useOrdersPage({ status: 'terminado', q, limit: pageSize, offset: (page - 1) * pageSize, ...(notifiedFilter === 'not_notified' ? { onlyNotNotified: '1' } : notifiedFilter === 'notified' ? { onlyNotified: '1' } : {}) })
+  const pageData = pageResult.data || { orders: [], total: 0 }
 
   const sorted = useMemo(() => {
     const cmp = (a, b) => {
@@ -111,10 +103,7 @@ export default function Terminados() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Terminados</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{pageData.total} equipo(s) listo(s) para entregar</p>
-      </div>
+      <PageHeading title="Terminados" description={pageResult.data ? `${pageData.total} equipo(s) listo(s) para entregar` : pageResult.loading ? 'Cargando equipos…' : 'Listado no disponible'} />
 
       {/* Filtros */}
       <Card className="p-4">
@@ -160,9 +149,10 @@ export default function Terminados() {
         </div>
       </Card>
 
+      {pageResult.error && <div role="alert" className="ws-conflict"><p>{pageResult.error}</p><button className="ws-button" onClick={pageResult.retry}>Reintentar</button></div>}
       {/* Tabla */}
-      <Card className="overflow-hidden">
-        {sorted.length === 0 ? (
+      <Card className="overflow-hidden" aria-busy={pageResult.loading}>
+        {!pageResult.data ? <p className="px-5 py-10 text-sm text-slate-400" role="status">{pageResult.loading ? 'Cargando…' : 'No se pudieron cargar los equipos.'}</p> : sorted.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-slate-400">
             No hay equipos terminados.
           </p>
@@ -203,7 +193,7 @@ export default function Terminados() {
                       {o.price ? formatMoney(o.price) : '—'}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">
-                      {o.notified
+                      {o.noContact ? <Badge tone="slate">Sin comunicación</Badge> : o.notified
                         ? <Badge tone="green">Avisado</Badge>
                         : <Badge tone="yellow">Sin avisar</Badge>
                       }

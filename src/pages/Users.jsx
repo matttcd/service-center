@@ -2,12 +2,13 @@
 // Usuarios: gestión de usuarios (solo admin)
 // ============================================
 import { useNotify } from '../context/notifications.js'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { UserPlus, ShieldCheck, Shield, Wrench, History } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../utils/api.js'
 import Card from '../components/Card.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 import Badge from '../components/Badge.jsx'
 import UserForm from '../components/UserForm.jsx'
 import Modal from '../components/Modal.jsx'
@@ -40,7 +41,10 @@ export default function Users() {
   const { currentUser } = useAuth()
   const [formOpen, setFormOpen] = useState(false)
   const [logs, setLogs] = useState([])
-  const [logTotal, setLogTotal] = useState(0)
+  const [logTotal, setLogTotal] = useState(null)
+  const [logLoading, setLogLoading] = useState(true)
+  const [logError, setLogError] = useState('')
+  const logRequest = useRef(0)
   const [logPage, setLogPage] = useState(1)
   const [logPages, setLogPages] = useState(1)
   const [confirmToggle, setConfirmToggle] = useState(null)
@@ -48,14 +52,18 @@ export default function Users() {
 
   // Carga el historial de auditoría paginado (solo admin llega a esta página).
   const loadLogs = useCallback(async (page) => {
+    const sequence = ++logRequest.current
+    setLogLoading(true)
+    setLogError('')
     try {
       const res = await api(`/audit?page=${page}&limit=50`)
+      if (sequence !== logRequest.current) return
       setLogs(res.logs || [])
       setLogTotal(res.total || 0)
       setLogPages(res.pages || 1)
-    } catch {
-      setLogs([])
-    }
+    } catch (error) {
+      if (sequence === logRequest.current) setLogError(error.message)
+    } finally { if (sequence === logRequest.current) setLogLoading(false) }
   }, [])
 
   useEffect(() => {
@@ -64,19 +72,16 @@ export default function Users() {
 
   useEffect(() => {
     loadLogs(logPage)
+    // Invalida respuestas anteriores; este ref es un contador, no un nodo DOM.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { logRequest.current++ }
   }, [logPage, loadLogs])
 
   const handleCreate = (form) => addUser(form)
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Usuarios</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Gestioná los accesos al sistema
-          </p>
-        </div>
+      <PageHeading title="Usuarios" description="Gestioná los accesos al sistema">
         <button
           onClick={() => setFormOpen(true)}
           className="inline-flex items-center gap-2 self-start rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
@@ -84,7 +89,7 @@ export default function Users() {
           <UserPlus size={16} />
           Nuevo usuario
         </button>
-      </div>
+      </PageHeading>
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
@@ -226,9 +231,10 @@ export default function Users() {
         <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
           <History size={18} className="text-slate-400" />
           <h2 className="font-semibold text-slate-900 dark:text-white">Historial de auditoría</h2>
-          <span className="ml-auto text-xs text-slate-400">{logTotal} registro(s)</span>
+          <span className="ml-auto text-xs text-slate-400">{logTotal == null ? logLoading ? 'Cargando…' : 'No disponible' : `${logTotal} registro(s)`}</span>
         </div>
-        {logs.length === 0 ? (
+        {logError && <div role="alert" className="p-4"><p>{logError}</p><button className="ws-button" onClick={() => loadLogs(logPage)}>Reintentar</button></div>}
+        {logLoading && logTotal == null ? <p role="status" className="p-5">Cargando historial…</p> : logTotal == null ? null : logs.length === 0 ? (
           <p className="px-5 py-6 text-center text-sm text-slate-400">Sin registros todavía.</p>
         ) : (
           <>

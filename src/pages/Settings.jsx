@@ -1,3 +1,6 @@
+import { useAuth } from '../context/AuthContext.jsx'
+import AccountSettings from './AccountSettings.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 // ============================================
 // Settings: configuración general (solo admin)
 // Rediseño unificado con pestañas estilo Dashboard
@@ -7,6 +10,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Save,
+  UserRound,
   AlertCircle,
   Stethoscope,
   Upload,
@@ -846,7 +850,7 @@ function TechniciansSection({ catalogLists, saveCatalogLists }) {
           ¿Cómo se utilizan los técnicos externos?
         </p>
         <p className="mt-1 text-amber-800 dark:text-amber-300/90">
-          Al usar la acción &ldquo;Enviar a técnico externo&rdquo; en una orden, podrás seleccionar a cualquiera de estos técnicos y cargar el costo derivado. Las órdenes enviadas aparecerán en la pestaña &ldquo;Externos&rdquo; del Taller y en el Dashboard.
+          Al usar la acción &ldquo;Enviar a técnico externo&rdquo; en una orden, podrás seleccionar a cualquiera de estos técnicos y cargar el costo derivado. Las órdenes enviadas aparecerán en Recepción, en la pestaña &ldquo;Externos&rdquo;.
         </p>
       </div>
     </div>
@@ -857,6 +861,7 @@ function TechniciansSection({ catalogLists, saveCatalogLists }) {
 // Definición de las Pestañas (Estructura idéntica al Dashboard)
 // ----------------------------------------------------
 const SETTINGS_TABS = [
+  { key: 'cuenta', label: 'Mi cuenta', Icon: UserRound },
   { key: 'general', label: 'General', Icon: Sliders },
   { key: 'impresoras', label: 'Impresoras', Icon: Printer },
   { key: 'opciones', label: 'Opciones de orden', Icon: Tags },
@@ -870,10 +875,12 @@ const SETTINGS_TABS = [
 // ----------------------------------------------------
 export default function Settings() {
   const { config, saveConfig, catalogLists, saveCatalogLists } = useData()
+  const { currentUser } = useAuth()
+  const tabs = currentUser.role === 'admin' ? SETTINGS_TABS : SETTINGS_TABS.filter((tab) => tab.key === 'cuenta')
   const [searchParams, setSearchParams] = useSearchParams()
 
   const tabParam = searchParams.get('tab')
-  const activeTab = SETTINGS_TABS.some((t) => t.key === tabParam) ? tabParam : 'general'
+  const activeTab = tabs.some((t) => t.key === tabParam) ? tabParam : 'cuenta'
 
   const setActiveTab = (tab) => {
     setSearchParams({ tab }, { replace: true })
@@ -892,19 +899,15 @@ export default function Settings() {
   return (
     <div className="space-y-6">
       {/* Encabezado */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Configuración</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Parámetros operativos del taller, listas rápidas y cláusulas de comprobantes
-        </p>
-      </div>
+      <PageHeading title="Ajustes" description="Cuenta y preferencias" />
 
       {/* Contenedor principal idéntico al Dashboard */}
       <div className="sc-tabbed-section">
-        <Tabs id="settings" label="Secciones de configuración" panelId="settings-panel" items={SETTINGS_TABS.map((tab) => ({ ...tab, count: counts[tab.key] }))} value={activeTab} onChange={setActiveTab} />
+        <Tabs id="settings" label="Secciones de configuración" panelId="settings-panel" items={tabs.map((tab) => ({ ...tab, count: counts[tab.key] }))} value={activeTab} onChange={setActiveTab} />
         <Card className="!p-0 overflow-hidden" role="tabpanel" id="settings-panel" aria-labelledby={`settings-${activeTab}`}>
         {/* Contenido sin cards anidadas */}
         <div className="p-6 sm:p-8 animate-fadeIn">
+          {activeTab === 'cuenta' && <AccountSettings embedded />}
           {activeTab === 'general' && (
             <GeneralSection
               config={config}

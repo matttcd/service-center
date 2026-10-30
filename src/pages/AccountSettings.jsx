@@ -3,13 +3,14 @@ import { KeyRound, Mail, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import ChangePasswordModal from '../components/ChangePasswordModal.jsx'
 import Card from '../components/Card.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 import { ROLE_LABEL } from '../utils/helpers.js'
 
-export default function AccountSettings() {
+export default function AccountSettings({ embedded = false }) {
   const { currentUser, clearMustChangePassword } = useAuth()
   const [open, setOpen] = useState(false)
   return <div className="space-y-6">
-    <h1 className="text-lg font-bold">Ajustes</h1>
+    {!embedded && <PageHeading title="Ajustes" />}
     <Card className="sc-account">
       <header className="sc-account-heading"><span className="ws-avatar" aria-hidden="true">{currentUser.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('')}</span><h2>Mi cuenta</h2></header>
       <dl className="sc-account-details">

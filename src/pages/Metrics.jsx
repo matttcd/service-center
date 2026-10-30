@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Wallet, Timer, PackageCheck, PackageOpen, TrendingUp, Smartphone } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
+import PageHeading from '../components/PageHeading.jsx'
 import StatCard from '../components/StatCard.jsx'
 import { formatMoney, formatDate } from '../utils/helpers.js'
 
@@ -20,10 +21,7 @@ export default function Metrics() {
   if (adminMetricsError) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Métricas</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Indicadores del negocio</p>
-        </div>
+        <PageHeading title="Métricas" description="Indicadores del negocio" />
         <Card className="p-10">
           <p className="text-center text-sm text-red-600 dark:text-red-400">
             No se pudieron cargar las métricas. {adminMetricsError}
@@ -35,10 +33,7 @@ export default function Metrics() {
   if (!adminMetrics) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Métricas</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Indicadores del negocio</p>
-        </div>
+        <PageHeading title="Métricas" description="Indicadores del negocio" />
         <Card className="p-10">
           <p className="text-center text-sm text-slate-400">Todavía no hay métricas para mostrar.</p>
         </Card>
@@ -51,10 +46,7 @@ export default function Metrics() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Métricas</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Indicadores del negocio</p>
-      </div>
+      <PageHeading title="Métricas" description="Indicadores del negocio" />
 
       {/* Ingresos */}
       <div>

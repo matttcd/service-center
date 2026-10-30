@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { root } from './download.mjs'
 
 assert.equal(process.platform, 'win32')
+execFileSync(process.execPath, [path.join(root, 'scripts/windows/verify-payload.mjs')], { windowsHide: true, stdio: 'inherit' })
 const directory = fs.mkdtempSync(path.join(root, 'tools/windows-installer-check-'))
 const appDir = path.join(directory, 'Programa á')
 const dataDir = path.join(directory, 'Datos ñ')

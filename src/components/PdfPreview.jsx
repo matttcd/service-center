@@ -8,14 +8,17 @@ GlobalWorkerOptions.workerSrc = workerUrl
 export default function PdfPreview({ file, onRetry }) {
   const pages = useRef(null)
   const [loading, setLoading] = useState(true)
+  const [rendering, setRendering] = useState(true)
   const [error, setError] = useState(false)
   useEffect(() => {
     let cancelled = false, task
     const container = pages.current
     container.replaceChildren()
     setLoading(true)
+    setRendering(true)
     setError(false)
     const render = async () => {
+      const started = performance.now()
       const data = new Uint8Array(await file.arrayBuffer())
       if (cancelled) return
       task = getDocument({ data, isEvalSupported: false })
@@ -32,14 +35,19 @@ export default function PdfPreview({ file, onRetry }) {
         await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
         if (cancelled) return
         container.append(canvas)
+        if (number === 1) {
+          setLoading(false)
+          performance.measure('service-center:pdf-first-page', { start: started, end: performance.now() })
+        }
       }
       setLoading(false)
+      setRendering(false)
     }
-    render().catch(() => { if (!cancelled) { setLoading(false); setError(true) } })
+    render().catch(() => { if (!cancelled) { setLoading(false); setRendering(false); setError(true) } })
     return () => { cancelled = true; task?.destroy(); container.replaceChildren() }
   }, [file])
   return <div className="sc-pdf-viewer">
-    <div className="sc-pdf-pages" ref={pages} tabIndex={0} aria-label="Páginas del comprobante" aria-busy={loading} />
+    <div className="sc-pdf-pages" ref={pages} tabIndex={0} aria-label="Páginas del comprobante" aria-busy={rendering} />
     {loading && <div className="sc-print-state sc-pdf-message" role="status"><Loader2 size={28} className="animate-spin" /><p>Cargando vista previa…</p></div>}
     {error && <div className="sc-print-state sc-pdf-message" role="alert"><AlertTriangle size={28} /><p>No se pudo mostrar la vista previa.</p><button className="ws-button" onClick={onRetry}><RotateCw size={16} />Reintentar</button></div>}
   </div>

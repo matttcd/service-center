@@ -1,3 +1,4 @@
+import { formatDni } from '../utils/helpers.js'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Phone, Mail, MapPin, KeyRound, IdCard, Grid3X3, Smartphone, Cable } from 'lucide-react'
 import { PatternPreview } from './PatternPad.jsx'
@@ -35,14 +36,14 @@ export default function OrderSheet({ order, customer, onBack, tools, children, f
       <div className="ws-context">{children}</div>
     </div>
     <aside className="ws-reference" aria-label="Cliente y seguimiento">
-      <div className="ws-customer"><span className="ws-avatar" aria-hidden="true">{name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('')}</span><div><h3><Link to={`/clientes/${order.customerId}`}>{name}</Link></h3><p><IdCard size={14} /> DNI: {customer?.dni || '—'}</p></div></div>
-      <dl className="ws-contact-list">{fact('Teléfono', customer?.phone, Phone)}{fact('Teléfono 2', customer?.phone2, Phone)}{fact('Teléfono 3', customer?.phone3, Phone)}{fact('Correo', customer?.email, Mail)}{fact('Domicilio', customer?.address, MapPin)}</dl>
+      <div className="ws-customer"><span className="ws-avatar" aria-hidden="true">{name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('')}</span><div><h3><Link to={`/clientes/${order.customerId}`}>{name}</Link></h3><p><IdCard size={14} /> DNI: {formatDni(customer?.dni) || '—'}</p></div></div>
+      <dl className="ws-contact-list">{order.noContact && fact('Comunicación', 'Sin medio de comunicación · confirma en el local', Phone)}{fact('Teléfono', customer?.phone, Phone)}{fact('Teléfono 2', customer?.phone2, Phone)}{fact('Teléfono 3', customer?.phone3, Phone)}{fact('Correo', customer?.email, Mail)}{fact('Domicilio', customer?.address, MapPin)}</dl>
       <dl className="ws-tracking">
         {fact('Ingreso', formatDateTime(order.createdAt))}{fact('Recibió', order.receivedByName)}{fact('Técnico', order.assignedToName || 'Sin asignar')}{fact('Aceptado', accepted ? formatDateTime(accepted) : 'Sin fecha registrada')}
-        {fact('Aviso al cliente', order.notified ? <>Avisado<span>{event(order.notifiedAt, order.notifiedByName)}</span></> : 'Sin avisar')}
+        {fact('Aviso al cliente', order.notified ? <>Avisado<span>{event(order.notifiedAt, order.notifiedByName)}</span></> : order.noContact ? 'Sin medio de comunicación' : 'Sin avisar')}
         {fact('Respuesta', order.rejectedAt ? <>Rechazado<span>{event(order.rejectedAt, order.rejectedByName)}</span></> : order.confirmed ? <>Aprobado<span>{event(order.confirmedAt, order.confirmedByName)}</span></> : 'Sin respuesta')}
         {completed && order.repairedBy && fact(order.isSimpleService ? 'Finalizó' : 'Reparó', order.repairedByName)}
-        {order.deliveredAt && <>{fact('Entrega', event(order.deliveredAt, order.deliveredByName))}{fact('Retiró', order.pickupBy === 'third' ? `${order.pickupName} · DNI: ${order.pickupDni}` : 'Cliente titular')}</>}
+        {order.deliveredAt && <>{fact('Entrega', event(order.deliveredAt, order.deliveredByName))}{fact('Retiró', order.pickupBy === 'third' ? `${order.pickupName} · DNI: ${formatDni(order.pickupDni)}` : 'Cliente titular')}</>}
       </dl>
     </aside>
     <footer className="ws-footer">{footer}</footer>

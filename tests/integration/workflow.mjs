@@ -4,7 +4,7 @@ import fs from 'node:fs'
 
 const base = process.env.VERIFY_URL || 'http://localhost:8181'
 // Este archivo crea y restaura datos: solo admite el entorno descartable.
-assert.match(base, /^http:\/\/(localhost|127\.0\.0\.1):8181$/)
+assert.match(base, /^http:\/\/(localhost|127\.0\.0\.1):818[123]$/)
 let token
 async function request(path, { method = 'GET', body, as = token, status = 200 } = {}) {
   const response = await fetch(`${base}/api${path}`, {
@@ -38,25 +38,73 @@ test('flujo completo y recuperación en PostgreSQL real', async (t) => {
     t.techToken = (await post('/auth/login', { profileId: technician.id, password: 'Verification-tech-2026' })).token
     t.counterToken = (await post('/auth/login', { profileId: reception.id, password: 'Verification-counter-2026' })).token
     await request('/backups', { as: t.techToken, status: 403 })
+    for (const endpoint of ['/printers', '/orders/missing/pdf', '/orders/missing/label-pdf', '/orders/missing/pickup-pdf']) await request(endpoint, { as: t.techToken, status: 403 })
+    for (const endpoint of ['/orders/missing/print', '/orders/missing/label']) await post(endpoint, {}, { as: t.techToken, status: 403 })
+    assert.equal('password' in technician.user, false)
+    assert.equal(technician.user.id, technician.id)
     await post('/users', { name: 'Intruso', password: 'Verification-123', role: 'admin' }, { as: t.counterToken, status: 403 })
   })
-  const customer = await post('/customers', { fullName: 'Cliente Verificación', dni: '30123456', phone: '3704000000' })
+  const customer = await post('/customers', { fullName: 'Cliente Verificación', dni: '30123456', phone: '3704000000', address: 'Calle Pruebas 123' })
   const create = async (fields = {}) => (await post('/orders', {
     customerId: customer.id, deviceType: 'Celular', brand: 'Samsung', model: 'Galaxy A15',
-    issue: 'No enciende', ...fields,
+    issue: 'No enciende', conditions: 'Apagado', accessories: 'Sin accesorios', noPin: true, diagnosisType: 'visible', fix: fields.diagnosisType === 'revision' ? '' : 'Limpieza', price: fields.diagnosisType === 'revision' ? 0 : 1500, ...fields,
   })).order
   const state = async (order, status, extras = {}, options = {}) => (await post(`/orders/${order.id}/status`, { status, ...extras }, options)).order
   let visible
+  await t.test('ingreso obligatorio, DNI reutilizado y modelos separados por dispositivo', async () => {
+    const fields = { customerId: customer.id, deviceType: 'Celular', brand: 'Samsung', model: 'Galaxy A15', issue: 'No carga', conditions: 'Apagado', accessories: 'Sin accesorios', noPin: true, diagnosisType: 'revision' }
+    for (const key of ['deviceType', 'brand', 'model', 'issue', 'conditions', 'accessories']) await post('/orders', { ...fields, [key]: '' }, { status: 400 })
+    await post('/orders', { ...fields, noPin: false }, { status: 400 })
+    await post('/orders', { ...fields, noContact: 'true' }, { status: 400 })
+    const incomplete = await post('/customers', { fullName: 'Cliente incompleto', dni: '30123459' })
+    await post('/orders', { ...fields, customerId: incomplete.id }, { status: 400 })
+    const attempts = await Promise.all(Array.from({ length: 3 }, () => post('/customers', { fullName: 'Cliente sin teléfono', dni: '30.123.460', address: 'Calle 123', phone2: '1155552222', phone3: '1155553333', reuseExisting: true })))
+    assert.equal(new Set(attempts.map(result => result.id)).size, 1)
+    assert.equal(attempts.filter(result => result.reused).length, 2)
+    const reused = await post('/customers', { fullName: 'Otro nombre', dni: '30.123.460', reuseExisting: true })
+    assert.equal(reused.customer.fullName, 'Cliente Sin Teléfono')
+    assert.equal(reused.customer.phone2, '1155552222')
+    assert.equal(reused.customer.phone3, '1155553333')
+    await post('/customers', { fullName: 'Duplicado', dni: '30123460' }, { status: 400 })
+    for (const type of ['Celular', 'Tablet', 'Smart TV']) {
+      const catalog = await request(`/catalog?deviceType=${encodeURIComponent(type)}`)
+      assert.ok(catalog.models.length)
+      assert.ok(catalog.models.every(model => model.deviceType === type))
+    }
+  })
+  await t.test('sin comunicación: respuesta presencial y retiro, sin omitir el retiro anticipado', async () => {
+    for (const reject of [false, true]) {
+      let order = await create({ diagnosisType: 'revision', noContact: true })
+      await state(order, 'entregado', { pickup: { pickupBy: 'client' } }, { status: 400 })
+      order = await state(order, 'en_revision', { assignedTo: t.technician }, { as: t.techToken })
+      await put(`/orders/${order.id}`, { fix: 'Cambio de batería' }, { as: t.techToken })
+      order = await state(order, 'presupuesto', {}, { as: t.techToken })
+      await post(`/orders/${order.id}/confirm`, { confirmed: true }, { status: 400 })
+      await put(`/orders/${order.id}`, { price: 30000 }, { as: t.counterToken })
+      if (reject) order = await state(order, 'presupuesto_rechazado', { rejectedCharge: 0 }, { as: t.counterToken })
+      else {
+        order = (await post(`/orders/${order.id}/confirm`, { confirmed: true }, { as: t.counterToken })).order
+        assert.ok(order.history.some(entry => entry.note === 'Confirmado por el cliente en el local'))
+        order = await state(order, 'en_reparacion', {}, { as: t.techToken })
+        order = await state(order, 'terminado', {}, { as: t.techToken })
+      }
+      assert.equal(order.notified, false)
+      order = await state(order, 'entregado', { pickup: { pickupBy: 'client' } }, { as: t.counterToken })
+      assert.equal(order.noContact, true)
+      assert.equal(order.notified, false)
+      t.noContactOrder = order
+    }
+  })
   await t.test('reintentos concurrentes crean una sola orden', async () => {
     const fields = { requestId: 'verification-retry-0001', price: 1500 }
     const before = (await request('/orders')).total
     const results = await Promise.all([create(fields), create(fields), create(fields)])
     assert.equal(new Set(results.map((order) => order.id)).size, 1)
     assert.equal((await request('/orders')).total, before + 1)
-    await post('/orders', { customerId: customer.id, deviceType: 'Celular', brand: 'Samsung', model: 'Galaxy A15', issue: 'No enciende', ...fields, price: 2000 }, { status: 409 })
+    await post('/orders', { customerId: customer.id, deviceType: 'Celular', brand: 'Samsung', model: 'Galaxy A15', issue: 'No enciende', conditions: 'Apagado', accessories: 'Sin accesorios', noPin: true, diagnosisType: 'visible', fix: 'Limpieza', ...fields, price: 2000 }, { status: 409 })
   })
   await t.test('recepción, reparación, entrega y garantía', async () => {
-    visible = await create({ fix: 'Cambio de batería', price: 30000, advance: 5000 })
+    visible = await create({ diagnosisType: 'visible', fix: 'Cambio de batería', price: 30000, advance: 5000 })
     await put(`/orders/${visible.id}`, { pin: '4321', pattern: [0, 1, 2], expected: { pin: '', pattern: [] } }, { as: t.counterToken })
     await state(visible, 'en_reparacion', {}, { status: 400 })
     visible = await state(visible, 'en_reparacion', { assignedTo: t.technician })
@@ -208,7 +256,7 @@ test('flujo completo y recuperación en PostgreSQL real', async (t) => {
     }
   })
   await t.test('papelera recupera bajas sin reactivar órdenes eliminadas antes', async () => {
-    const client = await post('/customers', { fullName: 'Cliente Papelera', dni: '30123458' })
+    const client = await post('/customers', { fullName: 'Cliente Papelera', dni: '30123458', address: 'Pruebas 123' })
     const older = await create({ customerId: client.id })
     const current = await create({ customerId: client.id })
     await request(`/orders/${older.id}`, { method: 'DELETE' })
@@ -242,6 +290,7 @@ test('flujo completo y recuperación en PostgreSQL real', async (t) => {
     assert.equal(rejected.rejectedCharge, 3500)
     assert.equal(rejected.price, 45000)
     assert.ok(rejected.acceptedAt)
+    assert.equal((await request(`/orders/${t.noContactOrder.id}`)).order.noContact, true)
   })
   await t.test('listas editables deduplicadas y cambios inválidos conservan el catálogo', async () => {
     await put('/catalog/lists', { accessories: ['Funda', ' funda ', 'Cargador'] }, { as: t.techToken, status: 403 })

@@ -16,7 +16,8 @@ const page = await browser.newPage()
 page.setDefaultTimeout(20000)
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
-const routes = ['recepcion', 'taller', 'terminados', 'ordenes', 'clientes', 'actividad', 'resumen', 'metricas', 'usuarios', 'backups', 'papelera', 'configuracion', 'ajustes']
+const routes = ['recepcion', 'taller', 'terminados', 'ordenes', 'clientes', 'actividad', 'metricas', 'usuarios', 'backups', 'papelera', 'configuracion', 'ajustes']
+const headings = new Map()
 try {
   await page.setViewport({ width: 1366, height: 768 })
   await page.goto(`${base}/login`, { waitUntil: 'domcontentloaded' })
@@ -36,6 +37,20 @@ try {
       }
       for (const [width, height] of [[1366, 768], [1024, 768], [390, 844]]) {
         await page.setViewport({ width, height })
+        await page.waitForFunction(() => { const rect = document.querySelector('.sc-sidebar').getBoundingClientRect(); return matchMedia('(max-width:1023px)').matches ? rect.right <= 1 : rect.left >= -1 })
+        assert.equal(await page.$eval('.sc-content h1', node => getComputedStyle(node).fontSize), '18px', `${route}: tamaño uniforme del título a ${width}`)
+        const heading = await page.$eval('.sc-page-heading', node => {
+          const box = node.getBoundingClientRect()
+          return { top: box.top, height: box.height, titleTop: node.querySelector('h1').getBoundingClientRect().top, gap: node.nextElementSibling.getBoundingClientRect().top - box.bottom }
+        })
+        const key = `${dark}:${width}`
+        if (!headings.has(key)) headings.set(key, heading)
+        const reference = headings.get(key)
+        assert.ok(Math.abs(heading.titleTop - reference.titleTop) <= 1, `${route}: título alineado con Recepción a ${width}`)
+        if (width >= 1024) {
+          assert.ok(Math.abs(heading.height - reference.height) <= 1, `${route}: mismo espacio del encabezado a ${width}: ${JSON.stringify(heading)}`)
+          assert.ok(Math.abs(heading.gap - reference.gap) <= 1, `${route}: misma separación del contenido a ${width}: ${JSON.stringify(heading)}`)
+        }
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false, `${route}: desbordamiento a ${width}`)
         if (width === 1366) {
           const sidebar = await page.evaluate(() => {
@@ -46,15 +61,17 @@ try {
           assert.ok(Math.abs(sidebar.bottom - height) <= 1, `${route}: perfil al fondo`)
           assert.ok(sidebar.theme < sidebar.profile, `${route}: tema fuera del perfil`)
           if (route === 'recepcion' || route === 'taller') {
+            await page.waitForSelector('[data-order-id]')
+            await page.click('[data-order-id]')
             await page.waitForSelector('.ws-sheet')
             const aligned = await page.evaluate(() => {
-              const header = document.querySelector('.ws-order-header').getBoundingClientRect()
+              const panel = document.querySelector('.ws-layout').getBoundingClientRect()
               const search = document.querySelector('.ws-search input').getBoundingClientRect()
               const list = document.querySelector('.ws-queue-list').getBoundingClientRect()
               const tabs = document.querySelector('.sc-tabs').getBoundingClientRect()
               const last = document.querySelector('.sc-tabs > button:last-child').getBoundingClientRect()
               const count = document.querySelector('.sc-tab-count')
-              return { center: Math.abs((search.top + search.bottom - header.top - header.bottom) / 2), edge: Math.abs(list.top - header.bottom), end: Math.abs(tabs.right - last.right), radius: parseFloat(getComputedStyle(count).borderRadius), countHeight: count.offsetHeight }
+              return { center: Math.abs((search.top + search.bottom) / 2 - panel.top - 42), edge: Math.abs(list.top - panel.top - 84), end: Math.abs(tabs.right - last.right), radius: parseFloat(getComputedStyle(count).borderRadius), countHeight: count.offsetHeight }
             })
             assert.ok(aligned.center <= 1 && aligned.edge <= 1, `${route}: buscador y encabezado alineados ${JSON.stringify(aligned)}`)
             assert.ok(aligned.end <= 1, `${route}: pestañas terminan en la última`)
@@ -72,6 +89,7 @@ try {
             await page.keyboard.press('Home')
             await page.waitForFunction(() => document.querySelector('[role=tab]:first-child').getAttribute('aria-selected') === 'true')
             if (route === 'taller') await page.click('#queue-all')
+            if (route === 'taller' || route === 'recepcion') { await page.waitForSelector('[data-order-id]'); await page.click('[data-order-id]'); await page.waitForSelector('.ws-sheet') }
           }
         }
         if (['recepcion', 'terminados', 'clientes', 'actividad', 'configuracion', 'resumen', 'ajustes'].includes(route) && width !== 1024) {

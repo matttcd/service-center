@@ -10,9 +10,11 @@ const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:4000'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  optimizeDeps: { entries: ['index.html', 'flow-preview.html'] },
   // Permite acceder desde otros dispositivos de la red (LAN).
   server: {
     host: true,
+    watch: { ignored: ['**/tools/**', '**/release/**', '**/test-results/**', '**/server/data/**'] },
     // En modo desarrollo, redirige las llamadas /api al backend de desarrollo.
     proxy: {
       '/api': apiTarget,

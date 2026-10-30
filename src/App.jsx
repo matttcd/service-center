@@ -2,14 +2,12 @@ import { lazy, Suspense } from 'react'
 // ============================================
 // App: definición de rutas y guardas de acceso
 // ============================================
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './context/AuthContext.jsx'
 import Layout from './components/Layout.jsx'
 import Login from './pages/Login.jsx'
-import Dashboard from './pages/Dashboard.jsx'
 import Taller from './pages/Taller.jsx'
 import Reception from './pages/Reception.jsx'
-import AccountSettings from './pages/AccountSettings.jsx'
 import Terminados from './pages/Terminados.jsx'
 import Orders from './pages/Orders.jsx'
 import OrderDetail from './pages/OrderDetail.jsx'
@@ -42,7 +40,12 @@ function Home() {
   const { currentUser } = useAuth()
   if (currentUser?.role === 'tecnico') return <Navigate to="/taller" replace />
   if (currentUser?.role === 'recepcion') return <Navigate to="/recepcion" replace />
-  return <Navigate to="/resumen" replace />
+  return <Navigate to="/recepcion" replace />
+}
+
+function LegacySettings() {
+  const { search } = useLocation()
+  return <Navigate to={`/ajustes${search || '?tab=general'}`} replace />
 }
 
 export default function App() {
@@ -59,9 +62,9 @@ export default function App() {
         }
       >
         <Route index element={<Home />} />
-        <Route path="resumen" element={<RequireRole roles={['recepcion', 'admin']}><Dashboard /></RequireRole>} />
+        <Route path="resumen" element={<Navigate to="/" replace />} />
         <Route path="recepcion" element={<RequireRole roles={['recepcion', 'admin']}><Reception /></RequireRole>} />
-        <Route path="ajustes" element={<AccountSettings />} />
+        <Route path="ajustes" element={<Suspense fallback={<p>Cargando ajustes…</p>}><Settings /></Suspense>} />
         <Route
           path="taller"
           element={
@@ -112,7 +115,7 @@ export default function App() {
           path="configuracion"
           element={
             <RequireRole roles={['admin']}>
-              <Suspense fallback={<p>Cargando configuración…</p>}><Settings /></Suspense>
+              <LegacySettings />
             </RequireRole>
           }
         />

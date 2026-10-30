@@ -7,10 +7,20 @@ import { Loader2, Printer, Monitor, RotateCw, AlertTriangle, FileText } from 'lu
 import Modal from './Modal.jsx'
 import { printOrderServer, listPrinters } from '../utils/print.js'
 import { loadSession } from '../utils/storage.js'
+import { useData } from '../context/DataContext.jsx'
+import { useWorkspaceState } from '../context/workspace.js'
+import { pdfSignature } from '../utils/pdfPreview.js'
 
 const PdfPreview = lazy(() => import('./PdfPreview.jsx'))
 
 export default function PrintOrderPanel({ open, order, onClose }) {
+  const { customers, config } = useData()
+  const [cachedPdfs, setCachedPdfs] = useWorkspaceState('cache:pdf', [])
+  const cacheRef = useRef(cachedPdfs)
+  cacheRef.current = cachedPdfs
+  const customer = customers.find((item) => item.id === order?.customerId) || order?.customer
+  const signature = pdfSignature(order, customer, config?.terms)
+  const orderId = order?.id
   const printerId = useId()
   const [printers, setPrinters] = useState([])
   const [selected, setSelected] = useState('')
@@ -26,7 +36,7 @@ export default function PrintOrderPanel({ open, order, onClose }) {
   const pdfBlobUrlRef = useRef(null)
 
   useEffect(() => {
-    if (!open || !order) return
+    if (!open || !orderId) return
     let active = true
     const controller = new AbortController()
     setPdfFile(null)
@@ -39,14 +49,20 @@ export default function PrintOrderPanel({ open, order, onClose }) {
     const headers = {}
     if (session?.token) headers.Authorization = `Bearer ${session.token}`
 
-    const fetchPdf = fetch(`/api/orders/${order.id}/pdf`, { headers, signal: controller.signal })
+    const cached = cacheRef.current.find((entry) => entry.signature === signature)
+    const started = performance.now()
+    const fetchPdf = (cached ? Promise.resolve(cached.blob) : fetch(`/api/orders/${orderId}/pdf`, { headers, signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
           throw new Error(data.error || `Error ${res.status}`)
         }
-        const blob = await res.blob()
+        return res.blob()
+      }))
+      .then((blob) => {
         if (!active) return
+        performance.measure('service-center:pdf-download', { start: started, end: performance.now(), detail: { cached: !!cached } })
+        if (!cached) setCachedPdfs((previous) => [...previous.filter((entry) => entry.orderId !== orderId), { orderId, signature, blob }].slice(-3))
         pdfBlobUrlRef.current = URL.createObjectURL(blob)
         setPdfFile(blob)
       })
@@ -71,9 +87,13 @@ export default function PrintOrderPanel({ open, order, onClose }) {
         pdfBlobUrlRef.current = null
       }
     }
-  }, [open, order, retry, setNotice])
+    // La firma representa los datos impresos; un refresh de la cola no regenera el PDF.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, orderId, signature, retry, setNotice])
 
   const handleRetry = () => {
+    cacheRef.current = cacheRef.current.filter((entry) => entry.signature !== signature)
+    setCachedPdfs(cacheRef.current)
     setPdfFile(null)
     setPdfError(null)
     setNotice(null)

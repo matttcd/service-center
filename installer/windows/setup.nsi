@@ -21,7 +21,8 @@ RequestExecutionLevel admin
 Name "Service Center ${AppVersion}"
 OutFile "${OutputPath}\ServiceCenter-Setup-${AppVersion}.exe"
 InstallDir "$PROGRAMFILES64\ServiceCenter"
-SetCompressor /SOLID zlib
+; Bloques independientes: omitir un archivo no descomprime los demás.
+SetCompressor zlib
 ShowInstDetails show
 ShowUninstDetails show
 VIProductVersion "${AppVersion}.0"
@@ -64,7 +65,7 @@ Page custom NetworkPage NetworkLeave
 Page custom AccountPage AccountLeave
 Page custom PasswordPage PasswordLeave
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_TEXT "Service Center está disponible por HTTPS. Configurá las impresoras desde Configuración → Impresoras.$\r$\n$\r$\nEl certificado público y las instrucciones para otras PC están en la carpeta de datos."
+!define MUI_FINISHPAGE_TEXT "Service Center está disponible por HTTPS. Configurá las impresoras desde Ajustes → Impresoras.$\r$\n$\r$\nEl certificado público y las instrucciones para otras PC están en la carpeta de datos."
 !insertmacro MUI_PAGE_FINISH
 !define MUI_UNCONFIRMPAGE_TEXT_TOP "Se retirarán los servicios y el programa. Se conservarán la base de datos, las claves, certificados y respaldos."
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -401,11 +402,23 @@ Section "Instalar"
   IfErrors optionsFailed
   SetOutPath "$PLUGINSDIR"
   File /oname=preflight.ps1 "${StageDir}\installer\windows\preflight.ps1"
+  File /oname=prepare-payload.ps1 "${StageDir}\installer\windows\prepare-payload.ps1"
+  File /oname=payload.ps1 "${StageDir}\installer\windows\payload.ps1"
+  File /oname=manifest.json "${StageDir}\manifest.json"
   nsExec::ExecToLog '"$PowerShell" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\preflight.ps1" -OptionsFile "$OptionsFile"'
   Pop $0
   ${If} $0 != 0
     Delete $OptionsFile
     MessageBox MB_ICONSTOP "Revisá las rutas y el espacio disponible. El detalle aparece en el registro del asistente."
+    SetErrorLevel 1
+    Abort
+  ${EndIf}
+  DetailPrint 'Verificando archivos que pueden reutilizarse...'
+  nsExec::ExecToLog '"$PowerShell" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\prepare-payload.ps1" -OptionsFile "$OptionsFile" -ManifestFile "$PLUGINSDIR\manifest.json"'
+  Pop $0
+  ${If} $0 != 0
+    Delete $OptionsFile
+    MessageBox MB_ICONSTOP "No se pudo preparar la actualización. La versión anterior se conserva. Revisá el detalle del asistente."
     SetErrorLevel 1
     Abort
   ${EndIf}
@@ -417,6 +430,14 @@ Section "Instalar"
   ${If} ${Errors}
     Delete $OptionsFile
     MessageBox MB_ICONSTOP "No se pudieron copiar todos los archivos. Revisá el espacio y los permisos antes de reparar la instalación."
+    SetErrorLevel 1
+    Abort
+  ${EndIf}
+  nsExec::ExecToLog '"$PowerShell" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\prepare-payload.ps1" -OptionsFile "$OptionsFile" -ManifestFile "$PLUGINSDIR\manifest.json" -Verify'
+  Pop $0
+  ${If} $0 != 0
+    Delete $OptionsFile
+    MessageBox MB_ICONSTOP "La verificación de archivos falló. No se modificarán los servicios. Revisá el detalle y volvé a ejecutar el instalador."
     SetErrorLevel 1
     Abort
   ${EndIf}

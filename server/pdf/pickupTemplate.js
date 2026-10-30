@@ -1,3 +1,4 @@
+import { formatDni } from '../../shared/identifiers.js'
 import { orderAmounts } from '../../shared/order-workspace.js'
 import { LOGO_DATA_URL } from './logo.js'
 
@@ -41,7 +42,7 @@ function field(label, value) {
 
 export function buildPickupHtml(order, customer, pickup) {
   const custName = customer?.fullName || order?.customerName || ''
-  const dni = customer?.dni || ''
+  const dni = formatDni(customer?.dni)
   const phones = [customer?.phone, customer?.phone2, customer?.phone3].filter(Boolean).join(' / ') || ''
   const address = customer?.address || ''
   const receivedByName = order?.receivedByName || ''
@@ -56,7 +57,7 @@ export function buildPickupHtml(order, customer, pickup) {
 
   const isThird = pickup?.pickupBy === 'third'
   const pickupName = isThird ? (pickup?.pickupName || '') : custName
-  const pickupDni = isThird ? (pickup?.pickupDni || '') : dni
+  const pickupDni = isThird ? formatDni(pickup?.pickupDni) : dni
 
   const date = formatDateTime(new Date().toISOString())
 

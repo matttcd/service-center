@@ -1,10 +1,11 @@
+import { useOrdersPage } from '../utils/useOrdersPage.js'
+import { formatDni } from '../utils/helpers.js'
 // ============================================
 // ClientDetail: ficha del cliente, edición y baja
 // + historial de sus órdenes de servicio.
 // ============================================
 import { useNotify } from '../context/notifications.js'
 import { useEffect, useState } from 'react'
-import { api } from '../utils/api.js'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil, Trash2, Mail, Phone, MapPin, AlertTriangle, ClipboardList } from 'lucide-react'
 import { useData } from '../context/DataContext.jsx'
@@ -18,7 +19,7 @@ import { formatDate, ORDER_STATUS_LABEL, orderStatusTone } from '../utils/helper
 export default function ClientDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { customers, ordersRevision, updateCustomer, deleteCustomer } = useData()
+  const { customers, updateCustomer, deleteCustomer } = useData()
   const { currentUser } = useAuth()
   const isAdmin = currentUser?.role === 'admin'
 
@@ -29,20 +30,12 @@ export default function ClientDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const setNotice = useNotify('success')
   const [page, setPage] = useState(1)
-  const [history, setHistory] = useState({ orders: [], total: 0 })
-  const [historyLoading, setHistoryLoading] = useState(true)
-  const [historyError, setHistoryError] = useState('')
   const pageSize = 50
+  const historyResult = useOrdersPage({ customerId: id, limit: pageSize, offset: (page - 1) * pageSize })
+  const history = historyResult.data || { orders: [], total: 0 }
+  const historyLoading = historyResult.loading
+  const historyError = historyResult.error
   useEffect(() => { setPage(1) }, [id])
-  useEffect(() => {
-    let active = true
-    setHistoryLoading(true)
-    api(`/orders?customerId=${encodeURIComponent(id)}&limit=${pageSize}&offset=${(page - 1) * pageSize}`)
-      .then((result) => { if (active) { setHistory(result); setHistoryError('') } })
-      .catch((err) => { if (active) setHistoryError(err.message) })
-      .finally(() => { if (active) setHistoryLoading(false) })
-    return () => { active = false }
-  }, [id, page, ordersRevision])
 
   if (!customer) {
     return (
@@ -109,8 +102,8 @@ export default function ClientDetail() {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{customer.fullName}</h1>
-                <Badge tone="slate">DNI {customer.dni || '—'}</Badge>
+                <h1 className="text-lg font-bold text-slate-900 dark:text-white">{customer.fullName}</h1>
+                <Badge tone="slate">DNI {formatDni(customer.dni) || '—'}</Badge>
               </div>
               <p className="mt-0.5 text-sm text-slate-400">
                 Cliente desde {formatDate(customer.createdAt)}
@@ -158,11 +151,11 @@ export default function ClientDetail() {
         <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
           <ClipboardList size={18} />
           Órdenes de servicio
-          <span className="text-sm font-normal text-slate-400">({history.total})</span>
+          <span className="text-sm font-normal text-slate-400">{historyResult.data ? `(${history.total})` : historyLoading ? '…' : '—'}</span>
         </h2>
 
-        {historyError && <p role="alert" className="mb-3 text-sm text-red-600">No se pudo cargar el historial: {historyError}</p>}
-        {historyLoading ? <p className="py-6 text-sm text-slate-500">Cargando historial…</p> : customerOrders.length === 0 ? (
+        {historyError && <div role="alert" className="ws-conflict"><p>{historyError}</p><button className="ws-button" onClick={historyResult.retry}>Reintentar</button></div>}
+        {!historyResult.data ? <p className="py-6 text-sm text-slate-500">{historyLoading ? 'Cargando historial…' : 'Historial no disponible'}</p> : customerOrders.length === 0 ? (
           <Card>
             <p className="px-5 py-10 text-center text-sm text-slate-400">
               Este cliente todavía no tiene órdenes de servicio.
