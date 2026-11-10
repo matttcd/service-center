@@ -170,7 +170,7 @@ try {
     assert.equal(response.status, 200, JSON.stringify(result))
     return result
   }
-  await Promise.all(Array.from({ length: 27 }, (_, index) => api('/orders', 'POST', { customerId: result.order.customerId, deviceType: 'Celular', brand: 'Samsung', model: 'Galaxy A15', issue: `Exportación ${index}`, diagnosisType: 'revision' })))
+  await Promise.all(Array.from({ length: 27 }, (_, index) => api('/orders', 'POST', { customerId: result.order.customerId, deviceType: 'Celular', brand: 'Samsung', model: 'Galaxy A15', issue: `Exportación ${index}`, conditions: 'Sin observaciones', accessories: 'Sin accesorios', noPin: true, diagnosisType: 'revision' })))
   await page.goto(`${base}/ordenes`, { waitUntil: 'domcontentloaded' })
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some((node) => node.textContent.trim() === 'Exportar CSV' && !node.disabled))
   await page.evaluate(() => {
@@ -205,7 +205,7 @@ try {
   await page.goto(`${base}/configuracion?tab=impresoras`, { waitUntil: 'domcontentloaded' })
   await text('Impresoras del local')
   await page.waitForSelector('input[type="number"]')
-  await page.select('select', '')
+  await page.select('.sc-settings-panel form select', '')
   const fields = await page.$$('input[type="number"]')
   await fields[0].click()
   await page.keyboard.down('Control')

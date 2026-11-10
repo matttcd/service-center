@@ -51,6 +51,13 @@ try {
   await page.waitForSelector('.sc-sidebar')
   await page.goto(`${base}/ajustes`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.sc-account')
+  await page.select('#account-theme', 'dark')
+  await page.waitForFunction(() => document.documentElement.classList.contains('dark'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('#account-theme')
+  assert.equal(await page.$eval('#account-theme', (select) => select.value), 'dark')
+  assert.ok(await page.evaluate(() => document.documentElement.classList.contains('dark')))
+  await page.select('#account-theme', 'light')
   await click('Cambiar contraseña', '.sc-account')
   for (const field of await page.$$('input[type=password]')) assert.ok(await field.evaluate((node) => !!node.labels?.length))
   await page.type('input[autocomplete=current-password]', 'Ejemplo de validación')
@@ -63,6 +70,72 @@ try {
   await page.keyboard.press('Escape')
   await page.waitForSelector('[role=dialog]', { hidden: true })
   assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), 'Cambiar contraseña')
+
+  await page.click('#settings-terminos')
+  await page.waitForSelector('.sc-terms-editor > div')
+  await click('Plantilla por defecto', '.sc-settings-panel')
+  await page.click('.sc-terms-editor')
+  await page.keyboard.down('Control')
+  await page.keyboard.press('A')
+  await page.keyboard.up('Control')
+  await page.keyboard.type('Negrita Cursiva Subrayado')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Segunda clausula')
+  for (const [word, tag] of [['Negrita', 'strong'], ['Cursiva', 'em'], ['Subrayado', 'u']]) {
+    await page.$eval('.sc-terms-editor', (editor, word) => {
+      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
+      let node
+      while ((node = walker.nextNode())) {
+        const start = node.textContent.indexOf(word)
+        if (start === -1) continue
+        const range = document.createRange()
+        range.setStart(node, start)
+        range.setEnd(node, start + word.length)
+        window.getSelection().removeAllRanges()
+        window.getSelection().addRange(range)
+        return
+      }
+      throw new Error(`No aparece ${word} en el editor`)
+    }, word)
+    if (tag === 'u') {
+      await page.keyboard.down('Shift')
+      await page.keyboard.press('Tab')
+      await page.keyboard.up('Shift')
+      assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), word)
+      await page.keyboard.press('Enter')
+    } else {
+      await page.click(`.sc-terms-tools button[aria-label="${word}"]`)
+    }
+  }
+  await click('Vista previa', '.sc-settings-panel')
+  for (const [tag, word] of [['strong', 'Negrita'], ['em', 'Cursiva'], ['u', 'Subrayado']]) {
+    assert.equal(await page.$eval(`#terms-preview ${tag}`, (node) => node.textContent), word)
+  }
+  assert.equal(await page.$$eval('#terms-preview li', (clauses) => clauses.length), 2)
+  const savedTerms = page.waitForResponse((response) => response.url().endsWith('/api/catalog/lists') && response.request().method() === 'PUT' && response.ok())
+  await click('Guardar términos', '.sc-settings-panel')
+  await savedTerms
+  await page.waitForFunction(() => [...document.querySelectorAll('.sc-terms-footer button')].some((button) => button.disabled && button.textContent.trim() === 'Guardar términos'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('.sc-terms-editor strong')
+  assert.equal(await page.$eval('.sc-terms-editor em', (node) => node.textContent), 'Cursiva')
+  assert.equal(await page.$eval('.sc-terms-editor u', (node) => node.textContent), 'Subrayado')
+  for (const dark of [false, true]) {
+    await page.evaluate((dark) => document.documentElement.classList.toggle('dark', dark), dark)
+    for (const [width, height] of [[1366, 768], [1024, 768], [390, 844]]) {
+      await page.setViewport({ width, height })
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false)
+      await page.waitForFunction(() => {
+        const rect = document.querySelector('.sc-sidebar').getBoundingClientRect()
+        return matchMedia('(max-width:1023px)').matches ? rect.right <= 1 : rect.left >= -1
+      })
+      await page.screenshot({ path: path.join(output, `ajustes-terminos-${dark ? 'oscuro' : 'claro'}-${width}.png`), fullPage: true })
+    }
+  }
+  await page.select('.sc-settings-select select', 'cuenta')
+  await page.waitForSelector('#account-theme', { visible: true })
+  await page.setViewport({ width: 1366, height: 768 })
+  console.log('✓ Tema guardado y editor de términos: formatos, teclado, guardado, reapertura y tres anchos.')
 
   // Las impresoras y los envíos se simulan; el comprobante inicial usa el PDF real.
   await page.setRequestInterception(true)
@@ -153,8 +226,10 @@ try {
   // Cambiar la orden invalida el comprobante de la sesión.
   const auth = await page.evaluate(() => JSON.parse(localStorage.getItem('service_session_v1')).token)
   const orderId = response.url().split('/').at(-2)
-  await fetch(`${base}/api/orders/${orderId}`, { method: 'PUT', headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ issue: 'Comprobante actualizado en pruebas' }) })
-  await page.waitForFunction(() => document.querySelector('.ws-sheet').textContent.includes('Comprobante actualizado en pruebas'))
+  const issue = `Comprobante actualizado en pruebas ${Date.now()}`
+  const updated = await fetch(`${base}/api/orders/${orderId}`, { method: 'PUT', headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ issue }) })
+  assert.ok(updated.ok)
+  await page.waitForFunction((issue) => document.querySelector('.ws-sheet').textContent.includes(issue), {}, issue)
   await page.click('[aria-haspopup=menu]'); await click('Imprimir orden', '[role=menu]')
   await page.waitForFunction(() => document.querySelectorAll('.sc-pdf-pages canvas').length === 2)
   assert.equal(pdfAttempts, beforeRetry + 1)

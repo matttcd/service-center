@@ -1,11 +1,21 @@
 import { describe, it, expect } from 'vitest'
+import { cleanTerm, termsLength } from '../../shared/terms.js'
+import { buildOrderHtml } from '../../server/pdf/orderTemplate.js'
 import {
   moveArrayItem,
-  calculateTermsTotal,
   parseBulkModels,
   termsTextToClauses,
-  clausesToTermsText,
 } from '../../src/utils/helpers.js'
+
+it('preserva los formatos de términos y trata el HTML arbitrario como texto en el comprobante', () => {
+  const clause = '<b>30 días</b> & <i>vigente</i> <u>desde el retiro</u> <img src=x onerror=alert(1)>'
+  const safe = '<strong>30 días</strong> &amp; <em>vigente</em> <u>desde el retiro</u> &lt;img src=x onerror=alert(1)&gt;'
+  expect(cleanTerm(clause)).toBe(safe)
+  expect(cleanTerm(safe)).toBe(safe)
+  expect(termsLength([safe])).toBe('30 días & vigente desde el retiro <img src=x onerror=alert(1)>'.length)
+  expect(buildOrderHtml({}, {}, [clause])).toContain(`<li>${safe}</li>`)
+  expect(cleanTerm('<strong>Texto')).toBe('<strong>Texto</strong>')
+})
 
 describe('moveArrayItem', () => {
   it('moves an item upwards (from higher index to lower)', () => {
@@ -35,27 +45,27 @@ describe('moveArrayItem', () => {
   })
 })
 
-describe('calculateTermsTotal', () => {
+describe('termsLength', () => {
   it('sums the lengths of all strings in terms array', () => {
     const terms = [
       'Garantía de 90 días sobre reparaciones.',
       'Equipos no retirados después de 60 días pasan a desguace.',
     ]
     const expected = terms[0].length + terms[1].length
-    expect(calculateTermsTotal(terms)).toBe(expected)
+    expect(termsLength(terms)).toBe(expected)
   })
 
   it('returns 0 for empty or non-array values', () => {
-    expect(calculateTermsTotal([])).toBe(0)
-    expect(calculateTermsTotal(null)).toBe(0)
-    expect(calculateTermsTotal(undefined)).toBe(0)
+    expect(termsLength([])).toBe(0)
+    expect(termsLength(null)).toBe(0)
+    expect(termsLength(undefined)).toBe(0)
   })
 
   it('correctly calculates total for character limit validation (1600 chars)', () => {
     const longClause = 'a'.repeat(800)
     const terms = [longClause, longClause]
-    expect(calculateTermsTotal(terms)).toBe(1600)
-    expect(calculateTermsTotal([...terms, 'x'])).toBe(1601)
+    expect(termsLength(terms)).toBe(1600)
+    expect(termsLength([...terms, '<strong>x</strong>'])).toBe(1601)
   })
 })
 
@@ -114,7 +124,7 @@ describe('parseBulkModels', () => {
   })
 })
 
-describe('termsTextToClauses and clausesToTermsText', () => {
+describe('termsTextToClauses', () => {
   it('converts paragraph-separated text into individual clauses', () => {
     const text = `
       Para retirar el equipo debe presentar la orden física.
@@ -147,15 +157,12 @@ describe('termsTextToClauses and clausesToTermsText', () => {
     ])
   })
 
-  it('converts array of clauses into clean double-spaced editable text', () => {
-    const clauses = ['Cláusula A', 'Cláusula B']
-    expect(clausesToTermsText(clauses)).toBe('Cláusula A\n\nCláusula B')
+  it('keeps single and double line breaks as separate clauses', () => {
+    expect(termsTextToClauses('Cláusula A\nCláusula B\n\nCláusula C')).toEqual(['Cláusula A', 'Cláusula B', 'Cláusula C'])
   })
 
   it('handles empty or non-string inputs gracefully', () => {
     expect(termsTextToClauses('')).toEqual([])
     expect(termsTextToClauses(null)).toEqual([])
-    expect(clausesToTermsText([])).toBe('')
-    expect(clausesToTermsText(null)).toBe('')
   })
 })

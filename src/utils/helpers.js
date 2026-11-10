@@ -147,12 +147,6 @@ export function moveArrayItem(list, from, to) {
   return next
 }
 
-// Calcula los caracteres totales de un listado de términos legales.
-export function calculateTermsTotal(terms) {
-  if (!Array.isArray(terms)) return 0
-  return terms.join('').length
-}
-
 // Parsea texto multilinea a una lista de marcas y modelos para el catálogo.
 export function parseBulkModels(text) {
   if (!text || typeof text !== 'string') return []
@@ -170,16 +164,7 @@ export function parseBulkModels(text) {
 // Convierte un texto unificado a un array de cláusulas legales para almacenamiento.
 export function termsTextToClauses(rawText) {
   if (!rawText || typeof rawText !== 'string') return []
-  const blocks = rawText.includes('\n\n')
-    ? rawText.split(/\n\s*\n/)
-    : rawText.split('\n')
-  return blocks
+  return rawText.split('\n')
     .map((b) => b.trim().replace(/^(\d+[.\-)]|[•\-*])\s*/, '').trim())
     .filter(Boolean)
-}
-
-// Convierte un array de cláusulas a texto unificado para edición fluida.
-export function clausesToTermsText(clauses) {
-  if (!Array.isArray(clauses)) return ''
-  return clauses.filter(Boolean).join('\n\n')
 }

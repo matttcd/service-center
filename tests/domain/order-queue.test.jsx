@@ -25,6 +25,7 @@ describe('Tiempo de la cola del taller', () => {
       ],
     }]
     const html = renderToStaticMarkup(<OrderQueue />)
+    expect(html).toContain('Mis equipos')
     expect(html).toContain('title="Última actualización">· hace 3m')
     expect(html).not.toContain('hace 2h')
   })
@@ -37,11 +38,13 @@ describe('Tiempo de la cola del taller', () => {
   })
 })
 
-it('recepción puede consultar el taller sin una pestaña Mis trabajos', () => {
-  state.role = 'recepcion'; state.tab = 'all'
+it.each(['recepcion', 'admin'])('%s consulta el taller sin la pestaña Mis equipos', (role) => {
+  state.role = role; state.tab = 'mine'
   const html = renderToStaticMarkup(<OrderQueue />)
-  expect(html).not.toContain('Mis trabajos')
+  expect(html).not.toContain('Mis equipos')
+  expect(html).not.toContain('id="queue-mine"')
   expect(html).toContain('Sin asignar')
   expect(html).toContain('Todos')
+  expect(html).toContain('aria-labelledby="queue-all"')
   state.role = 'tecnico'
 })

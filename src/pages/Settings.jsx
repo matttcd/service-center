@@ -1,17 +1,15 @@
 import { useAuth } from '../context/AuthContext.jsx'
 import AccountSettings from './AccountSettings.jsx'
 import PageHeading from '../components/PageHeading.jsx'
-// ============================================
-// Settings: configuración general (solo admin)
-// Rediseño unificado con pestañas estilo Dashboard
-// ============================================
 import { useNotify } from '../context/notifications.js'
-import { useEffect, useState, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useState, useMemo, useRef } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
+  Bold,
+  Italic,
+  Underline,
   Save,
   UserRound,
-  AlertCircle,
   Stethoscope,
   Upload,
   Plus,
@@ -24,8 +22,6 @@ import {
   Sliders,
   Tags,
   Search,
-  Eye,
-  EyeOff,
   Sparkles,
   Trash2,
   HelpCircle,
@@ -34,17 +30,9 @@ import {
 import PrinterSettings from '../components/PrinterSettings.jsx'
 import { useData } from '../context/DataContext.jsx'
 import Card from '../components/Card.jsx'
-import Tabs from '../components/Tabs.jsx'
-import {
-  formatMoney,
-  calculateTermsTotal,
-  parseBulkModels,
-  termsTextToClauses,
-  clausesToTermsText,
-} from '../utils/helpers.js'
+import { formatMoney, parseBulkModels, termsTextToClauses } from '../utils/helpers.js'
+import { cleanTerm, MAX_TERMS_CHARS, termsLength } from '../../shared/terms.js'
 import { api } from '../utils/api.js'
-
-const MAX_TERMS_CHARS = 1600
 
 const SAMPLE_MODELS = `Samsung, Galaxy A15 5G
 Samsung, Galaxy A25 5G
@@ -263,8 +251,7 @@ function OptionsSection({ catalogLists, saveCatalogLists }) {
 
   return (
     <div className="space-y-6">
-      {/* Sub-pestañas tipo píldoras suaves */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-4 dark:border-slate-800">
+      <div className="sc-settings-filters" role="group" aria-label="Opciones de orden">
         {SUB_TABS.map((sub) => {
           const Icon = sub.icon
           const isActive = subTab === sub.key
@@ -272,29 +259,17 @@ function OptionsSection({ catalogLists, saveCatalogLists }) {
             <button
               key={sub.key}
               type="button"
+              aria-pressed={isActive}
               onClick={() => {
                 setSubTab(sub.key)
                 setDraft('')
                 setFilter('')
                 setMsg(null)
               }}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
-                isActive
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-              }`}
+              className="ws-button"
             >
               <Icon size={15} />
               <span>{sub.label}</span>
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                  isActive
-                    ? 'bg-white/20 text-white dark:bg-black/10 dark:text-slate-900'
-                    : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
-                }`}
-              >
-                {sub.items.length}
-              </span>
             </button>
           )
         })}
@@ -327,7 +302,6 @@ function OptionsSection({ catalogLists, saveCatalogLists }) {
         </div>
       )}
 
-      {/* Lista de chips en línea */}
       {list.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400 dark:border-slate-800">
           Sin opciones cargadas todavía en {activeSub.label.toLowerCase()}.
@@ -337,25 +311,23 @@ function OptionsSection({ catalogLists, saveCatalogLists }) {
           No hay opciones que coincidan con &ldquo;{filter}&rdquo;
         </p>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <ul className="sc-settings-list">
           {filteredItems.map(({ item, idx }) => (
-            <span
-              key={`${item}-${idx}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-            >
+            <li key={`${item}-${idx}`}>
               {item}
               <button
                 type="button"
                 onClick={() => removeItem(idx)}
                 disabled={saving}
                 title={`Eliminar "${item}"`}
-                className="rounded-full p-0.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-30 dark:hover:bg-red-500/20"
+                className="ws-icon-button"
+                aria-label={`Eliminar ${item}`}
               >
                 <X size={14} />
               </button>
-            </span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {/* Agregar nueva opción */}
@@ -518,172 +490,116 @@ function CatalogSection() {
 // ----------------------------------------------------
 // 4. Pestaña Términos Legales (Editor de texto único y fluido)
 // ----------------------------------------------------
+const TERM_FORMATS = [
+  ['bold', 'Negrita', Bold],
+  ['italic', 'Cursiva', Italic],
+  ['underline', 'Subrayado', Underline],
+]
+
 function TermsSection({ catalogLists, saveCatalogLists }) {
-  const [text, setText] = useState('')
+  const editor = useRef(null)
+  const selection = useRef(null)
+  const synchronized = useRef(null)
+  const [clauses, setClauses] = useState([])
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const setMsg = useNotify('success')
   const [showPreview, setShowPreview] = useState(false)
+  const notify = useNotify('success')
+
+  const load = (terms) => {
+    const safe = terms.map(cleanTerm)
+    const html = safe.map((term) => `<div>${term}</div>`).join('')
+    if (editor.current.innerHTML !== html) {
+      editor.current.innerHTML = html
+      selection.current = null
+    }
+    setClauses(safe)
+  }
+  useEffect(() => {
+    if (synchronized.current === catalogLists.terms) return
+    synchronized.current = catalogLists.terms
+    if (!dirty) load(catalogLists.terms || [])
+  }, [catalogLists.terms, dirty])
 
   useEffect(() => {
-    if (!dirty) {
-      setText(clausesToTermsText(catalogLists.terms || []))
+    const remember = () => {
+      const active = window.getSelection()
+      if (active.rangeCount && editor.current?.contains(active.anchorNode) && editor.current.contains(active.focusNode)) {
+        selection.current = active.getRangeAt(0).cloneRange()
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalogLists.terms])
+    document.addEventListener('selectionchange', remember)
+    return () => document.removeEventListener('selectionchange', remember)
+  }, [])
 
-  const parsedClauses = useMemo(() => termsTextToClauses(text), [text])
-  const totalChars = useMemo(() => calculateTermsTotal(parsedClauses), [parsedClauses])
+  const change = () => {
+    const text = editor.current.innerHTML.replace(/<\/?(?:div|p)>|<br\s*\/?>/gi, '\n').replaceAll('&nbsp;', ' ')
+    setClauses(termsTextToClauses(text).map(cleanTerm).filter((term) => termsLength([term]) > 0))
+    setDirty(true)
+  }
+
+  const format = (command) => {
+    const range = selection.current
+    if (!range || !editor.current.contains(range.commonAncestorContainer)) {
+      editor.current.focus()
+      return
+    }
+    editor.current.focus()
+    const active = window.getSelection()
+    active.removeAllRanges()
+    active.addRange(range)
+    // shortcut: native editing preserves undo; switch to an editor library if browser support changes.
+    document.execCommand('styleWithCSS', false, false)
+    if (document.execCommand(command)) change()
+  }
+
+  const totalChars = termsLength(clauses)
   const over = totalChars > MAX_TERMS_CHARS
-  const charPct = Math.min(100, Math.round((totalChars / MAX_TERMS_CHARS) * 100))
-
   const handleSave = async () => {
-    if (saving || over) return
+    if (saving || over || !dirty) return
     setSaving(true)
-    setMsg(null)
-    const res = await saveCatalogLists({ terms: parsedClauses })
-    if (res.error) {
-      setMsg({ type: 'error', text: res.error })
-    } else {
+    const res = await saveCatalogLists({ terms: clauses })
+    if (res.error) notify({ type: 'error', text: res.error })
+    else {
       setDirty(false)
-      setMsg({ type: 'ok', text: `Términos y condiciones guardados con éxito (${parsedClauses.length} cláusulas).` })
+      notify({ type: 'ok', text: 'Términos y condiciones guardados.' })
     }
     setSaving(false)
   }
 
-  const handleLoadSample = () => {
-    setText(clausesToTermsText(DEFAULT_TERMS_SAMPLE))
-    setDirty(true)
-    setMsg(null)
-  }
-
-  const progressColor =
-    totalChars > MAX_TERMS_CHARS
-      ? 'bg-red-500'
-      : totalChars > 1250
-      ? 'bg-amber-500'
-      : 'bg-emerald-500'
-
   return (
-    <div className="space-y-6">
-      {/* Cabecera con título y acciones rápidas */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
-        <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
-            <FileText size={20} className="text-primary-500" />
-            Términos y Condiciones Legales
-          </h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Escribí o pegá el texto completo. Cada párrafo o salto de línea representará una cláusula numerada en el comprobante impreso.
-          </p>
+    <div className="space-y-4">
+      <header>
+        <h2 id="terms-title" className="font-semibold">Términos y condiciones</h2>
+        <p id="terms-hint" className="sc-secondary">Cada párrafo se numera en el comprobante.</p>
+      </header>
+      <div className="sc-terms">
+        <div className="sc-terms-tools" role="group" aria-label="Formato del texto">
+          {TERM_FORMATS.map(([command, label, Icon]) => <button key={command} type="button" title={label} aria-label={label} className="ws-icon-button" disabled={saving} onMouseDown={(event) => event.preventDefault()} onClick={() => format(command)}><Icon size={16} aria-hidden="true" /></button>)}
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleLoadSample}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-          >
-            <Sparkles size={14} className="text-amber-500" />
-            Plantilla por defecto
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowPreview((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-          >
-            {showPreview ? <EyeOff size={14} /> : <Eye size={14} />}
-            {showPreview ? 'Ocultar vista previa' : 'Vista previa de ticket'}
-          </button>
-        </div>
-      </div>
-
-      {/* Barra de estado de caracteres y cláusulas */}
-      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-800/40">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-3">
-            <span className="font-medium text-slate-600 dark:text-slate-300">
-              Espacio ocupado en comprobante:
-            </span>
-            <span
-              className={`font-mono font-bold ${
-                over ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-200'
-              }`}
-            >
-              {totalChars} / {MAX_TERMS_CHARS} caracteres ({charPct}%)
-            </span>
-          </div>
-          <span className="rounded-full bg-slate-200 px-2.5 py-0.5 font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-            {parsedClauses.length} {parsedClauses.length === 1 ? 'cláusula detectada' : 'cláusulas detectadas'}
-          </span>
-        </div>
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-          <div
-            className={`h-full transition-all duration-300 ${progressColor}`}
-            style={{ width: `${charPct}%` }}
-          />
-        </div>
-        {over && (
-          <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
-            <AlertCircle size={14} />
-            El límite total es {MAX_TERMS_CHARS} caracteres. Reducí el texto antes de guardar.
-          </p>
-        )}
-      </div>
-
-      {/* Vista previa de ticket térmico */}
-      {showPreview && (
-        <div className="rounded-xl border border-slate-300 bg-amber-50/30 p-4 font-mono text-xs dark:border-slate-700 dark:bg-slate-900/60">
-          <p className="mb-2 font-sans font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            --- Vista previa del pie de comprobante impreso (Ticket 80mm) ---
-          </p>
-          <div className="space-y-1.5 text-slate-600 dark:text-slate-400">
-            {parsedClauses.map((term, i) => (
-              <p key={i}>
-                {i + 1}. {term}
-              </p>
-            ))}
-            {parsedClauses.length === 0 && <p className="italic text-slate-400">Sin cláusulas configuradas.</p>}
-          </div>
-        </div>
-      )}
-
-      {/* Editor de texto único (Textarea amplio y cómodo) */}
-      <div className="space-y-2">
-        <textarea
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            setDirty(true)
-            setMsg(null)
+        <div ref={editor} className="sc-terms-editor" role="textbox" aria-labelledby="terms-title" aria-describedby="terms-hint terms-count" aria-multiline="true" aria-readonly={saving} contentEditable={!saving}
+          onInput={change} onDrop={(event) => event.preventDefault()} onPaste={(event) => {
+            event.preventDefault()
+            if (document.execCommand('insertText', false, event.clipboardData.getData('text/plain'))) change()
           }}
-          placeholder="Escribí aquí los términos y condiciones del taller..."
-          rows={12}
-          className="w-full rounded-xl border border-slate-300 bg-white p-4 font-sans text-sm leading-relaxed text-slate-800 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
         />
-        <p className="text-xs text-slate-400">
-          Tip: Podés separar las cláusulas con saltos de línea. La numeración (1., 2., etc.) se asignará automáticamente en el comprobante impreso.
-        </p>
       </div>
-
-      {/* Guardar cambios */}
-      <div className="flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
-        <p className="text-xs text-slate-400">
-          {dirty ? 'Tenés cambios sin guardar.' : 'Las cláusulas están sincronizadas.'}
-        </p>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving || !dirty || over}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-40"
-        >
-          <Save size={16} />
-          {saving ? 'Guardando...' : 'Guardar términos y condiciones'}
-        </button>
+      <div className="sc-terms-footer">
+        <span id="terms-count" className={over ? 'text-red-600 dark:text-red-400' : 'sc-secondary'}>{totalChars} / {MAX_TERMS_CHARS} caracteres</span>
+        <div className="ws-buttons">
+          <button type="button" className="ws-button" disabled={saving} onClick={() => { load(DEFAULT_TERMS_SAMPLE); setDirty(true) }}>Plantilla por defecto</button>
+          <button type="button" className="ws-button" aria-expanded={showPreview} aria-controls="terms-preview" onClick={() => setShowPreview(!showPreview)}>Vista previa</button>
+          <button type="button" className="ws-button primary" disabled={saving || !dirty || over} onClick={handleSave}><Save size={16} />{saving ? 'Guardando…' : 'Guardar términos'}</button>
+        </div>
       </div>
+      {showPreview && <section id="terms-preview" className="sc-terms-preview" aria-label="Vista previa del comprobante">
+        <h3 className="font-semibold">En el comprobante</h3>
+        {clauses.length ? <ol>{clauses.map((clause, index) => <li key={index} dangerouslySetInnerHTML={{ __html: clause }} />)}</ol> : <p className="sc-secondary">Sin cláusulas configuradas.</p>}
+      </section>}
     </div>
   )
 }
+
 
 // ----------------------------------------------------
 // 5. Pestaña Técnicos Externos
@@ -777,7 +693,6 @@ function TechniciansSection({ catalogLists, saveCatalogLists }) {
         </div>
       )}
 
-      {/* Chips */}
       {list.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400 dark:border-slate-800">
           Sin técnicos externos registrados.
@@ -787,25 +702,23 @@ function TechniciansSection({ catalogLists, saveCatalogLists }) {
           No hay técnicos que coincidan con &ldquo;{filter}&rdquo;
         </p>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <ul className="sc-settings-list">
           {filteredItems.map(({ item, idx }) => (
-            <span
-              key={`${item}-${idx}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-            >
+            <li key={`${item}-${idx}`}>
               {item}
               <button
                 type="button"
                 onClick={() => removeItem(idx)}
                 disabled={saving}
                 title={`Eliminar "${item}"`}
-                className="rounded-full p-0.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-30 dark:hover:bg-red-500/20"
+                className="ws-icon-button"
+                aria-label={`Eliminar ${item}`}
               >
                 <X size={14} />
               </button>
-            </span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {/* Agregar técnico */}
@@ -876,69 +789,33 @@ const SETTINGS_TABS = [
 export default function Settings() {
   const { config, saveConfig, catalogLists, saveCatalogLists } = useData()
   const { currentUser } = useAuth()
-  const tabs = currentUser.role === 'admin' ? SETTINGS_TABS : SETTINGS_TABS.filter((tab) => tab.key === 'cuenta')
+  const admin = currentUser.role === 'admin'
   const [searchParams, setSearchParams] = useSearchParams()
-
   const tabParam = searchParams.get('tab')
-  const activeTab = tabs.some((t) => t.key === tabParam) ? tabParam : 'cuenta'
-
-  const setActiveTab = (tab) => {
-    setSearchParams({ tab }, { replace: true })
-  }
-
-  // Contadores para las insignias estilo Dashboard
-  const counts = {
-    opciones:
-      (catalogLists.accessories?.length || 0) +
-      (catalogLists.conditions?.length || 0) +
-      (catalogLists.fixes?.length || 0),
-    terminos: catalogLists.terms?.length || 0,
-    externos: catalogLists.externalTechnicians?.length || 0,
-  }
+  const activeTab = admin && SETTINGS_TABS.some(({ key }) => key === tabParam) ? tabParam : 'cuenta'
+  const setActiveTab = (tab) => setSearchParams({ tab }, { replace: true })
 
   return (
-    <div className="space-y-6">
-      {/* Encabezado */}
+    <div>
       <PageHeading title="Ajustes" description="Cuenta y preferencias" />
-
-      {/* Contenedor principal idéntico al Dashboard */}
-      <div className="sc-tabbed-section">
-        <Tabs id="settings" label="Secciones de configuración" panelId="settings-panel" items={tabs.map((tab) => ({ ...tab, count: counts[tab.key] }))} value={activeTab} onChange={setActiveTab} />
-        <Card className="!p-0 overflow-hidden" role="tabpanel" id="settings-panel" aria-labelledby={`settings-${activeTab}`}>
-        {/* Contenido sin cards anidadas */}
-        <div className="p-6 sm:p-8 animate-fadeIn">
-          {activeTab === 'cuenta' && <AccountSettings embedded />}
-          {activeTab === 'general' && (
-            <GeneralSection
-              config={config}
-              saveConfig={saveConfig}
-            />
-          )}
-
-          {activeTab === 'opciones' && (
-            <OptionsSection
-              catalogLists={catalogLists}
-              saveCatalogLists={saveCatalogLists}
-            />
-          )}
-
+      <div className={`sc-settings ${admin ? 'sc-settings-admin' : ''}`}>
+        {admin && <nav className="sc-settings-nav" aria-label="Secciones de ajustes">
+          {SETTINGS_TABS.map(({ key, label, Icon }) => <Link key={key} id={`settings-${key}`} to={`?tab=${key}`} replace aria-current={activeTab === key ? 'page' : undefined}><Icon size={17} aria-hidden="true" />{label}</Link>)}
+        </nav>}
+        {admin && <label className="sc-settings-select">
+          <span>Sección</span>
+          <select className="ws-button" value={activeTab} onChange={(event) => setActiveTab(event.target.value)}>
+            {SETTINGS_TABS.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+          </select>
+        </label>}
+        <Card className="sc-settings-panel">
+          {activeTab === 'cuenta' && <AccountSettings />}
+          {activeTab === 'general' && <GeneralSection config={config} saveConfig={saveConfig} />}
+          {activeTab === 'opciones' && <OptionsSection catalogLists={catalogLists} saveCatalogLists={saveCatalogLists} />}
           {activeTab === 'catalogo' && <CatalogSection />}
           {activeTab === 'impresoras' && <PrinterSettings />}
-
-          {activeTab === 'terminos' && (
-            <TermsSection
-              catalogLists={catalogLists}
-              saveCatalogLists={saveCatalogLists}
-            />
-          )}
-
-          {activeTab === 'externos' && (
-            <TechniciansSection
-              catalogLists={catalogLists}
-              saveCatalogLists={saveCatalogLists}
-            />
-          )}
-        </div>
+          {activeTab === 'terminos' && <TermsSection catalogLists={catalogLists} saveCatalogLists={saveCatalogLists} />}
+          {activeTab === 'externos' && <TechniciansSection catalogLists={catalogLists} saveCatalogLists={saveCatalogLists} />}
         </Card>
       </div>
     </div>

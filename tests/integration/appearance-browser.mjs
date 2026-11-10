@@ -28,13 +28,12 @@ try {
   for (const route of routes) {
     await page.goto(`${base}/${route}`, { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('.sc-content h1')
+    if (route === 'metricas') await page.waitForSelector('.sc-metrics')
     for (const dark of [false, true]) {
       await page.setViewport({ width: 1366, height: 768 })
       await page.waitForFunction(() => document.querySelector('.sc-sidebar').getBoundingClientRect().left >= -1)
       if (route === 'taller') await page.click('#queue-all')
-      if (await page.evaluate(() => document.documentElement.classList.contains('dark')) !== dark) {
-        await page.click(`button[title="Cambiar a modo ${dark ? 'oscuro' : 'claro'}"]`)
-      }
+      await page.evaluate((dark) => document.documentElement.classList.toggle('dark', dark), dark)
       for (const [width, height] of [[1366, 768], [1024, 768], [390, 844]]) {
         await page.setViewport({ width, height })
         await page.waitForFunction(() => { const rect = document.querySelector('.sc-sidebar').getBoundingClientRect(); return matchMedia('(max-width:1023px)').matches ? rect.right <= 1 : rect.left >= -1 })
@@ -46,20 +45,30 @@ try {
         const key = `${dark}:${width}`
         if (!headings.has(key)) headings.set(key, heading)
         const reference = headings.get(key)
-        assert.ok(Math.abs(heading.titleTop - reference.titleTop) <= 1, `${route}: título alineado con Recepción a ${width}`)
+        assert.ok(Math.abs(heading.top - reference.top) <= 1, `${route}: encabezado alineado con Recepción a ${width}`)
         if (width >= 1024) {
+          assert.ok(Math.abs(heading.titleTop - reference.titleTop) <= 1, `${route}: título alineado con Recepción a ${width}`)
           assert.ok(Math.abs(heading.height - reference.height) <= 1, `${route}: mismo espacio del encabezado a ${width}: ${JSON.stringify(heading)}`)
           assert.ok(Math.abs(heading.gap - reference.gap) <= 1, `${route}: misma separación del contenido a ${width}: ${JSON.stringify(heading)}`)
         }
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false, `${route}: desbordamiento a ${width}`)
+        if (route === 'metricas') {
+          const charts = await page.$$eval('.sc-metric-bars', (nodes) => nodes.map((node) => node.getBoundingClientRect().top))
+          assert.equal(charts.length, 2)
+          assert.equal(Math.abs(charts[0] - charts[1]) < 12, width >= 1024, `Gráficos de métricas a ${width}`)
+          assert.ok(await page.$$eval('.sc-metric-income dd:not(.sc-secondary)', (values) => values.every((value) => {
+            const range = document.createRange()
+            range.selectNodeContents(value)
+            return range.getClientRects().length === 1
+          })), `Importes completos en una línea a ${width}`)
+        }
         if (width === 1366) {
           const sidebar = await page.evaluate(() => {
             const footer = document.querySelector('.sc-profile-footer').getBoundingClientRect()
-            const theme = document.querySelector('button[title^="Cambiar a modo"]').getBoundingClientRect()
-            return { bottom: footer.bottom, theme: theme.bottom, profile: footer.top }
+            return { bottom: footer.bottom, theme: !!document.querySelector('.sc-sidebar button[title^="Cambiar a modo"]') }
           })
           assert.ok(Math.abs(sidebar.bottom - height) <= 1, `${route}: perfil al fondo`)
-          assert.ok(sidebar.theme < sidebar.profile, `${route}: tema fuera del perfil`)
+          assert.equal(sidebar.theme, false, `${route}: tema fuera del sidebar`)
           if (route === 'recepcion' || route === 'taller') {
             await page.waitForSelector('[data-order-id]')
             await page.click('[data-order-id]')
@@ -92,7 +101,7 @@ try {
             if (route === 'taller' || route === 'recepcion') { await page.waitForSelector('[data-order-id]'); await page.click('[data-order-id]'); await page.waitForSelector('.ws-sheet') }
           }
         }
-        if (['recepcion', 'terminados', 'clientes', 'actividad', 'configuracion', 'resumen', 'ajustes'].includes(route) && width !== 1024) {
+        if (['recepcion', 'terminados', 'clientes', 'actividad', 'metricas', 'configuracion', 'resumen', 'ajustes'].includes(route) && width !== 1024) {
           await page.screenshot({ path: path.join(output, `app-${route}-${dark ? 'oscuro' : 'claro'}-${width}.png`), fullPage: true })
         }
       }

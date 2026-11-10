@@ -9,8 +9,6 @@ import {
   Settings,
   UserCog,
   Database,
-  Sun,
-  Moon,
   LogOut,
   X,
   History,
@@ -152,13 +150,13 @@ export default function Sidebar({ open, onClose }) {
               <p className="text-[11px] font-semibold text-accent-600 dark:text-accent-400">{BRAND_SUBTITLE}</p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1"><ThemeToggle /><button
+          <button
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden"
             aria-label="Cerrar menú"
           >
             <X size={18} />
-          </button></div>
+          </button>
         </div>
 
         {/* Navegación */}
@@ -180,30 +178,5 @@ export default function Sidebar({ open, onClose }) {
       <ProfileSwitchModal profile={switchTarget} onClose={() => setSwitchTarget(null)} />
       <ConfirmModal open={!!pendingNavigation} onClose={() => setPendingNavigation(null)} onConfirm={pendingNavigation} title="Borradores sin guardar" message="¿Descartar los borradores y salir?" confirmLabel="Descartar y salir" cancelLabel="Volver" />
     </>
-  )
-}
-
-// Toggle de tema claro/oscuro persistido en localStorage.
-function ThemeToggle() {
-  const [mode, setMode] = useState(
-    () => document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-  )
-
-  const toggle = () => {
-    const next = mode === 'dark' ? 'light' : 'dark'
-    document.documentElement.classList.toggle('dark', next === 'dark')
-    localStorage.setItem('service_theme_v1', next)
-    setMode(next)
-  }
-
-  return (
-    <button
-      onClick={toggle}
-      className="flex items-center justify-center rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-      title={mode === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-      aria-label={mode === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-    >
-      {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-    </button>
   )
 }

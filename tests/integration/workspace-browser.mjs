@@ -61,15 +61,7 @@ const screenshot = async (name) => page.screenshot({ path: path.join(output, `${
 const visual = async (prefix) => {
   for (const toast of await page.$$('[aria-label="Cerrar notificación"]')) if (await toast.isVisible()) await toast.click()
   for (const dark of [false, true]) {
-    await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }])
-    const isDark = await page.evaluate(() => document.documentElement.classList.contains('dark'))
-    if (isDark !== dark) {
-      for (const toast of await page.$$('[aria-label="Cerrar notificación"]')) if (await toast.isVisible()) await toast.click()
-      if (await page.$eval('.sc-sidebar', (node) => matchMedia('(max-width:1023px)').matches && node.classList.contains('-translate-x-full'))) { await page.click('[aria-label="Abrir menú"]'); await page.waitForFunction(() => document.querySelector('.sc-sidebar').getBoundingClientRect().left >= -1) }
-      await page.click(`button[title="Cambiar a modo ${dark ? 'oscuro' : 'claro'}"]`)
-      const close = await page.$('[aria-label="Cerrar menú"]')
-      if (close && await close.isVisible()) await close.click()
-    }
+    await page.evaluate((dark) => document.documentElement.classList.toggle('dark', dark), dark)
     for (const [width, height] of [[1366, 768], [1024, 768], [390, 844]]) {
       await page.setViewport({ width, height })
       await screenshot(`${prefix}-${dark ? 'oscuro' : 'claro'}-${width}`)
@@ -97,7 +89,7 @@ try {
   await clickText('Iniciar revisión'); await clickText('Confirmar')
   await waitOrder(review.id, (order) => order.status === 'en_revision' && order.acceptedAt)
   await page.waitForSelector('#queue-mine[aria-selected=true]')
-  assert.ok(await page.$('.ws-sheet'), 'Tomar un equipo mantiene la ficha y pasa a Mis trabajos')
+  assert.ok(await page.$('.ws-sheet'), 'Tomar un equipo mantiene la ficha y pasa a Mis equipos')
   await page.click('#queue-mine'); await openRow(review.id)
   for (const text of ['1234', '1100000001', '1100000002', '1100000003', 'pruebas@example.test', 'Dirección de pruebas 123', 'Funda, SIM']) assert.ok(await page.$eval('.ws-sheet', (node, text) => node.textContent.toLocaleLowerCase('es').includes(text.toLocaleLowerCase('es')), text))
   await page.click('#queue-mine'); await openRow(review.id)
@@ -153,7 +145,7 @@ try {
   await clickText('Iniciar reparación'); await clickText('Confirmar'); await waitOrder(review.id, (order) => order.status === 'en_reparacion')
   assert.ok(await page.$('.ws-sheet'), 'Iniciar reparación mantiene la ficha')
   await page.waitForFunction(() => document.querySelector('.ws-footer button')?.textContent.includes('Finalizar reparación') && !document.querySelector('.ws-footer button').disabled)
-  await clickText('Repuestos', false); await page.type('input[placeholder="Nombre del repuesto"]', 'Conector USB'); await clickText('Agregar'); await waitOrder(review.id, (order) => order.sparePartsLog.length === 1); await page.keyboard.press('Escape')
+  await page.$eval('.ws-tools', tools => [...tools.querySelectorAll('button')].find(button => button.textContent.startsWith('Repuestos')).click()); await page.waitForSelector('[role=dialog] input[placeholder="Nombre del repuesto"]'); await page.type('input[placeholder="Nombre del repuesto"]', 'Conector USB'); await clickText('Agregar'); await waitOrder(review.id, (order) => order.sparePartsLog.length === 1); await page.keyboard.press('Escape')
   await clickText('Esperar repuestos'); await clickText('Confirmar'); await waitOrder(review.id, (order) => order.status === 'falta_repuestos')
   await switchProfile(counterName); await page.waitForSelector('#queue-repuestos'); await page.click('#queue-repuestos'); await openRow(review.id)
   await clickText('Gestionar repuestos'); await clickText('Registrar pedido'); await clickText('Registrar llegada'); await page.keyboard.press('Escape')

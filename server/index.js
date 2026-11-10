@@ -1,5 +1,6 @@
 import { intakeError } from '../shared/intake.js'
 import { normalizeDni } from '../shared/identifiers.js'
+import { cleanTerm, MAX_TERMS_CHARS, termsLength } from '../shared/terms.js'
 // ============================================
 // Servidor Express · El Gringo Celulares API
 // Servidor de la API REST del servicio técnico
@@ -557,7 +558,7 @@ app.put('/api/catalog/lists', auth, async (req, res) => {
       : undefined
   const normalizeTerms = (v) =>
     Array.isArray(v)
-      ? v.map((s) => String(s).trim()).filter(Boolean)
+      ? v.map((s) => cleanTerm(String(s))).filter((term) => termsLength([term]) > 0)
       : undefined
   const accessories = normalize(body.accessories)
   const conditions = normalize(body.conditions)
@@ -569,8 +570,7 @@ app.put('/api/catalog/lists', auth, async (req, res) => {
   if (accessories === undefined && conditions === undefined && fixes === undefined && terms === undefined && externalTechnicians === undefined) {
     return res.status(400).json({ error: 'No se envió ninguna lista para actualizar.' })
   }
-  const MAX_TERMS_CHARS = 1600
-  if (terms !== undefined && terms.join('').length > MAX_TERMS_CHARS) {
+  if (terms !== undefined && termsLength(terms) > MAX_TERMS_CHARS) {
     return res.status(400).json({ error: `Los términos no pueden superar ${MAX_TERMS_CHARS} caracteres en total.` })
   }
   try {

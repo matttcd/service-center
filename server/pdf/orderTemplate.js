@@ -1,5 +1,6 @@
 import { formatDni } from '../../shared/identifiers.js'
 import { orderAmounts } from '../../shared/order-workspace.js'
+import { cleanTerm } from '../../shared/terms.js'
 import { LOGO_DATA_URL } from './logo.js'
 
 const DOTS = [
@@ -205,7 +206,7 @@ export function buildOrderHtml(order, customer, contractBulletsOverride) {
 
   <h2>Terminos y condiciones</h2>
   <ol class="legal-list">
-    ${contractBullets.map((b) => `<li>${b}</li>`).join('\n    ')}
+    ${contractBullets.map((b) => `<li>${cleanTerm(b)}</li>`).join('\n    ')}
   </ol>
 
 </div>

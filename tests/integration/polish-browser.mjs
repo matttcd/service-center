@@ -80,7 +80,7 @@ try{
  await page.waitForSelector('[aria-busy=false]');fail=true
  await page.type('input[placeholder^="Buscar por"]','fallo deliberado');await page.waitForFunction(()=>document.querySelector('[role=alert]')?.textContent.includes('Consulta de prueba'));assert.ok(!(await page.$eval('.sc-content',node=>node.textContent)).includes('0 equipo(s)'));fail=false;await click('Reintentar');await page.waitForSelector('[aria-busy=false]')
  await goto('resumen');await page.waitForFunction(()=>location.pathname==='/recepcion');assert.equal(await page.$('a[href="/resumen"]'),null)
- await goto('configuracion?tab=impresoras');await page.waitForSelector('#settings-impresoras[aria-selected=true]');assert.ok(page.url().includes('/ajustes?tab=impresoras'))
+ await goto('configuracion?tab=impresoras');await page.waitForSelector('#settings-impresoras[aria-current=page]');assert.ok(page.url().includes('/ajustes?tab=impresoras'))
  await goto('ajustes');for(const tab of ['cuenta','general','impresoras','opciones','catalogo','terminos','externos'])assert.ok(await page.$(`#settings-${tab}`))
  await goto(`clientes/${customer.id}`);assert.ok(!(await page.$eval('.sc-content',node=>node.textContent)).includes('(0)'));await page.waitForSelector('.sc-content li button');assert.ok((await page.$eval('.sc-content',node=>node.textContent)).includes('12.456.789'))
  assert.deepEqual(errors,[])
